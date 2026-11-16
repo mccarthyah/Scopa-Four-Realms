@@ -193,7 +193,7 @@ variant's rule never reads as a broken tap.
 |---|---|---|
 | Dwarves · Forge | **Deep Delve** | Draw 1 card, then bury 1 card from your hand on the bottom of the deck |
 | Elves · Grove | **Foresight** | Look at the top 3 cards and reorder them |
-| Orcs · Horde | **Raid** | Discard a table card to the bottom of the deck — not captured, no scopa |
+| Orcs · Horde | **Raid** | Put a table card on the deck bottom and replace it with the top card; no capture or scopa. Unavailable if the deck is empty |
 | Humans · Crown | **Diplomacy** | Swap 1 hand card with 1 table card; no capture triggered |
 
 Faction identity beyond the Oath is deliberately light: **Forge** counts double against the Forge boss's

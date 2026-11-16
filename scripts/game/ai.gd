@@ -116,8 +116,8 @@ static func choose_oath(duel, who: int) -> Dictionary:
 			sorted.sort_custom(func(a, b): return _card_value(a) > _card_value(b))
 			return {"kind": "foresight", "order": sorted}
 
-		T.HORDE: # Raid — banish the table card the enemy wants most
-			if duel.table.is_empty() or duel.rng.randf() > 0.5:
+		T.HORDE: # Raid — swap the table card the enemy wants most
+			if not duel.can_use_raid(who) or duel.rng.randf() > 0.5:
 				return {}
 			var target: int = duel.table[0]
 			for c in duel.table:

@@ -80,6 +80,7 @@ func run(m: Control) -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame
 	_test_rules()
+	_test_raid_rules()
 	_test_capture_math()
 	_test_ai_games()
 	_test_quests()
@@ -97,9 +98,12 @@ func run(m: Control) -> void:
 	_test_effect_atlas()
 	await _test_table_fit()
 	await _test_display_scaling()
+	await _test_logo_layout()
 	await _test_menu_sheets()
 	await _test_menu_pointer_input()
 	await _test_tap_play()
+	await _test_raid_picker()
+	await _test_other_oath_picker_signals()
 	await _audit_screens()
 	print("=== AUDIT COMPLETE · failures=%d ===" % failures)
 	print("godot ", Engine.get_version_info().string, " · renderer ",
@@ -447,6 +451,50 @@ func _test_display_scaling() -> void:
 			fail("page %.0f px does not match the %.0f px canvas" % [page.size.x, vp.x])
 	m.queue_free()
 	win.size = saved
+	await get_tree().process_frame
+
+
+## A centred Label can still look skewed if its wide-anchor right offset keeps
+## its old minimum width. Test the actual geometry at narrow and desktop widths.
+func _test_logo_layout() -> void:
+	var old_seen: bool = Profile.seen_intro
+	Profile.seen_intro = true
+	var host := Control.new()
+	host.size = Vector2(540, 960)
+	main.add_child(host)
+	var title = load("res://scripts/screens/title.gd").new()
+	host.add_child(title)
+	Profile.seen_intro = old_seen
+	var passed := true
+	for width in [320.0, 540.0, 720.0]:
+		host.size = Vector2(width, 960)
+		for i in range(5):
+			await get_tree().process_frame
+		var mast: Control = title.find_child("Masthead", true, false)
+		if mast == null:
+			passed = false
+			break
+		for node_name in ["LogoTitle", "LogoSubtitle", "LogoTagline"]:
+			var label: Label = mast.get_node_or_null(node_name)
+			if label == null:
+				passed = false
+				continue
+			var mr := mast.get_global_rect()
+			var lr := label.get_global_rect()
+			var font: Font = label.get_theme_font("font")
+			var fs: int = label.get_theme_font_size("font_size")
+			var text_width: float = font.get_string_size(label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+			if absf(lr.get_center().x - mr.get_center().x) > 0.5 or lr.size.x + 0.5 < text_width:
+				passed = false
+		var half_text: float = UI.font_title().get_string_size("FOUR REALMS", HORIZONTAL_ALIGNMENT_LEFT, -1, 26).x * 0.5
+		var span: Vector2 = title._logo_flourish_span(mast.size.x)
+		if span.y > span.x and (span.x - 7.2 <= half_text or span.y > mast.size.x * 0.5):
+			passed = false
+	if passed:
+		ok("logo text stays centred, unclipped and clear of flourishes at narrow, phone and desktop widths")
+	else:
+		fail("logo is off-centre, clipped, or crossed by its flourishes")
+	host.queue_free()
 	await get_tree().process_frame
 
 
@@ -1007,6 +1055,194 @@ func _test_tap_play() -> void:
 	await get_tree().process_frame
 
 
+## Exercise actual pointer hits on the Raid button and a non-first picker card.
+func _test_raid_picker() -> void:
+	var saved_profile_duel: Dictionary = Profile.saved_duel.duplicate(true)
+	var saved_anim: bool = Profile.anim_enabled
+	Profile.anim_enabled = false
+	var screen = load("res://scripts/screens/duel.gd").new()
+	screen.config = {"mode": T.Mode.QUICK, "seed": 284, "oaths": true, "player_faction": T.HORDE}
+	main.add_child(screen)
+	for i in range(50):
+		await get_tree().process_frame
+	screen._busy = false
+	screen.duel.turn = 0
+	screen.duel.favor[0] = 1
+	screen._refresh_all()
+	for i in range(5):
+		await get_tree().process_frame
+	_send_mouse_click(screen._btn_oath.get_global_rect().get_center())
+	for i in range(5):
+		await get_tree().process_frame
+	var picker: Control = null
+	for c in screen.get_children():
+		if c is PanelContainer and c.z_index == 101:
+			picker = c
+	var choices: Array = []
+	if picker != null:
+		for node in _walk_controls(picker):
+			if node is CardView:
+				choices.append(node)
+	if choices.size() < 2:
+		fail("Raid picker did not open or expose table cards")
+	else:
+		var selected: int = choices[1].card_id
+		var original_top: int = screen.duel.deck.back()
+		var table_size: int = screen.duel.table.size()
+		_send_mouse_click(choices[1].get_global_rect().get_center())
+		for i in range(5):
+			await get_tree().process_frame
+		if (screen.duel.table.size() != table_size or not screen.duel.table.has(original_top)
+				or screen.duel.table.has(selected) or screen.duel.deck.front() != selected
+				or not screen.duel.oath_used[0] or screen.duel.favor[0] != 0 or screen._overlay != null):
+			fail("clicking a Raid picker card did not execute and dismiss the swap")
+		elif Profile.saved_duel.get("state", {}).get("table", []) != screen.duel.table:
+			fail("Raid picker did not persist the updated table")
+		else:
+			ok("Raid picker mouse click swaps the selected card and saves the duel, with animation off")
+	# A crowded table must wrap in the sheet; the last card must still be
+	# reachable after scrolling, not hidden beyond the right edge.
+	screen.duel.oath_used[0] = false
+	screen.duel.favor[0] = 1
+	while screen.duel.table.size() < 12:
+		screen.duel.table.append(screen.duel.deck.pop_back())
+	screen._refresh_all()
+	screen._oath_raid()
+	for i in range(8):
+		await get_tree().process_frame
+	picker = null
+	for c in screen.get_children():
+		if c is PanelContainer and c.z_index == 101:
+			picker = c
+	choices = []
+	var scroll: ScrollContainer = null
+	if picker != null:
+		for node in _walk_controls(picker):
+			if node is CardView:
+				choices.append(node)
+			elif node is ScrollContainer:
+				scroll = node
+	if choices.size() != 12 or scroll == null:
+		fail("Raid picker did not show all 12 table cards")
+	else:
+		var last: CardView = choices.back()
+		scroll.ensure_control_visible(last)
+		for i in range(8):
+			await get_tree().process_frame
+		var sr := scroll.get_global_rect()
+		var cr := last.get_global_rect()
+		if not sr.grow(1.0).encloses(cr):
+			fail("crowded Raid picker leaves the last card clipped")
+		else:
+			var last_id: int = last.card_id
+			var top_id: int = screen.duel.deck.back()
+			_send_mouse_click(cr.get_center())
+			for i in range(5):
+				await get_tree().process_frame
+			if screen.duel.deck.front() == last_id and screen.duel.table.has(top_id) and screen._overlay == null:
+				ok("crowded Raid picker wraps and its last card is clickable")
+			else:
+				fail("crowded Raid picker did not respond to the last card")
+	screen._close_overlay()
+	# Simulate the deck running out and make the reason visible on the button.
+	screen.duel.oath_used[0] = false
+	screen.duel.favor[0] = 1
+	screen.duel.deck.clear()
+	screen._refresh_actions()
+	if screen._btn_oath.disabled and "deck empty" in screen._btn_oath.text:
+		ok("Raid button explains and disables itself when the deck is empty")
+	else:
+		fail("Raid button did not disable itself with an empty deck")
+	screen.queue_free()
+	Profile.anim_enabled = saved_anim
+	if saved_profile_duel.is_empty():
+		Profile.clear_duel()
+	else:
+		Profile.store_duel(saved_profile_duel)
+	await get_tree().process_frame
+
+
+## CardView.pressed has no arguments. Exercise the other two card-based oath
+## pickers as well; handlers that expect an argument silently fail on a click.
+func _test_other_oath_picker_signals() -> void:
+	var screen = load("res://scripts/screens/duel.gd").new()
+	screen.config = {"mode": T.Mode.QUICK, "seed": 288, "oaths": true, "player_faction": T.GROVE}
+	main.add_child(screen)
+	for i in range(45):
+		await get_tree().process_frame
+	screen._busy = false
+	screen.duel.turn = 0
+	screen.duel.favor[0] = 1
+	var original: Array = screen.duel.peek_top(3)
+	screen._oath_foresight()
+	await get_tree().process_frame
+	var panel: Control = null
+	for n in screen.get_children():
+		if n is PanelContainer and n.z_index == 101:
+			panel = n
+	var cards: Array = []
+	var confirm: Button = null
+	if panel != null:
+		for n in _walk_controls(panel):
+			if n is CardView:
+				cards.append(n)
+			elif n is Button and n.text == "Set the order":
+				confirm = n
+	if cards.size() != 3 or confirm == null:
+		fail("Foresight picker did not expose three cards and confirmation")
+	else:
+		cards[0].pressed.emit()
+		cards[1].pressed.emit()
+		if cards[0].card_id != original[1] or cards[1].card_id != original[0]:
+			fail("Foresight picker cards did not swap on press")
+		else:
+			confirm.pressed.emit()
+			if screen.duel.peek_top(3) != [original[1], original[0], original[2]]:
+				fail("Foresight picker did not save the chosen deck order")
+			else:
+				ok("Foresight picker card presses reorder the deck")
+	screen._close_overlay()
+	screen.duel.player_faction = T.CROWN
+	screen.duel.turn = 0
+	screen.duel.oath_used[0] = false
+	screen.duel.favor[0] = 1
+	var hand_card: int = screen.duel.hands[0][0]
+	var table_card: int = screen.duel.visible_table(0)[0]
+	screen._oath_diplomacy()
+	await get_tree().process_frame
+	panel = null
+	for n in screen.get_children():
+		if n is PanelContainer and n.z_index == 101:
+			panel = n
+	var hcard: CardView = null
+	var tcard: CardView = null
+	confirm = null
+	if panel != null:
+		for n in _walk_controls(panel):
+			if n is CardView and n.card_id == hand_card:
+				hcard = n
+			elif n is CardView and n.card_id == table_card:
+				tcard = n
+			elif n is Button and n.text == "Swap":
+				confirm = n
+	if hcard == null or tcard == null or confirm == null:
+		fail("Diplomacy picker did not expose the hand, table and confirmation")
+	else:
+		hcard.pressed.emit()
+		tcard.pressed.emit()
+		if confirm.disabled:
+			fail("Diplomacy picker did not enable Swap after selecting both cards")
+		else:
+			confirm.pressed.emit()
+			if screen.duel.hands[0].has(table_card) and screen.duel.table.has(hand_card):
+				ok("Diplomacy picker card presses swap the chosen cards")
+			else:
+				fail("Diplomacy picker did not swap the chosen cards")
+	screen._close_overlay()
+	screen.queue_free()
+	await get_tree().process_frame
+
+
 func fail(msg: String) -> void:
 	failures += 1
 	print("FAIL: ", msg)
@@ -1071,6 +1307,90 @@ func _test_rules() -> void:
 		fail("card conservation broken at deal")
 	else:
 		ok("40 unique cards, 4 on table, 3+3 dealt")
+
+
+## Raid swaps with the ORIGINAL deck top, buries the selected card, consumes
+## exactly one Favor, and cannot be used if no replacement can be drawn.
+func _test_raid_rules() -> void:
+	for who in [0, 1]:
+		var d = DuelScript.new({"mode": T.Mode.QUICK, "seed": 281, "oaths": true,
+			"player_faction": T.HORDE, "bot_faction": T.HORDE})
+		d.turn = who
+		d.favor[who] = 2
+		d.drain_events()
+		var table_before: Array = d.table.duplicate()
+		var deck_before: Array = d.deck.duplicate()
+		var captured_before: Array = d.captured.duplicate(true)
+		var scopes_before: Array = d.scopa_count.duplicate()
+		var selected: int = table_before[1]
+		var top: int = deck_before.back()
+		var expected_deck: Array = deck_before.duplicate()
+		expected_deck.pop_back()
+		expected_deck.push_front(selected)
+		var expected_table: Array = table_before.duplicate()
+		expected_table[1] = top
+		if not d.use_raid(who, selected) or d.table != expected_table or d.deck != expected_deck:
+			fail("Raid: wrong swap or deck order for player %d" % who)
+		elif (d.captured != captured_before or d.scopa_count != scopes_before or d.favor[who] != 1
+				or not d.oath_used[who] or d.turn != who):
+			fail("Raid: capture, scopa, Favor, oath or turn changed incorrectly")
+		else:
+			ok("Raid swaps original top card in place and buries the chosen card for player %d" % who)
+		var all: Array = d.deck + d.table + d.hands[0] + d.hands[1] + d.captured[0] + d.captured[1]
+		all.sort()
+		if all != C.full_deck():
+			fail("Raid broke 40-card conservation")
+		else:
+			ok("Raid preserves all 40 cards for player %d" % who)
+		var evs: Array = d.drain_events()
+		if evs.size() != 1 or evs[0].get("banished", -1) != selected or evs[0].get("replacement", -1) != top:
+			fail("Raid event did not identify both swapped cards")
+		elif d.use_raid(who, top):
+			fail("Raid was allowed twice in one hand")
+		else:
+			ok("Raid emits the swap and remains once per hand")
+		var copy = DuelScript.new({"mode": T.Mode.QUICK})
+		copy.from_dict(d.to_dict())
+		if copy.table != d.table or copy.deck != d.deck or copy.oath_used != d.oath_used:
+			fail("Raid state did not survive save/resume")
+		else:
+			ok("Raid swap survives save and resume")
+	var single = DuelScript.new({"mode": T.Mode.QUICK, "seed": 111, "oaths": true})
+	single.turn = 0
+	single.favor[0] = 1
+	var removed: int = single.table[0]
+	var only: int = single.deck.back()
+	single.deck = [only]
+	if not single.use_raid(0, removed) or single.table[0] != only or single.deck != [removed]:
+		fail("Raid with one deck card did not draw the original card")
+	else:
+		ok("Raid with one deck card swaps the original top, not the buried card")
+	var empty = DuelScript.new({"mode": T.Mode.QUICK, "seed": 112, "oaths": true, "bot_faction": T.HORDE})
+	empty.turn = 1
+	empty.favor[1] = 1
+	empty.deck.clear()
+	var table_copy: Array = empty.table.duplicate()
+	if (empty.can_use_raid(1) or empty.use_raid(1, table_copy[0]) or empty.table != table_copy
+			or empty.favor[1] != 1 or empty.oath_used[1]):
+		fail("empty-deck Raid was allowed or spent Favor")
+	else:
+		ok("empty-deck Raid is blocked without spending Favor")
+	var bot_ok := true
+	for i in range(20):
+		if DuelAI.choose_oath(empty, 1).get("kind", "") == "raid":
+			bot_ok = false
+	if bot_ok:
+		ok("Horde AI does not attempt Raid with an empty deck")
+	else:
+		fail("Horde AI attempted Raid with an empty deck")
+	var hidden = DuelScript.new({"mode": T.Mode.QUICK, "seed": 113, "oaths": true})
+	hidden.turn = 0
+	hidden.favor[0] = 1
+	hidden.veiled = hidden.table[0]
+	if hidden.use_raid(0, hidden.veiled) or hidden.favor[0] != 1:
+		fail("Raid allowed a player to choose a veiled table card")
+	else:
+		ok("Raid cannot select a veiled card")
 
 
 func _test_ai_games() -> void:

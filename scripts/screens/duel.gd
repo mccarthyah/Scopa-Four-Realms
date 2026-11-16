@@ -758,6 +758,12 @@ func _refresh_actions() -> void:
 	elif duel.oath_used[0]:
 		_btn_oath.text = "%s · spent" % info.oath
 		_btn_oath.disabled = true
+	elif duel.player_faction == T.HORDE and duel.deck.is_empty():
+		_btn_oath.text = "Raid · deck empty"
+		_btn_oath.disabled = true
+	elif duel.player_faction == T.HORDE and duel.visible_table(0).is_empty():
+		_btn_oath.text = "Raid · no table card"
+		_btn_oath.disabled = true
 	else:
 		_btn_oath.text = "%s  ·  %d Favor" % [info.oath, duel.favor[0]]
 		_btn_oath.disabled = not can_oath
@@ -1099,7 +1105,7 @@ func _oath_foresight() -> void:
 				a.set_selected(false)
 				sel[0] = -1
 				Sfx.play("tap")
-		cv.pressed.connect(func(_c): cb.call(i))
+		cv.pressed.connect(func(): cb.call(i))
 
 	var go := UI.button("Set the order", "primary")
 	go.pressed.connect(func():
@@ -1112,23 +1118,39 @@ func _oath_foresight() -> void:
 
 
 func _oath_raid() -> void:
-	var panel := _oath_sheet("RAID", "Tap a table card to banish it to the bottom of the deck. It will not be captured and cannot make a scopa.")
+	if not duel.can_use_raid(0):
+		_toast("Raid unavailable", "You need a card in the deck and a visible table card.")
+		return
+	var panel := _oath_sheet("RAID", "Choose a table card to put on the deck bottom. The top card replaces it. No capture or scopa.")
 	var body: VBoxContainer = panel.get_meta("body")
-	var row := HBoxContainer.new()
-	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 8)
+	# Tables can have more cards than fit across a window. Wrap the choices and
+	# let the sheet scroll vertically instead of hiding cards off the right edge.
+	var row := HFlowContainer.new()
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.alignment = FlowContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("h_separation", 8)
+	row.add_theme_constant_override("v_separation", 8)
 	body.add_child(row)
 	for c in duel.visible_table(0).duplicate():
 		var cv := CardView.new()
 		cv.setup(c, true, 84, 118)
 		cv.set_playable(true)
-		cv.pressed.connect(func(_x):
-			duel.use_raid(0, c)
-			_close_overlay()
-			_handle_events()
-			_refresh_all()
-			_toast("Raid", "%s banished to the deck's bottom." % C.label(c)))
+		cv.pressed.connect(_use_raid_card.bind(c))
 		row.add_child(cv)
+
+
+func _use_raid_card(card: int) -> void:
+	var drawn: int = duel.deck.back() if not duel.deck.is_empty() else -1
+	if not duel.use_raid(0, card):
+		_close_overlay()
+		_refresh_all()
+		_toast("Raid unavailable", "The table or deck changed; no Favor was spent.")
+		return
+	_close_overlay()
+	_handle_events()
+	_refresh_all()
+	_save_state()
+	_toast("Raid", "%s went to the deck bottom; %s replaced it." % [C.label(card), C.label(drawn)])
 
 
 func _oath_diplomacy() -> void:
@@ -1153,7 +1175,7 @@ func _oath_diplomacy() -> void:
 	for c in duel.hands[0].duplicate():
 		var cv := CardView.new()
 		cv.setup(c, true, 84, 118)
-		cv.pressed.connect(func(_x):
+		cv.pressed.connect(func():
 			state["hand"] = c
 			for ch in hr.get_children():
 				ch.set_selected(ch.card_id == c)
@@ -1164,7 +1186,7 @@ func _oath_diplomacy() -> void:
 		var cv2 := CardView.new()
 		cv2.setup(c, true, 84, 118)
 		cv2.set_playable(true)
-		cv2.pressed.connect(func(_x):
+		cv2.pressed.connect(func():
 			chosen_table[0] = c
 			for ch in table_row.get_children():
 				ch.set_selected(ch.card_id == c)

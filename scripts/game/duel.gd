@@ -361,15 +361,24 @@ func use_foresight(who: int, order: Array) -> bool:
 	return true
 
 
+## Raid trades a visible table card for the deck's original top card. The deck
+## must already have a replacement; burying first in an empty deck would allow
+## the same card to be drawn back and incorrectly spend Favor.
+func can_use_raid(who: int) -> bool:
+	return can_use_oath(who) and not deck.is_empty() and not visible_table(who).is_empty()
+
+
 func use_raid(who: int, table_card: int) -> bool:
-	if not can_use_oath(who) or not table.has(table_card):
+	if not can_use_raid(who) or not visible_table(who).has(table_card):
 		return false
-	table.erase(table_card)
+	var idx: int = table.find(table_card)
+	var replacement: int = deck.pop_back()
+	table[idx] = replacement
 	deck.push_front(table_card)
 	if table_card == veiled:
 		veiled = -1
 	_finish_oath(who)
-	_push({"t": "oath", "who": who, "oath": "Raid", "banished": table_card})
+	_push({"t": "oath", "who": who, "oath": "Raid", "banished": table_card, "replacement": replacement})
 	return true
 
 

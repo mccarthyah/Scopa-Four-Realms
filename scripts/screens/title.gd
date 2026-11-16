@@ -62,13 +62,15 @@ func _build() -> void:
 	# ---- masthead -------------------------------------------------------
 	var mast := Control.new()
 	mast.custom_minimum_size = Vector2(0, 178)
-	# The three masthead lines are centred wide labels. Without clipping they report
-	# their full unwrapped text width (the tagline measured 737 px on a 540 px page)
-	# and stick out past the column; centred, so clipping loses nothing.
+	# Clip the logo to the column on narrow windows. Child labels get explicit
+	# zero horizontal offsets: TOP_WIDE alone preserves their old minimum width
+	# as a right offset and shifts centred text well past the page centre.
+	mast.name = "Masthead"
 	mast.clip_contents = true
 	col.add_child(mast)
 
 	var emblem := Control.new()
+	emblem.name = "LogoDecoration"
 	emblem.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	emblem.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	emblem.draw.connect(_draw_masthead.bind(emblem))
@@ -79,21 +81,21 @@ func _build() -> void:
 	if not UI.LOW_SPEC:
 		title.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.7))
 	title.add_theme_constant_override("shadow_offset_y", 4)
+	title.name = "LogoTitle"
 	mast.add_child(title)
-	title.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
-	title.position = Vector2(0, 34)
+	_place_logo_line(title, 34)
 
 	var sub := UI.label("FOUR REALMS", 26, UI.GOLD, true)
+	sub.name = "LogoSubtitle"
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	mast.add_child(sub)
-	sub.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
-	sub.position = Vector2(0, 104)
+	_place_logo_line(sub, 104)
 
 	var tag := UI.label("Capture. Sweep. Rule the table.", 19, UI.TEXT_DIM)
+	tag.name = "LogoTagline"
 	tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	mast.add_child(tag)
-	tag.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
-	tag.position = Vector2(0, 140)
+	_place_logo_line(tag, 140)
 
 	# ---- faction picker ------------------------------------------------
 	col.add_child(_section_header("CHOOSE YOUR OATH", "Change faction and the Oath you can spend Favor on."))
@@ -166,15 +168,36 @@ func _section_header(title: String, sub: String) -> Control:
 	return v
 
 
+## Anchor labels to the actual masthead width, not width + their initial minimum.
+func _place_logo_line(label: Label, top: float) -> void:
+	label.clip_text = true
+	label.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+	label.offset_left = 0
+	label.offset_right = 0
+	label.offset_top = top
+	label.offset_bottom = top + label.get_combined_minimum_size().y
+
+
+## Return the inner and outer distances from centre for decorative lines. Their
+## start follows the measured text width, so no font fallback can cross a glyph.
+func _logo_flourish_span(width: float) -> Vector2:
+	var half_text := UI.font_title().get_string_size("FOUR REALMS", HORIZONTAL_ALIGNMENT_LEFT, -1, 26).x * 0.5
+	var inner := half_text + 16.0
+	var outer := minf(inner + 42.0, width * 0.5 - 8.0)
+	return Vector2(inner, outer)
+
+
 func _draw_masthead(node: Control) -> void:
 	var w := node.size.x
-	# decorative flourishes either side of the subtitle
+	var span := _logo_flourish_span(w)
+	if span.y <= span.x:
+		return
 	var y := 118.0
 	for sgn in [-1.0, 1.0]:
 		var s: float = sgn
-		var x: float = w * 0.5 + s * 96.0
-		node.draw_line(Vector2(x + s * 12, y), Vector2(x + s * 54, y), Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, 0.5), 1.5)
-		node.draw_circle(Vector2(x + s * 8, y), 2.2, Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, 0.8))
+		var center := w * 0.5
+		node.draw_line(Vector2(center + s * span.x, y), Vector2(center + s * span.y, y), Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, 0.5), 1.5)
+		node.draw_circle(Vector2(center + s * (span.x - 5.0), y), 2.2, Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, 0.8))
 
 
 func _faction_card(f: int) -> Button:
