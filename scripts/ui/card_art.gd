@@ -13,6 +13,28 @@ const UI := preload("res://scripts/ui/ui.gd")
 const T := preload("res://scripts/tables.gd")
 const C := preload("res://scripts/game/cards.gd")
 
+## Painted suit emblems, one per faction. Loaded once on first use and shared by
+## every card, so a tableful of cards still costs one texture each. Falls back to
+## the old vector emblems if an asset is ever missing.
+const SUIT_ART := [
+	"res://assets/suits/forge.png",   # FORGE  (Dwarves · Coins)
+	"res://assets/suits/grove.png",   # GROVE  (Elves · Cups)
+	"res://assets/suits/horde.png",   # HORDE  (Orcs · Swords)
+	"res://assets/suits/crown.png",   # CROWN  (Humans · Batons)
+]
+
+static var _suit_tex := {}
+
+
+static func suit_texture(f: int) -> Texture2D:
+	if _suit_tex.has(f):
+		return _suit_tex[f]
+	var tex: Texture2D = null
+	if f >= 0 and f < SUIT_ART.size() and ResourceLoader.exists(SUIT_ART[f]):
+		tex = load(SUIT_ART[f])
+	_suit_tex[f] = tex
+	return tex
+
 
 ## Draw a card face (id >= 0) or a card back (id < 0) into `target`.
 ## `alpha` is accepted for callers' convenience but deliberately IGNORED.
@@ -60,9 +82,17 @@ static func draw_face(target: CanvasItem, rect: Rect2, card_id: int, back_style:
 	target.draw_style_box(UI.flat(Color(col.r, col.g, col.b, 0.30), 8),
 		Rect2(art_rect.position, Vector2(art_rect.size.x, art_rect.size.y * 0.42)))
 	var art_center := art_rect.position + art_rect.size * 0.5
-	var sc := minf(art_rect.size.x, art_rect.size.y) / 100.0
-	_draw_emblem(target, f, art_center, sc,
-		Color(pale.r, pale.g, pale.b, 0.95), Color(col.r, col.g, col.b, 0.55))
+	var emblem: Texture2D = suit_texture(f)
+	if emblem != null:
+		# The painted emblem fills most of the art window, inset slightly so its
+		# dark outline never touches the frame.
+		var box := minf(art_rect.size.x, art_rect.size.y) * 0.94
+		target.draw_texture_rect(emblem,
+			Rect2(art_center - Vector2(box, box) * 0.5, Vector2(box, box)), false)
+	else:
+		var sc := minf(art_rect.size.x, art_rect.size.y) / 100.0
+		_draw_emblem(target, f, art_center, sc,
+			Color(pale.r, pale.g, pale.b, 0.95), Color(col.r, col.g, col.b, 0.55))
 
 	# --- rank numeral, large, top-left
 	var num_size := int(h * 0.34)
