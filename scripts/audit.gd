@@ -85,6 +85,7 @@ func run(m: Control) -> void:
 	_test_profile_io()
 	_test_deal()
 	_test_overlay_dismiss()
+	_test_quindici()
 	await _test_tap_play()
 	await _audit_screens()
 	print("=== AUDIT COMPLETE · failures=%d ===" % failures)
@@ -92,6 +93,118 @@ func run(m: Control) -> void:
 		ProjectSettings.get_setting("rendering/renderer/rendering_method", "?"), " · adapter ",
 		RenderingServer.get_video_adapter_name())
 	get_tree().quit()
+
+
+## Scopa di Quindici (first version): only totals of 15 capture, and a card can
+## never take one of its own value.
+func _test_quindici() -> void:
+	# The published example: table A, 3, 4, 7 and you play a 4 -> either 4+7 or
+	# A+3+7, and never the 4 that matches your own value.
+	var table := [C.make(1, 0), C.make(3, 0), C.make(4, 1), C.make(7, 0)]
+	var played := C.make(4, 0)
+	var q := C.capture_groups_quindici(table, played)
+	var keyed := {}
+	for g in q:
+		keyed[_sort_key(g)] = true
+	if not keyed.has(_sort_key([C.make(4, 1), C.make(7, 0)])):
+		fail("quindici: 4+7 was not offered")
+	elif not keyed.has(_sort_key([C.make(1, 0), C.make(3, 0), C.make(7, 0)])):
+		fail("quindici: A+3+7 was not offered")
+	elif keyed.has(_sort_key([C.make(4, 1)])):
+		fail("quindici: captured a card by matching its own value")
+	else:
+		ok("quindici: A/3/4/7 + a 4 takes 4+7 or A+3+7, never the matching 4")
+
+	# A single card can complete the 15: a 5 takes a 10 (5+10). But a 10 can
+	# never take another 10, and never takes itself.
+	var ten := C.make(10, 2)
+	var g_single := C.capture_groups_quindici([ten, C.make(5, 3)], C.make(5, 0))
+	if g_single.size() == 1 and g_single.has([ten]):
+		ok("quindici: a 5 takes a lone 10 (5+10 = 15)")
+	else:
+		fail("quindici: 5 should take a lone 10, got %s" % str(g_single))
+	# 10 played: needs 5, so two 10s on the table must not be takeable by a 10.
+	var t3 := [C.make(10, 0), C.make(10, 1)]
+	var g_ten := C.capture_groups_quindici(t3, C.make(10, 3))
+	if g_ten.is_empty():
+		ok("quindici: a 10 cannot take another 10 (no 15 total exists)")
+	else:
+		fail("quindici: a 10 took a 10: %s" % str(g_ten))
+	# Two fives under a played five DO total 15, and that is a legal 15 capture.
+	var g_55 := C.capture_groups_quindici([C.make(5, 0), C.make(5, 1)], C.make(5, 2))
+	if g_55.size() == 1:
+		ok("quindici: three fives are a legal 15 (5+5+5)")
+	else:
+		fail("quindici: 5+5 under a 5 should total 15, got %s" % str(g_55))
+
+	# Every group totals exactly 15, across random tables.
+	var all_ok := true
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 99
+	for trial in range(400):
+		var tab: Array = []
+		var pool := C.full_deck().duplicate()
+		for i in range(rng.randi_range(1, 6)):
+			tab.append(pool.pop_at(rng.randi() % pool.size()))
+		var pc: int = pool[rng.randi() % pool.size()]
+		for g in C.capture_groups_quindici(tab, pc):
+			var total := C.rank(pc)
+			for c in g:
+				total += C.rank(c)
+			# a group of one is legal as long as it totals 15 and is not the
+			# played card's own value (which is impossible at 15 anyway)
+			if total != 15:
+				all_ok = false
+			for c in g:
+				if c == pc:
+					all_ok = false
+	if all_ok:
+		ok("quindici: every capture group totals exactly 15 across 400 random tables")
+	else:
+		fail("quindici: a capture group did not total 15")
+
+	# A whole duel under the ruleset plays through and only ever offers 15s.
+	var d = load("res://scripts/game/duel.gd").new({"mode": T.Mode.QUINDICI, "rule": C.RULE_QUINDICI, "seed": 4242})
+	var steps := 0
+	var offered_ok := true
+	while not d.match_over and steps < 600:
+		steps += 1
+		if d.hand_over:
+			if d.match_over:
+				break
+			d.next_hand()
+			continue
+		var who: int = d.turn
+		if d.hands[who].is_empty():
+			d._advance_turn()
+			continue
+		var card: int = d.hands[who][0]
+		for g in d.groups_for_player(who, card):
+			var total := C.rank(card)
+			for c in g:
+				total += C.rank(c)
+			if total != 15:
+				offered_ok = false
+		d.play(who, card, 0)
+	if not offered_ok:
+		fail("quindici duel: a capture group did not total 15")
+	elif d.hands_played > 0:
+		ok("quindici: a full duel played through (%d hands, %d turns)" % [d.hands_played, d.turn_count])
+	else:
+		fail("quindici: duel did not complete")
+
+	# Classic must be untouched by the variant existing.
+	var cd = load("res://scripts/game/duel.gd").new({"mode": T.Mode.QUICK, "seed": 77})
+	if cd.rule == C.RULE_CLASSIC and C.capture_groups_rule([C.make(4, 0)], C.make(4, 1), C.RULE_CLASSIC).size() == 1:
+		ok("classic capture still matches rank when the variant is not selected")
+	else:
+		fail("classic capture changed by the variant")
+
+
+func _sort_key(g: Array) -> String:
+	var s: Array = g.duplicate()
+	s.sort()
+	return str(s)
 
 
 ## Closing a sheet must stop blocking input in the SAME frame. queue_free() is

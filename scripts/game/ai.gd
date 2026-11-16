@@ -29,7 +29,7 @@ static func choose_move(duel, who: int) -> Dictionary:
 	var best := {}
 	var best_score := -INF
 	for card in hand:
-		var groups := C.capture_groups(duel.table, card)
+		var groups: Array = C.capture_groups_rule(duel.table, card, duel.rule)
 		if groups.is_empty():
 			var s := _place_score(duel, who, card, style)
 			if s > best_score:

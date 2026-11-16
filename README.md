@@ -61,6 +61,7 @@ Everything in the brief, playable end to end:
 |---|---|
 | 40-card Scopa deck, four factions, Rank-large faces, Runestone | ✅ fully procedural card art (no image assets) |
 | Standard capture rules: rank match **or** a sum to your rank, 10s only match 10s | ✅ with all legal sets enumerated and choosable |
+| **Scopa di Quindici** variant (first version) | ✅ separate game type: only totals of 15 capture, a card never takes its own value. Chosen per match, never mixed inside one |
 | Deal 3 + 3, 4 on the table, redeal in rounds, last capturer sweeps the rest | ✅ |
 | Scopa scores 1 (not on the final play of a deal, per Scopa rules) | ✅ plus a full-screen celebration |
 | 20–30 s turn timer, legal captures highlighted, dramatic scopa clear | ✅ 26 s timer, pulsing gold rings, particle burst, screen shake, held beat |
@@ -75,6 +76,25 @@ Everything in the brief, playable end to end:
 | **Daily Puzzle** — fixed deal, goal in N moves | ✅ 3 deals, rotates by date, each solver-verified |
 | **Async duels** | ✅ foundation: the duel serialises exactly (verified) and a mid-hand duel resumes from the title screen. Needs a transport (see *Next*) |
 | Cosmetics only | ✅ card backs, board themes, saved in the profile; no card power anywhere |
+
+### Scopa di Quindici
+
+A ruleset variant, selected as its **own game type** on the title screen — it is
+never mixed into a Classic or Ranked match. The deck, deal, Oaths, quests and
+scoring are identical; only the capture rule changes.
+
+* Your card plus the cards you take must total **exactly 15**.
+* A card may **never** capture a card of its own value — the rank match that
+  Classic allows does not exist here.
+* With **A, 3, 4, 7** on the table, playing a **4** takes `4+7` *or* `A+3+7`,
+  your choice. The 4 on the table is untouchable.
+* A single card can complete a 15: a **5 takes a lone 10**, a 6 takes a 9, a 7
+  takes an 8. Two 10s can never be taken by a 10.
+* Three fives (`5+5+5`) are a legal 15.
+
+When a card you have selected could not capture, the status line says so
+explicitly ("matching a value never captures — only cards totalling 15") so the
+variant's rule never reads as a broken tap.
 
 ### Oaths (implemented exactly as specified)
 

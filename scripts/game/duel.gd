@@ -26,6 +26,9 @@ var player_faction := T.FORGE
 var bot_faction := T.HORDE
 var campaign: Dictionary = {}
 var puzzle: Dictionary = {}
+## Which capture ruleset this match uses (see Cards.RULE_*).  Chosen per match
+## from the title screen - variants are never mixed inside one match.
+var rule := C.RULE_CLASSIC
 
 # --- state -------------------------------------------------------------------
 var deck: Array = []              # deck[0] = bottom, deck[-1] = next drawn
@@ -60,6 +63,7 @@ func _init(config: Dictionary = {}) -> void:
 	bot_faction = config.get("bot_faction", T.HORDE)
 	campaign = config.get("campaign", {})
 	puzzle = config.get("puzzle", {})
+	rule = config.get("rule", C.RULE_CLASSIC)
 	rng.seed = config.get("seed", randi())
 	quests = config.get("quests", [])
 	renown = [0, 0]
@@ -161,7 +165,21 @@ func groups_for(card: int) -> Array:
 
 
 func groups_for_player(who: int, card: int) -> Array:
-	return C.capture_groups(visible_table(who), card)
+	return C.capture_groups_rule(visible_table(who), card, rule)
+
+
+## True when Quindici is what stops this card: under classic rules it would have
+## captured, and the only capture Quindici removes is matching a card's own value.
+## Used purely to explain the rule, so it never looks like a broken tap.
+func blocked_by_quindici(card: int) -> bool:
+	if rule != C.RULE_QUINDICI:
+		return false
+	if not C.capture_groups_quindici(visible_table(0), card).is_empty():
+		return false
+	for c in visible_table(0):
+		if C.rank(c) == C.rank(card):
+			return true
+	return false
 
 
 func is_my_turn(p: int) -> bool:
@@ -185,7 +203,7 @@ func play(who: int, card: int, group_idx: int = 0) -> Dictionary:
 		return empty_result
 
 	var vis := visible_table(who)
-	var groups := C.capture_groups(vis, card)
+	var groups := C.capture_groups_rule(vis, card, rule)
 	hands[who].erase(card)
 	turn_count += 1
 	var result := {"card": card, "captured": [], "scopa": false, "who": who, "placed": false}
@@ -560,7 +578,7 @@ func _roll_quests() -> Array:
 # ---------------------------------------------------------------------------
 func to_dict() -> Dictionary:
 	return {
-		"mode": mode, "oaths": oaths_enabled,
+		"mode": mode, "oaths": oaths_enabled, "rule": rule,
 		"player_faction": player_faction, "bot_faction": bot_faction,
 		"campaign_id": campaign.get("id", ""), "puzzle_name": puzzle.get("name", ""),
 		"deck": deck, "table": table, "hands": hands, "captured": captured,
@@ -592,6 +610,7 @@ func from_dict(d: Dictionary) -> void:
 	quest_done = d.get("quest_done", [false, false])
 	hand_over = bool(d.get("hand_over", false))
 	match_over = bool(d.get("match_over", false))
+	rule = String(d.get("rule", C.RULE_CLASSIC))
 	veiled = int(d.get("veiled", -1))
 	hands_played = int(d.get("hands_played", 0))
 	stat = d.get("stat", {})

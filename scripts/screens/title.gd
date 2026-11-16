@@ -253,6 +253,7 @@ func _build_modes() -> void:
 	if Profile.has_saved_duel():
 		_mode_list.add_child(_mode_row("Resume duel", "Pick up where you left off.", "RESUME", _resume_duel, Color("9d7fe0")))
 	_mode_list.add_child(_mode_row("Quick Duel", "One hand. Oaths on. Four minutes.", "QUICK", func(): _launch(T.Mode.QUICK), UI.GOLD))
+	_mode_list.add_child(_mode_row("Scopa di Quindici", "Fifteen or nothing. Rank matches never capture.", "XV", _launch_quindici, Color("6fa8d4")))
 	_mode_list.add_child(_mode_row("Ranked Duel", "Best of three. First to 11 Renown.", "RANKED", _open_ranked, Color("9d7fe0")))
 	_mode_list.add_child(_mode_row("Campaign", "Four bosses, four twists.", "CAMPAIGN", _open_campaign, Color("c86f4a")))
 	var pz: Dictionary = T.PUZZLES[Profile.daily_puzzle_index()]
@@ -350,6 +351,12 @@ func _launch(mode: int, extra: Dictionary = {}) -> void:
 	start_duel.emit(cfg)
 
 
+## Scopa di Quindici - a ruleset variant of the same duel, never mixed into
+## another match.
+func _launch_quindici() -> void:
+	_launch(T.Mode.QUINDICI, {"rule": "quindici"})
+
+
 func _resume_duel() -> void:
 	var sv: Dictionary = Profile.saved_duel
 	if sv.is_empty():
@@ -360,6 +367,7 @@ func _resume_duel() -> void:
 		"oaths": not Profile.classic_mode,
 		"campaign": sv.get("campaign", {}),
 		"puzzle": sv.get("puzzle", {}),
+		"rule": sv.get("state", {}).get("rule", "classic"),
 		"resume": sv.get("state", {}),
 	}
 	Sfx.play("tap")

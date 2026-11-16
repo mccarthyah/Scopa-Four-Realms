@@ -94,6 +94,7 @@ func _build_duel() -> void:
 		"bot_faction": bfac,
 		"campaign": config.get("campaign", {}),
 		"puzzle": config.get("puzzle", {}),
+		"rule": config.get("rule", "classic"),
 		"seed": config.get("seed", randi()),
 	})
 
@@ -464,6 +465,8 @@ func _refresh_all() -> void:
 	else:
 		_top_name.text = "%s · %s" % [bot.people, bot.name]
 		_top_meta.text = bot.oath + " · " + T.MODE_INFO[duel.mode].name
+		if duel.rule == C.RULE_QUINDICI:
+			_top_meta.text = bot.oath + " · Scopa di Quindici"
 
 	UI.set_chip(_top_favor, "FAVOR %d" % duel.favor[1], Color("3a2f22") if duel.favor[1] > 0 else Color("2b2338"),
 		UI.GOLD if duel.favor[1] > 0 else UI.TEXT_DIM)
@@ -586,6 +589,8 @@ func _refresh_table() -> void:
 			_table_sub.text = "Tap a glowing card to choose which cards to take"
 		elif gs.size() == 1:
 			_table_sub.text = "Tap the glowing card to capture"
+		elif duel.blocked_by_quindici(_selection):
+			_table_sub.text = "Quindici: matching a value never captures — only cards totalling 15"
 		else:
 			_table_sub.text = "No capture — this card will lie on the table"
 
@@ -773,7 +778,7 @@ func _run_bot() -> void:
 		return
 	var card: int = move.card
 	var gi: int = move.group
-	var groups: Array = C.capture_groups(duel.table, card)
+	var groups: Array = C.capture_groups_rule(duel.table, card, duel.rule)
 	var captured: Array = []
 	if not groups.is_empty():
 		captured = groups[clampi(gi, 0, groups.size() - 1)] + [card]
@@ -1160,8 +1165,11 @@ func _on_hint() -> void:
 func _show_rules() -> void:
 	var panel := _oath_sheet("RULES & SCORING", "")
 	var body: VBoxContainer = panel.get_meta("body")
+	var capture_line := "Play a card whose rank matches a table card, or whose rank equals the sum of several table cards. A 10 can only take a 10."
+	if duel.rule == C.RULE_QUINDICI:
+		capture_line = "Scopa di Quindici: your card plus the cards you take must total exactly 15, and a card can never take another card of the same value. A 10 can only be taken by a 5."
 	for line in [
-		["Capture", "Play a card whose rank matches a table card, or whose rank equals the sum of several table cards. A 10 can only take a 10."],
+		["Capture", capture_line],
 		["Scopa", "Clear the table with a capture to score a scopa. The final capture of a hand is not a scopa."],
 		["The sweep", "When the deck runs out, whoever captured last takes the remaining table cards."],
 		["Loot", "1 Renown for the most captured cards."],

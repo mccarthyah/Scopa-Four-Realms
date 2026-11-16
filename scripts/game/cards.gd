@@ -79,6 +79,36 @@ static func sort_by_rank(a: int, b: int) -> bool:
 ##   * exactly one opponent card of that rank, or
 ##   * a set of cards that sums to that rank.
 ## Cards of rank 10 can only be taken by an exact 10.
+## Rulesets. QUINDICI is "Scopa di Quindici" (first version): a card may NOT
+## take a card of its own value - only combinations that total 15.
+const RULE_CLASSIC := "classic"
+const RULE_QUINDICI := "quindici"
+const QUINDICI_TOTAL := 15
+
+
+## Capture groups for whichever ruleset is in play.
+static func capture_groups_rule(table: Array, played: int, rule: String) -> Array:
+	if rule == RULE_QUINDICI:
+		return capture_groups_quindici(table, played)
+	return capture_groups(table, played)
+
+
+## Scopa di Quindici (first version).  The played card plus the cards taken must
+## total exactly 15, and a card can never be taken by one of its own value.  So
+## with A, 3, 4, 7 on the table, playing a 4 takes either 4+7 or A+3+7 - the 4
+## itself is untouchable.  A single table card can never total 15 with a real
+## card (15 - x = x is not a card in this deck), so a group is always 2+ cards.
+static func capture_groups_quindici(table: Array, played: int) -> Array:
+	var need: int = QUINDICI_TOTAL - rank(played)
+	if need <= 0:
+		return []
+	var out: Array = []
+	# A single table card may complete the 15 (5 takes a 10, 6 a 9, 7 an 8).
+	# It can never be the played card's own value, since 15 - x = x is not a card.
+	_sum_groups(table, need, 0, [], out, 1)
+	return out
+
+
 static func capture_groups(table: Array, played: int) -> Array:
 	var target := rank(played)
 	var by_rank: Array = []
@@ -107,16 +137,16 @@ static func _key(group: Array) -> String:
 	return str(s)
 
 
-static func _sum_groups(table: Array, remaining: int, start: int, acc: Array, out: Array) -> void:
+static func _sum_groups(table: Array, remaining: int, start: int, acc: Array, out: Array, min_size: int = 2) -> void:
 	if remaining == 0:
-		if acc.size() >= 2:
+		if acc.size() >= min_size:
 			out.append(acc.duplicate())
 		return
 	for i in range(start, table.size()):
 		var c: int = table[i]
 		if rank(c) <= remaining:
 			acc.append(c)
-			_sum_groups(table, remaining - rank(c), i + 1, acc, out)
+			_sum_groups(table, remaining - rank(c), i + 1, acc, out, min_size)
 			acc.pop_back()
 
 

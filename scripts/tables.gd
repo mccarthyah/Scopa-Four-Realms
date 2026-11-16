@@ -106,7 +106,10 @@ const QUESTS := [
 # ---------------------------------------------------------------------------
 # MATCH MODES
 # ---------------------------------------------------------------------------
-enum Mode { QUICK, RANKED, CAMPAIGN, PUZZLE }
+## QUINDICI is a ruleset variant, not a different kind of match: same deck, same
+## Oaths, same scoring - only the capture rule changes.  Variants are chosen per
+## match and never mixed inside one.
+enum Mode { QUICK, RANKED, CAMPAIGN, PUZZLE, QUINDICI }
 
 const MODE_INFO := {
 	Mode.QUICK: {
@@ -128,6 +131,11 @@ const MODE_INFO := {
 		"name": "Daily Puzzle",
 		"blurb": "A fixed deal. Hit the goal in time.",
 		"oaths": false, "hands": 1, "target": 0,
+	},
+	Mode.QUINDICI: {
+		"name": "Scopa di Quindici",
+		"blurb": "Only combinations totalling 15 capture. Never take your own value.",
+		"oaths": true, "hands": 1, "target": 0,
 	},
 }
 
