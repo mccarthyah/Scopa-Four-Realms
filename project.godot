@@ -1,27 +1,36 @@
 ; Engine configuration file.
-; Scopa: Four Realms — a mobile-first fantasy Scopa card game.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
 
 config_version=5
 
 [application]
 
-; Cap the frame rate. A card game does not need more, and on a VM without a
-; working vsync a 2D game can otherwise spin at several hundred fps and pin a
-; CPU core — which reads as a freeze.
-run/max_fps=60
-
 config/name="Scopa: Four Realms"
 config/description="A mobile-first fantasy reimagining of Scopa: four factions, faction Oaths, public quests and short duels."
 run/main_scene="res://scenes/main.tscn"
 config/features=PackedStringArray("4.7", "Mobile")
-config/icon="res://icon.svg"
+run/max_fps=60
 boot_splash/bg_color=Color(0.078, 0.071, 0.109, 1)
 boot_splash/show_image=false
+config/icon="res://icon.svg"
 
 [autoload]
 
 Sfx="*res://scripts/sfx.gd"
 Profile="*res://scripts/profile.gd"
+
+[debug]
+
+file_logging/enable_file_logging=true
+file_logging/log_to_stdout=true
+editor/run/main_run_args=""
+editor/run/auto_run_on_open=false
+editor/rendering/use_hdr_2d=false
 
 [display]
 
@@ -29,10 +38,6 @@ window/size/viewport_width=540
 window/size/viewport_height=960
 window/size/window_width_override=540
 window/size/window_height_override=960
-; NOTE: these keys must live under display/window/stretch/. Writing them as
-; display/window/size/stretch/* creates settings Godot ignores, leaving stretch
-; DISABLED - the game then lays out at raw window pixels and clips at any size
-; other than the 540x960 base. That is exactly what broke on desktop.
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 window/handheld/orientation=1
@@ -44,36 +49,11 @@ theme/default_font_multichannel_signed_distance_field=true
 [input_devices]
 
 pointing/emulate_touch_from_mouse=true
-pointing/emulate_mouse_from_touch=true
 
 [rendering]
 
-; GL Compatibility on purpose: this is a 2D card game, and the Vulkan/Metal
-; ("mobile"/"forward_plus") paths can hard-lock a GPU-poor or virtualised
-; machine — a wedged VM rather than a crash. Compatibility is the safest,
-; most portable path and costs nothing for 2D.
+rendering_device/fallback_to_vulkan=false
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
-renderer/rendering_method.web="gl_compatibility"
-; Never silently fall back to Vulkan: if OpenGL fails we want a clean error.
-rendering_device/fallback_to_vulkan=false
-environment/defaults/default_clear_color=Color(0.078, 0.071, 0.109, 1)
 textures/vram_compression/import_etc2_astc=true
-anti_aliasing/quality/msaa_2d=0
-
-[debug]
-
-; Log to disk and flush every line, so a freeze or hard kill still leaves a
-; readable log behind (verified against SIGKILL).
-file_logging/enable_file_logging=true
-file_logging/enable_file_logging.pc=true
-file_logging/log_to_stdout=true
-; The editor should not auto-run the game on open: an unwanted run is how a
-; renderer can lock up a VM you are working in.
-editor/run/main_run_args=""
-editor/run/auto_run_on_open=false
-; Avoid the extra GPU work of a second editor window path.
-editor/rendering/use_hdr_2d=false
-gdscript/warnings/untyped_declaration=0
-gdscript/warnings/unsafe_property_access=0
-gdscript/warnings/unsafe_method_access=0
+environment/defaults/default_clear_color=Color(0.078, 0.071, 0.109, 1)
