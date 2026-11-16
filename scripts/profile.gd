@@ -2,6 +2,8 @@ extends Node
 ## Local profile: stats, settings and the daily-puzzle rotation.  Saved to
 ## user://four_realms_profile.json so progress survives between sessions.
 
+signal orientation_changed(value: String)
+
 const T := preload("res://scripts/tables.gd")
 const SAVE_PATH := "user://four_realms_profile.json"
 const DUEL_PATH := "user://four_realms_duel.json"
@@ -17,6 +19,9 @@ var quests_done := 0
 var puzzles_solved := 0
 var campaign_cleared: Array = []
 var classic_mode := false
+## Auto follows the window/device; left/right are device orientations on mobile.
+var orientation := "auto"
+var _orientation_correction_queued := false
 ## Presentation settings.  Animations are purely cosmetic: the game is fully
 ## playable with every one of them off.
 var anim_enabled := true
@@ -36,6 +41,8 @@ var faction_plays := {0: 0, 1: 0, 2: 0, 3: 0}
 
 func _ready() -> void:
 	load_profile()
+	get_window().size_changed.connect(_on_window_size_changed)
+	call_deferred("apply_orientation")
 
 
 func load_profile() -> void:
@@ -60,6 +67,9 @@ func load_profile() -> void:
 	puzzles_solved = d.get("puzzles_solved", 0)
 	campaign_cleared = d.get("campaign_cleared", [])
 	classic_mode = d.get("classic_mode", false)
+	orientation = str(d.get("orientation", "auto"))
+	if orientation not in ["auto", "landscape_left", "landscape_right", "portrait"]:
+		orientation = "auto"
 	seen_intro = d.get("seen_intro", false)
 	card_back = d.get("card_back", 0)
 	board_theme = d.get("board_theme", 0)
@@ -82,6 +92,7 @@ func save_profile() -> void:
 		"best_renown": best_renown, "total_glory": total_glory, "scopas": scopas,
 		"quests_done": quests_done, "puzzles_solved": puzzles_solved,
 		"campaign_cleared": campaign_cleared, "classic_mode": classic_mode,
+		"orientation": orientation,
 		"seen_intro": seen_intro, "card_back": card_back, "board_theme": board_theme,
 		"anim_enabled": anim_enabled, "anim_spin": anim_spin,
 		"anim_slow": anim_slow, "anim_match": anim_match,
@@ -93,6 +104,82 @@ func save_profile() -> void:
 		return
 	f.store_string(JSON.stringify(d, "  "))
 	f.close()
+
+
+## Mobile uses the OS orientation sensor. Desktop cannot rotate an individual
+## window, so forced modes instead make the window portrait/landscape shaped.
+func set_orientation(value: String) -> void:
+	if value not in ["auto", "landscape_left", "landscape_right", "portrait"]:
+		return
+	orientation = value
+	save_profile()
+	apply_orientation()
+	orientation_changed.emit(value)
+
+
+func apply_orientation() -> void:
+	# Browsers control their own windows; Godot's desktop window resizing APIs
+	# are not a reliable way to lock a browser or a mobile web page.
+	if OS.has_feature("web"):
+		return
+	if DisplayServer.has_feature(DisplayServer.FEATURE_ORIENTATION):
+		var mode := DisplayServer.SCREEN_SENSOR
+		match orientation:
+			"portrait": mode = DisplayServer.SCREEN_PORTRAIT
+			"landscape_left": mode = DisplayServer.SCREEN_LANDSCAPE
+			"landscape_right": mode = DisplayServer.SCREEN_REVERSE_LANDSCAPE
+		DisplayServer.screen_set_orientation(mode)
+		return
+	if DisplayServer.get_name() == "headless" or orientation == "auto":
+		return
+	# A maximized/fullscreen window cannot be resized until windowed. Centre the
+	# new shape inside the monitor's usable area, with room for window chrome.
+	var window := get_window()
+	if window == null:
+		return
+	if window.mode != Window.MODE_WINDOWED:
+		window.mode = Window.MODE_WINDOWED
+	var screen: int = DisplayServer.window_get_current_screen()
+	var usable: Rect2i = DisplayServer.screen_get_usable_rect(screen)
+	var bounds := Vector2i(maxi(usable.size.x - 32, 320), maxi(usable.size.y - 80, 240))
+	var landscape: bool = orientation != "portrait"
+	var desired := Vector2(960, 540) if landscape else Vector2(540, 960)
+	var scale_factor := minf(1.0, minf(float(bounds.x) / desired.x, float(bounds.y) / desired.y))
+	var target := Vector2i(desired * scale_factor)
+	window.size = target
+	window.position = usable.position + (usable.size - target) / 2
+
+
+## On desktop keep a forced shape even if the user drags the window past square.
+## Auto never interferes with manual resizing. Mobile is controlled by the OS.
+func _on_window_size_changed() -> void:
+	if _orientation_correction_queued or orientation == "auto" or OS.has_feature("web") or DisplayServer.get_name() == "headless" or DisplayServer.has_feature(DisplayServer.FEATURE_ORIENTATION):
+		return
+	_orientation_correction_queued = true
+	_correct_window_shape.call_deferred()
+
+
+func _correct_window_shape() -> void:
+	_orientation_correction_queued = false
+	# The preference or window mode may have changed since the resize event.
+	if orientation == "auto" or DisplayServer.has_feature(DisplayServer.FEATURE_ORIENTATION):
+		return
+	var window := get_window()
+	if window == null or window.mode != Window.MODE_WINDOWED:
+		return
+	var sz := window.size
+	var landscape: bool = orientation != "portrait"
+	# Keep enough aspect difference for the corresponding responsive layout,
+	# even while a user drags the window close to square.
+	if (landscape and float(sz.x) >= float(sz.y) * 1.2) or (not landscape and float(sz.y) >= float(sz.x) * 1.2):
+		return
+	var usable: Rect2i = DisplayServer.screen_get_usable_rect(DisplayServer.window_get_current_screen())
+	var bounds := Vector2i(maxi(usable.size.x - 32, 320), maxi(usable.size.y - 80, 240))
+	var short_side: float = float(mini(sz.x, sz.y))
+	var long_side: float = maxf(float(maxi(sz.x, sz.y)), short_side * 1.2)
+	var target := Vector2(long_side, short_side) if landscape else Vector2(short_side, long_side)
+	var factor := minf(1.0, minf(float(bounds.x) / target.x, float(bounds.y) / target.y))
+	window.size = Vector2i(target * factor)
 
 
 func record_match(won: bool, draw: bool, renown_for: int, glory: int, scopa_total: int, faction: int, quests: int) -> void:

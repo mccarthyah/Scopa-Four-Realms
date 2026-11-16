@@ -40,7 +40,8 @@ window/size/window_width_override=540
 window/size/window_height_override=960
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
-window/handheld/orientation=1
+; Sensor permits both portrait and either landscape direction on mobile.
+window/handheld/orientation=6
 
 [gui]
 

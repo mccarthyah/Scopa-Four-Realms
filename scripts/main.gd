@@ -67,7 +67,16 @@ func _swap(screen: Control) -> void:
 func _layout_stage(screen: Control) -> void:
 	screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var v := get_viewport_rect().size
-	if _is_wide():
+	# The title remains a readable centred column. The duel uses a real wide
+	# layout when the canvas is landscape, instead of stretching a phone page.
+	if screen is DuelScreen and v.x > v.y * 1.12:
+		var w: float = minf(1760.0, v.x)
+		var margin: float = maxf((v.x - w) * 0.5, 0.0)
+		screen.anchor_left = 0.0
+		screen.anchor_right = 0.0
+		screen.offset_left = margin
+		screen.offset_right = margin + w
+	elif _is_wide():
 		var w: float = minf(DESIGN_WIDTH, v.x)
 		var margin: float = maxf((v.x - w) * 0.5, 0.0)
 		screen.anchor_left = 0.0

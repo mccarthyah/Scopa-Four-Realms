@@ -17,8 +17,8 @@ the Runestone    the 7 of Forge — the settebello
 
 1. Install **Godot 4.7.2** (or any 4.4+; standard build, no C# needed).
 2. Open `project.godot` → press **F5**.
-3. The viewport is a 720×1280 portrait phone canvas that stretches to any window; the window opens at
-   540×960 for desktop testing.
+3. The 540×960 base canvas adapts to portrait and landscape; the desktop window opens at
+   540×960 unless a saved orientation preference requests a different shape.
 
 The project ships on the **GL Compatibility** renderer deliberately: the Vulkan
 paths can hard-lock a virtualised or GPU-poor machine instead of failing, and a
@@ -78,33 +78,32 @@ Everything in the brief, playable end to end:
 | Cosmetics only | ✅ card backs, board themes, saved in the profile; no card power anywhere |
 | **Card animation**, all optional | ✅ played cards spin 360° onto the field, captures flash a ring on every matched card, the opponent's hand sits face down above the playfield and thins as it plays. Slower play is a switch; **every** animation can be turned off in settings |
 
-### Window sizes: phone and desktop
+### Window sizes and orientation
 
-The page is a 540x960 design that scales to whatever window it gets. Two settings
-matter and they must live at `display/window/stretch/*`:
+The title remains a centred, scrollable column. In a wide window the duel reflows
+into a sidebar for the opponent, turn and quests, beside a wider playfield for
+cards and actions. The same match and selection survive a window resize or device
+rotation; portrait keeps the original vertical table.
+
+In **Settings → Orientation**, choose **Auto**, **Landscape Left**, **Landscape
+Right** or **Portrait**. The preference is saved. On supported Android and iOS
+devices, Auto requests the orientation sensor and the other choices request that
+device orientation. Device and OS rotation restrictions may still apply. On
+Windows, Linux and macOS, Auto follows the window shape; forced choices make and
+maintain a landscape- or portrait-shaped window while it is windowed. Left and
+Right have the same landscape shape on desktop; they do not rotate the operating system's display.
+Forcing a desktop orientation returns a maximized/full-screen window to windowed
+mode so it can be resized. Choosing Auto leaves the current window size alone.
+In the Web build, orientation is controlled by the browser, so the choice is
+disabled and the layout follows the browser window instead.
+
+Stretch must be configured under the keys Godot reads:
 
     window/stretch/mode="canvas_items"
     window/stretch/aspect="expand"
 
-Written as `display/window/size/stretch/*` they are silently ignored, stretch is
-left **disabled**, and the game lays out at raw window pixels — fine on a phone
-whose window is 540x960, badly clipped on any other size. An audit check asserts
-the key Godot actually reads is present and that the dead key is not.
-
-With stretch on, `expand` keeps the phone's height and lets a taller-or-narrower
-window breathe horizontally. When the window is genuinely wide (wider than tall)
-the page is capped at the 540 design width and centred, rather than stretched into
-a 1700 px-wide canvas. Measured, with no control escaping the page:
-
-| Window | Canvas | Page |
-|---|---|---|
-| 309x549 (small desktop window) | 540x960 | 540 wide, full bleed |
-| 540x960 (phone) | 540x960 | 540 wide, full bleed |
-| 780x654 (desktop) | 1144x960 | 540 wide, centred |
-| 1600x900 (maximised) | 1706x960 | 540 wide, centred |
-
-Long lines of text wrap rather than growing unboundedly, and the centred masthead
-lines are clipped to their column.
+Putting these under `display/window/size/stretch/*` silently disables stretch.
+The layout, orientation preference and resize paths are covered by the audit.
 
 ### Table layout
 

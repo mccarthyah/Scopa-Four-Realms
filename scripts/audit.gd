@@ -100,7 +100,9 @@ func run(m: Control) -> void:
 	await _test_display_scaling()
 	await _test_logo_layout()
 	await _test_settings_dialog()
+	await _test_orientation_setting()
 	await _test_settings_layout()
+	await _test_landscape_reflow()
 	await _test_menu_sheets()
 	await _test_menu_pointer_input()
 	await _test_tap_play()
@@ -358,6 +360,156 @@ func _test_settings_dialog() -> void:
 	Profile.save_profile()
 	main.show_title()
 	for i in range(4): await get_tree().process_frame
+
+
+## The Settings choice persists all values and its callback applies a desktop
+## window shape (or calls the mobile API where supported).
+func _test_orientation_setting() -> void:
+	var preset := ConfigFile.new()
+	var loaded: Error = preset.load("res://export_presets.cfg")
+	if ProjectSettings.get_setting("display/window/handheld/orientation", -1) == DisplayServer.SCREEN_SENSOR and loaded == OK and preset.get_value("preset.2.options", "orientation/portrait", false) and preset.get_value("preset.2.options", "orientation/landscape_left", false) and preset.get_value("preset.2.options", "orientation/landscape_right", false) and preset.get_value("preset.1.options", "progressive_web_app/orientation", -1) == 0:
+		ok("mobile export permits sensor, portrait and both landscape orientations; web PWA is unlocked")
+	else: fail("orientation: mobile or web export preset forbids an orientation")
+	var win: Window = get_window()
+	var saved_size := win.size
+	var saved_pos := win.position
+	var old: String = Profile.orientation
+	var title = main.current
+	title._codex_close()
+	title._scroll.scroll_vertical = 0
+	title._open_settings()
+	for i in range(5): await get_tree().process_frame
+	var choice: OptionButton = title._sheet_panel.find_child("OrientationChoice", true, false)
+	if choice == null or choice.item_count != 4:
+		fail("orientation: settings choice missing or incomplete")
+	else:
+		var good := true
+		var body: VBoxContainer = title._sheet_panel.get_meta("body")
+		var sc: ScrollContainer = body.get_parent()
+		sc.ensure_control_visible(choice)
+		for i in range(4): await get_tree().process_frame
+		_send_mouse_click(choice.get_global_rect().get_center())
+		for i in range(4): await get_tree().process_frame
+		if not choice.get_popup().visible: good = false
+		choice.get_popup().hide()
+		var values := ["auto", "landscape_left", "landscape_right", "portrait"]
+		for index in [1, 2, 3, 0]:
+			choice.select(index)
+			choice.item_selected.emit(index)
+			for i in range(5): await get_tree().process_frame
+			if Profile.orientation != values[index]: good = false
+			Profile.orientation = "invalid"
+			Profile.load_profile()
+			if Profile.orientation != values[index]: good = false
+			if DisplayServer.get_name() != "headless" and not DisplayServer.has_feature(DisplayServer.FEATURE_ORIENTATION):
+				if index in [1, 2] and win.size.x < win.size.y: good = false
+				if index == 3 and win.size.y < win.size.x: good = false
+		if good: ok("orientation choice saves and reloads all four modes; desktop window follows forced shape")
+		else: fail("orientation: setting, profile reload or desktop window shape failed")
+		# Invalid/old profile values safely fall back to Auto.
+		Profile.orientation = "invalid"
+		Profile.save_profile()
+		Profile.load_profile()
+		if Profile.orientation == "auto": ok("invalid orientation profile falls back to Auto")
+		else: fail("orientation: invalid stored value was not sanitized")
+	title._codex_close()
+	Profile.orientation = "auto"
+	win.size = saved_size
+	win.position = saved_pos
+	Profile.orientation = old
+	Profile.save_profile()
+	for i in range(5): await get_tree().process_frame
+
+
+## A live duel can move between landscape and portrait without rebuilding game
+## state, losing a selected card, or leaving its cards/actions outside the view.
+func _test_landscape_reflow() -> void:
+	var win: Window = get_window()
+	var old_size := win.size
+	var old_scale := win.content_scale_size
+	var old_anim: bool = Profile.anim_enabled
+	Profile.anim_enabled = false
+	win.content_scale_size = Vector2i(1280, 720)
+	win.size = Vector2i(1280, 720)
+	for i in range(5): await get_tree().process_frame
+	var host := Control.new()
+	host.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	main.add_child(host)
+	var d = load("res://scripts/screens/duel.gd").new()
+	d.config = {"mode": 0, "seed": 12, "oaths": true}
+	host.add_child(d)
+	for i in range(25): await get_tree().process_frame
+	d._busy = false
+	d.duel.turn = 0
+	d._refresh_all()
+	for i in range(6): await get_tree().process_frame
+	var good: bool = d._landscape and d._landscape_root.visible and not d._portrait_root.visible
+	var bounds: Rect2 = d.get_global_rect()
+	for key in ["HUD", "TurnBar", "BotHand", "Table", "Quests", "Hand", "Actions"]:
+		var r: Rect2 = d._layout_parts[key].get_global_rect()
+		if r.position.x < bounds.position.x - 1 or r.position.y < bounds.position.y - 1 or r.end.x > bounds.end.x + 1 or r.end.y > bounds.end.y + 1:
+			print("  info  landscape out of bounds ", key, " ", r, " of ", bounds)
+			good = false
+	for count in range(1, 17):
+		var layout: Dictionary = d._table_layout(count, d._table_grid.size)
+		for point in layout.at:
+			if point.x < -0.5 or point.y < -0.5 or point.x + layout.cw > d._table_grid.size.x + 0.5 or point.y + layout.ch > d._table_grid.size.y + 0.5:
+				good = false
+	for card in d._table_grid.get_children():
+		var r: Rect2 = card.get_global_rect()
+		var area: Rect2 = d._table_grid.get_global_rect()
+		if r.position.x < area.position.x - 1 or r.end.x > area.end.x + 1 or r.position.y < area.position.y - 1 or r.end.y > area.end.y + 1: good = false
+	# Animations and effects use coordinates local to a centred stage, not
+	# global window coordinates (which differ in ultrawide windows).
+	host.position += Vector2(37, 9)
+	for i in range(4): await get_tree().process_frame
+	var expected_center: Vector2 = d._table_box.get_global_rect().get_center() - d.global_position
+	if d._table_center().distance_to(expected_center) > 0.5: good = false
+	host.position -= Vector2(37, 9)
+	for i in range(4): await get_tree().process_frame
+	var hand_card: Control = d._hand_row.get_child(0)
+	var id: int = hand_card.card_id
+	_send_mouse_click(hand_card.get_global_rect().get_center())
+	await get_tree().process_frame
+	if d._selection != id: good = false
+	var state: Dictionary = d.duel.to_dict().duplicate(true)
+	_send_mouse_click(d._btn_pile.get_global_rect().get_center())
+	for i in range(4): await get_tree().process_frame
+	var open_overlay: Control = d._overlay
+	if open_overlay == null: good = false
+	win.content_scale_size = Vector2i(540, 960)
+	win.size = Vector2i(540, 960)
+	for i in range(20): await get_tree().process_frame
+	if d._landscape or not d._portrait_root.visible or d._selection != id or d.duel.to_dict() != state or d._overlay != open_overlay: good = false
+	# Close the still-open sheet via the real pointer after rotating.
+	var close: Button = null
+	for node in d.get_children():
+		if node is PanelContainer and node.z_index == 101:
+			for child in _walk_controls(node):
+				if child is Button and child.text == "Close": close = child
+	if close == null:
+		good = false
+		d._close_overlay()
+	else:
+		_send_mouse_click(close.get_global_rect().get_center())
+		for i in range(4): await get_tree().process_frame
+		if d._overlay != null: good = false
+	# A real click on the pile control must still work after the reflow.
+	_send_mouse_click(d._btn_pile.get_global_rect().get_center())
+	for i in range(4): await get_tree().process_frame
+	if d._overlay == null: good = false
+	d._close_overlay()
+	win.content_scale_size = Vector2i(1280, 720)
+	win.size = Vector2i(1280, 720)
+	for i in range(20): await get_tree().process_frame
+	if not d._landscape or d._selection != id or d.duel.to_dict() != state: good = false
+	if good: ok("landscape duel fits, receives clicks and preserves selection/state across both rotations")
+	else: fail("landscape duel reflow, bounds, hit testing or state preservation failed")
+	host.queue_free()
+	Profile.anim_enabled = old_anim
+	win.content_scale_size = old_scale
+	win.size = old_size
+	for i in range(5): await get_tree().process_frame
 
 
 ## Resize a real title instance to small and desktop-column dimensions. The

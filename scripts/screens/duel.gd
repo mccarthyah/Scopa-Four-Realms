@@ -55,6 +55,14 @@ var _deck_chip: PanelContainer
 var _pile_chip: PanelContainer
 var _goal_chip: PanelContainer
 var _score_chip: PanelContainer
+var _portrait_root: VBoxContainer
+var _landscape_root: HBoxContainer
+var _landscape_side: VBoxContainer
+var _landscape_table: VBoxContainer
+var _layout_parts := {}
+var _landscape := false
+var _layout_ready := false
+var _layout_refresh_pending := false
 
 # --- runtime -----------------------------------------------------------------
 var _turn_time := TURN_SECONDS
@@ -108,6 +116,8 @@ func _build_duel() -> void:
 	_bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 
 	var root := VBoxContainer.new()
+	_portrait_root = root
+	root.name = "PortraitLayout"
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root.offset_left = 12
 	root.offset_right = -12
@@ -137,6 +147,31 @@ func _build_duel() -> void:
 	var a := _build_actions()
 	a.name = "Actions"
 	root.add_child(a)
+	_layout_parts = {"HUD": t, "TurnBar": mid, "BotHand": bot, "Table": tbl,
+		"Quests": q, "Hand": h, "Actions": a}
+	_landscape_root = HBoxContainer.new()
+	_landscape_root.name = "LandscapeLayout"
+	_landscape_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_landscape_root.offset_left = 12
+	_landscape_root.offset_right = -12
+	_landscape_root.offset_top = 10
+	_landscape_root.offset_bottom = -10
+	_landscape_root.add_theme_constant_override("separation", 14)
+	_landscape_root.hide()
+	add_child(_landscape_root)
+	_landscape_side = VBoxContainer.new()
+	_landscape_side.name = "DuelSidebar"
+	_landscape_side.custom_minimum_size = Vector2(440, 0)
+	_landscape_side.add_theme_constant_override("separation", 8)
+	_landscape_root.add_child(_landscape_side)
+	_landscape_table = VBoxContainer.new()
+	_landscape_table.name = "DuelPlayfield"
+	_landscape_table.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_landscape_table.add_theme_constant_override("separation", 6)
+	_landscape_root.add_child(_landscape_table)
+	_layout_ready = true
+	_apply_orientation_layout()
+	_table_grid.resized.connect(_schedule_layout_refresh)
 
 	_toast_box = VBoxContainer.new()
 	_toast_box.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
@@ -279,14 +314,55 @@ func _bot_card_size() -> Vector2:
 
 
 func _notification(what: int) -> void:
-	if what != NOTIFICATION_RESIZED or not is_node_ready():
+	if what != NOTIFICATION_RESIZED or not is_node_ready() or not _layout_ready:
 		return
-	# The table layout is solved from the felt's size, so a window resize (or the
-	# user maximising) has to re-solve it or the cards keep their old size.
-	if _table_grid != null:
-		_refresh_table()
-	if _bot_row != null:
-		_refresh_bot_hand()
+	_apply_orientation_layout()
+	_schedule_layout_refresh()
+
+
+## Reparent existing controls rather than rebuilding the duel: a rotation must
+## not restart the game, invalidate a selection, or discard an open sheet.
+func _apply_orientation_layout() -> void:
+	if not _layout_ready:
+		return
+	var wide := size.x > size.y * 1.12
+	if wide == _landscape:
+		return
+	_landscape = wide
+	if wide:
+		for key in ["HUD", "TurnBar", "Quests"]:
+			_layout_parts[key].reparent(_landscape_side, false)
+		for key in ["BotHand", "Table", "Hand", "Actions"]:
+			_layout_parts[key].reparent(_landscape_table, false)
+		_portrait_root.hide()
+		_landscape_root.show()
+	else:
+		for key in ["HUD", "TurnBar", "BotHand", "Table", "Quests", "Hand", "Actions"]:
+			_layout_parts[key].reparent(_portrait_root, false)
+		_landscape_root.hide()
+		_portrait_root.show()
+	_schedule_layout_refresh()
+
+
+func _schedule_layout_refresh() -> void:
+	if not _layout_ready or _layout_refresh_pending:
+		return
+	_layout_refresh_pending = true
+	_refresh_after_layout.call_deferred()
+
+
+func _refresh_after_layout() -> void:
+	# Containers settle after a frame, including after reparenting and resizing.
+	await get_tree().process_frame
+	_layout_refresh_pending = false
+	if not is_inside_tree() or duel == null:
+		return
+	var hand_width: float = _hand_box.size.x
+	var hw: float = clampf(hand_width * 0.215, 112.0, 150.0)
+	_hand_box.custom_minimum_size = Vector2(0, int(hw * 1.404) + 36)
+	_refresh_table()
+	_refresh_hand()
+	_refresh_bot_hand()
 
 
 func _refresh_bot_hand() -> void:
@@ -599,7 +675,7 @@ func _refresh_hand() -> void:
 	var hand: Array = duel.hands[0].duplicate()
 	hand.sort_custom(C.sort_by_faction)
 	var my_turn := duel.is_my_turn(0) and not _busy
-	var hw: float = clampf(size.x * 0.215, 112.0, 150.0)
+	var hw: float = clampf(_hand_box.size.x * 0.215, 112.0, 150.0)
 	for c in hand:
 		var cv := CardView.new()
 		cv.setup(c, true, int(hw), int(hw * 1.404))
@@ -829,7 +905,7 @@ func _play_card(card: int, group_idx: int) -> void:
 	var target_center := _table_center()
 	var from_center := _hand_card_center(card)
 	if from_center == Vector2.ZERO:
-		from_center = _hand_box.global_position + _hand_box.size * Vector2(0.5, 0.6)
+		from_center = _hand_box.global_position - global_position + _hand_box.size * Vector2(0.5, 0.6)
 
 	# pre-compute what will be captured so the animation can fly the cards, and so
 	# the match can be shown on the real table cards before they leave it
@@ -878,7 +954,7 @@ func _play_card(card: int, group_idx: int) -> void:
 func _card_slot_center(c: int) -> Vector2:
 	var node := _table_card_node(c)
 	if node != null:
-		return node.global_position + node.size * 0.5
+		return node.global_position - global_position + node.size * 0.5
 	return _table_center()
 
 
@@ -945,11 +1021,11 @@ func _run_bot() -> void:
 		# the opponent's card visibly leaves their hand and travels down
 		var ch: float = clampf(maxf(_table_box.size.y, 260.0) * 0.40, 148.0, 208.0)
 		var cw: float = ch / 1.404
-		var origin: Vector2 = _bot_row.global_position + _bot_row.size * Vector2(0.5, 0.5)
+		var origin: Vector2 = _bot_row.global_position - global_position + _bot_row.size * Vector2(0.5, 0.5)
 		if _bot_row.get_child_count() > 0:
 			var first := _bot_row.get_child(0) as Control
 			if first != null:
-				origin = first.global_position + first.size * 0.5
+				origin = first.global_position - global_position + first.size * 0.5
 		var landing := _table_center() if matched.is_empty() else _card_slot_center(matched[0])
 		# How small their hand card is drawn, relative to a playfield card, so the
 		# card grows from that size to full as it flies and spins.
@@ -1297,9 +1373,8 @@ func _beat(long_s: float, short_s: float = 0.0) -> float:
 	return long_s if anim_on("slow") else short_s
 
 
-## Fly a card from `from` onto the playfield. With the spin enabled it turns a
-## full 360 about its vertical axis on the way, showing its back for the middle
-## of the turn. One tween, one property, no shader.
+## Fly a card from `from` onto the playfield. With spin enabled it turns a
+## full 360 degrees about its centre, face up throughout, without a shader.
 func _fly_card_in(c: int, from: Vector2, to: Vector2, w: int, h: int, delay: float = 0.0,
 		start_scale: float = 1.0) -> void:
 	var cv := CardView.new()
@@ -1397,18 +1472,18 @@ func _haptic(ms: int) -> void:
 
 
 func _table_center() -> Vector2:
-	return _table_box.global_position + _table_box.size * Vector2(0.5, 0.5)
+	return _table_box.global_position - global_position + _table_box.size * Vector2(0.5, 0.5)
 
 
 func _hand_card_center(card: int) -> Vector2:
 	for c in _hand_row.get_children():
 		if c is CardView and c.card_id == card:
-			return c.global_position + c.size * 0.5
-	return _hand_box.global_position + _hand_box.size * 0.5
+			return c.global_position - global_position + c.size * 0.5
+	return _hand_box.global_position - global_position + _hand_box.size * 0.5
 
 
 func _pile_chip_center() -> Vector2:
-	return _score_chip.global_position + _score_chip.size * 0.5
+	return _score_chip.global_position - global_position + _score_chip.size * 0.5
 
 
 func _toast(title: String, sub: String, col: Color = UI.GOLD) -> void:

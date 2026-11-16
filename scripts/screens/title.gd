@@ -320,12 +320,50 @@ func _open_settings() -> void:
 	var sheet := _sheet("SETTINGS")
 	var body: VBoxContainer = sheet.get_meta("body")
 	body.add_child(_classic_panel())
+	body.add_child(_orientation_panel())
 	body.add_child(_cosmetics_panel())
 	body.add_child(_animation_panel())
 	var done := UI.button("Done", "primary", 20)
 	done.name = "SettingsDone"
 	done.pressed.connect(_codex_close)
 	body.add_child(done)
+
+
+func _orientation_panel() -> Control:
+	var panel := PanelContainer.new()
+	panel.name = "OrientationSettings"
+	panel.add_theme_stylebox_override("panel", UI.panel(UI.PANEL, 16, Color("3a3050")))
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 8)
+	panel.add_child(col)
+	col.add_child(UI.label("ORIENTATION", 18, UI.GOLD))
+	var choice := OptionButton.new()
+	choice.name = "OrientationChoice"
+	choice.custom_minimum_size = Vector2(0, 44)
+	choice.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	choice.add_theme_font_override("font", UI.font_bold())
+	choice.add_theme_font_size_override("font_size", 16)
+	choice.add_theme_color_override("font_color", UI.TEXT)
+	choice.add_theme_color_override("font_hover_color", UI.GOLD)
+	choice.add_theme_stylebox_override("normal", UI.flat(UI.BG2, 8, Color("4a3f5e"), 1))
+	choice.add_theme_stylebox_override("hover", UI.flat(UI.PANEL_HI, 8, UI.GOLD, 1))
+	choice.add_theme_stylebox_override("pressed", UI.flat(UI.PANEL_HI, 8, UI.GOLD, 1))
+	var values := ["auto", "landscape_left", "landscape_right", "portrait"]
+	for text in ["Auto", "Landscape Left", "Landscape Right", "Portrait"]:
+		choice.add_item(text)
+	choice.select(maxi(values.find(Profile.orientation), 0))
+	choice.item_selected.connect(func(index: int):
+		Profile.set_orientation(values[index])
+		Sfx.play("select", -14.0))
+	col.add_child(choice)
+	var note := "Auto follows the device. Forced directions use the phone orientation."
+	if OS.has_feature("web"):
+		choice.disabled = true
+		note = "The browser controls orientation; the layout follows the window."
+	elif not DisplayServer.has_feature(DisplayServer.FEATURE_ORIENTATION):
+		note = "Auto follows the window. On desktop, forced modes resize the window."
+	col.add_child(UI.label(note, 14, UI.TEXT_DIM, false, true))
+	return panel
 
 
 func _classic_panel() -> Control:
