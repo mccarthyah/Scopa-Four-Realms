@@ -16,6 +16,7 @@ signal pressed()
 const T := preload("res://scripts/tables.gd")
 const C := preload("res://scripts/game/cards.gd")
 const CardArt := preload("res://scripts/ui/card_art.gd")
+const EffectAtlas := preload("res://scripts/ui/effect_atlas.gd")
 
 ## Height / width of a card. One constant, shared with the table layout so the
 ## grid and the cards can never disagree about how tall a card is.
@@ -180,7 +181,9 @@ func _draw() -> void:
 
 	# --- drop shadow: one cheap quad, no blur pass
 	_ensure_styles()
-	draw_style_box(_sb_shadow, Rect2(rect.position + Vector2(0, 3), rect.size))
+	var shadow_rect := Rect2(rect.position + Vector2(0, 3), rect.size)
+	if not UI.LOW_SPEC or not EffectAtlas.draw_sprite(self, shadow_rect, EffectAtlas.SHADOW):
+		draw_style_box(_sb_shadow, shadow_rect)
 
 	# The face remains face up while spinning. On software renderers use the
 	# prebuilt atlas; do not capture/read back a viewport during gameplay.
@@ -195,18 +198,24 @@ func _draw() -> void:
 	if playable or selected:
 		var pulse := 0.55 + 0.45 * sin(_ring_phase)
 		_sb_ring.border_color = Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, (0.55 + 0.45 * pulse) * alpha)
-		draw_style_box(_sb_ring, rect.grow(2.0))
+		if not UI.LOW_SPEC or not EffectAtlas.draw_sprite(self, rect.grow(2.0), EffectAtlas.PLAYABLE_RING,
+				Color(1, 1, 1, _sb_ring.border_color.a)):
+			draw_style_box(_sb_ring, rect.grow(2.0))
 		_sb_glow.bg_color = Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, 0.12 * alpha)
-		draw_style_box(_sb_glow, rect.grow(5.0))
+		if not UI.LOW_SPEC or not EffectAtlas.draw_sprite(self, rect.grow(5.0), EffectAtlas.GLOW):
+			draw_style_box(_sb_glow, rect.grow(5.0))
 
 	if selected:
 		_sb_sel.bg_color = Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, 0.10 * alpha)
-		draw_style_box(_sb_sel, rect)
+		if not UI.LOW_SPEC or not EffectAtlas.draw_sprite(self, rect, EffectAtlas.SELECTED):
+			draw_style_box(_sb_sel, rect)
 
 	if capturable:
 		var pulse2 := 0.5 + 0.5 * sin(_ring_phase * 0.8)
 		_sb_cap.border_color = Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, (0.35 + 0.45 * pulse2) * alpha)
-		draw_style_box(_sb_cap, rect.grow(3.0))
+		if not UI.LOW_SPEC or not EffectAtlas.draw_sprite(self, rect.grow(3.0), EffectAtlas.CAPTURE_RING,
+				Color(1, 1, 1, _sb_cap.border_color.a)):
+			draw_style_box(_sb_cap, rect.grow(3.0))
 		draw_string(UI.font_bold(), rect.position + Vector2(size.x - 20, 20), "◆",
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, alpha))
 

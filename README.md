@@ -284,7 +284,7 @@ scripts/
     title.gd             masthead, faction picker, modes, cosmetics, codex, resume
     duel.gd              HUD, table, hand, Oath sheets, score sheet, celebrations
   audit.gd               headless self-test + layout audit (dev only)
-assets/cards/            pre-rendered 40 card faces and 3 backs in one PNG atlas
+assets/cards/            pre-rendered card faces, backs and lightweight effects atlases
 assets/suits/            static painted suit emblems
 tools/                   offline card atlas generator
 audio/                   generated WAVs: deal, capture, scopa, favor, oath, win, lose, tick…
@@ -295,11 +295,12 @@ Open `screenshots/card_sheet.html` in a browser (or the workspace previewer) for
 card design — it mirrors the geometry and palette that `card_view.gd` draws.
 
 On software renderers the 40 faces and three backs use a single pre-rendered atlas; interactive
-selection, spin and highlights are still drawn separately. Other renderers keep the vector artwork,
-which also provides a fallback if the atlas is unavailable. The atlas is shipped with the game, so
-there is **no runtime baking or GPU readback**. To regenerate it after changing the card art, run
-`godot --path . -s res://tools/generate_card_atlas.gd` with a working rendering display, then re-import
-the PNG. The generator validates the cells before replacing the image.
+selection, spin and highlights are still drawn separately. On those machines, card shadows, selection
+and capture rings, felt sigils and Favor pips use a second small static atlas. Scores, timing, input
+and board layout remain live. Other renderers keep vector artwork, which also provides a fallback if
+an atlas is unavailable. Both atlases are shipped, so drawing these assets requires **no runtime
+atlas baking or GPU readback**. To regenerate after changing the artwork, run `godot --path . -s res://tools/generate_card_atlas.gd` and `godot --path . -s res://tools/generate_effect_atlas.gd`
+with a working rendering display, then re-import the PNGs. Both generators validate before saving.
 
 Everything a script needs is resolved with an explicit `const X := preload(...)` and a matching
 `class_name`, and the UI fonts are loaded lazily with a fallback — so a bare checkout parses and boots

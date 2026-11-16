@@ -5,6 +5,7 @@ extends Control
 const UI := preload("res://scripts/ui/ui.gd")
 const FX := preload("res://scripts/ui/fx.gd")
 const CardView := preload("res://scripts/ui/card_view.gd")
+const EffectAtlas := preload("res://scripts/ui/effect_atlas.gd")
 const DuelAI := preload("res://scripts/game/ai.gd")
 const RealmBackground := preload("res://scripts/ui/background.gd")
 
@@ -485,11 +486,14 @@ func _draw_favor_pips() -> void:
 	fav_node.draw_string(UI.font_bold(), Vector2(4, 16), "FAVOR", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, UI.TEXT_DIM)
 	for i in range(Duel.MAX_FAVOR):
 		var c := Vector2(x + i * 20, 10)
-		if i < n:
-			fav_node.draw_circle(c, 6.0, UI.GOLD)
-			fav_node.draw_circle(c, 3.0, Color("fff6dd"))
-		else:
-			fav_node.draw_arc(c, 6.0, 0, TAU, 18, Color("4a3f5e"), 1.4, true)
+		var icon := EffectAtlas.FAVOR_FILLED if i < n else EffectAtlas.FAVOR_EMPTY
+		var pip_rect := Rect2(c - Vector2(8, 8), Vector2(16, 16))
+		if not UI.LOW_SPEC or not EffectAtlas.draw_sprite(fav_node, pip_rect, icon):
+			if i < n:
+				fav_node.draw_circle(c, 6.0, UI.GOLD)
+				fav_node.draw_circle(c, 3.0, Color("fff6dd"))
+			else:
+				fav_node.draw_arc(c, 6.0, 0, TAU, 18, Color("4a3f5e"), 1.4, true)
 	if duel.oath_used[0]:
 		fav_node.draw_string(UI.font_bold(), Vector2(96 + Duel.MAX_FAVOR * 20 + 12, 16),
 			"Oath spent", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, UI.TEXT_DIM)
@@ -519,7 +523,9 @@ func _draw_table_felt() -> void:
 	for sx in [0.0, 1.0]:
 		for sy in [0.0, 1.0]:
 			var p := Vector2(r.size.x * (0.06 + 0.88 * sx), r.size.y * (0.10 + 0.80 * sy))
-			_table_box.draw_arc(p, 22, 0, TAU, 26, Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, 0.07), 1.0, true)
+			var sigil_rect := Rect2(p - Vector2(24, 24), Vector2(48, 48))
+			if not UI.LOW_SPEC or not EffectAtlas.draw_sprite(_table_box, sigil_rect, EffectAtlas.SIGIL):
+				_table_box.draw_arc(p, 22, 0, TAU, 26, Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, 0.07), 1.0, true)
 
 
 # ---------------------------------------------------------------------------

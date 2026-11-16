@@ -9,6 +9,7 @@ const C := preload("res://scripts/game/cards.gd")
 const DuelScript := preload("res://scripts/game/duel.gd")
 const DuelAI := preload("res://scripts/game/ai.gd")
 const CardArt := preload("res://scripts/ui/card_art.gd")
+const EffectAtlas := preload("res://scripts/ui/effect_atlas.gd")
 const UI := preload("res://scripts/ui/ui.gd")
 
 var failures := 0
@@ -93,6 +94,7 @@ func run(m: Control) -> void:
 	await _test_bot_hand_scale()
 	await _test_card_corners()
 	_test_card_atlas()
+	_test_effect_atlas()
 	await _test_table_fit()
 	await _test_display_scaling()
 	await _test_menu_sheets()
@@ -592,6 +594,50 @@ func _test_card_atlas() -> void:
 		fail("card atlas: missing texture did not trigger vector fallback")
 	else:
 		ok("missing atlas triggers vector artwork fallback")
+
+
+## Actual imported effect sprites must stay visible, transparent, and correctly
+## coloured. A transparent viewport readback is premultiplied; saving it as a
+## straight-alpha PNG without correcting RGB made the gold card glow turn gray.
+func _test_effect_atlas() -> void:
+	var tex: Texture2D = EffectAtlas.texture()
+	if tex == null:
+		fail("effect atlas: missing or wrong dimensions")
+		return
+	var image: Image = tex.get_image()
+	if image == null or image.is_empty():
+		fail("effect atlas: image is blank")
+		return
+	var shadow: Color = image.get_pixel(104, 146)
+	var ring_center: Color = image.get_pixel(312, 146)
+	var ring_top: Color = image.get_pixel(312, 4)
+	var glow: Color = image.get_pixel(520, 146)
+	var select: Color = image.get_pixel(728, 146)
+	if image.get_pixel(0, 0).a < 0.05 and shadow.a > 0.20 and shadow.a < 0.35 			and ring_center.a < 0.05 and ring_top.a > 0.8:
+		ok("effect atlas has curved transparent shadow and hollow selection ring")
+	else:
+		fail("effect atlas: shadow or selection ring is blank or opaque")
+	if glow.r > 0.7 and glow.g > 0.55 and glow.a > 0.08 and glow.a < 0.16 			and select.r > 0.7 and select.g > 0.55 and select.a > 0.07 and select.a < 0.13:
+		ok("translucent card glows retain gold colour (straight alpha)")
+	else:
+		fail("effect atlas: card glows lost colour or opacity")
+	if image.get_pixel(48, 296).a > 0.02 and image.get_pixel(48, 340).a < 0.05 			and image.get_pixel(112, 296).a > 0.5 and image.get_pixel(112, 308).a < 0.05 			and image.get_pixel(144, 308).a > 0.9:
+		ok("felt sigil and empty/filled favor pips have correct transparency")
+	else:
+		fail("effect atlas: felt sigil or favor pips are missing or opaque")
+	var saved_checked: bool = EffectAtlas._checked
+	var saved_tex: Texture2D = EffectAtlas._texture
+	EffectAtlas._checked = true
+	EffectAtlas._texture = null
+	var dummy := Control.new()
+	var used_atlas: bool = EffectAtlas.draw_sprite(dummy, Rect2(0, 0, 104, 146), EffectAtlas.SHADOW)
+	dummy.free()
+	EffectAtlas._texture = saved_tex
+	EffectAtlas._checked = saved_checked
+	if used_atlas:
+		fail("missing effect atlas did not trigger vector fallback")
+	else:
+		ok("missing effect atlas triggers vector decorations")
 
 
 ## The opponent's hand is drawn smaller than a playfield card, and their played
