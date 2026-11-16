@@ -70,7 +70,7 @@ Everything in the brief, playable end to end:
 | Traditional scoring renamed: Loot · Treasury · Runestone · Banner · Glory | ✅ auto-scored live, with a live Primiera/Banner meter |
 | Running **Renown** total | ✅ split bar in the HUD |
 | **Faction Oaths**, 1 Favor for a scopa or any 7, once per hand | ✅ all four, with dedicated picker UI |
-| **Classic Mode** (Oaths off) | ✅ toggle on the title screen |
+| **Classic Mode** (Oaths off) | ✅ toggle in the title-screen Settings dialog |
 | Two **public quests** per duel, bonus Renown | ✅ 8 quests, rolled per match, evaluated at hand end |
 | **Campaign** with boss twists | ✅ 4 bosses: veiled table card, late-game fury, double treasure, Banner ties |
 | **Daily Puzzle** — fixed deal, goal in N moves | ✅ 3 hand-authored deals, rotates by date; audit checks solvability |
@@ -145,7 +145,7 @@ check asserts both halves of that, so it cannot regress in either direction.
 
 ### Animation settings
 
-Title screen → *Animation*. Nothing here changes the rules, and the game is fully
+Title screen → *Settings* → *Animation*. Nothing here changes the rules, and the game is fully
 playable with it all switched off — the same moves resolve on the same frames,
 just instantly (a measured play: ~1.7 s animated, 66 ms off).
 

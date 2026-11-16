@@ -98,7 +98,15 @@ func _build() -> void:
 	_place_logo_line(tag, 140)
 
 	# ---- faction picker ------------------------------------------------
-	col.add_child(_section_header("CHOOSE YOUR OATH", "Change faction and the Oath you can spend Favor on."))
+	var oath_heading := _section_header("CHOOSE YOUR OATH", "Change faction and the Oath you can spend Favor on.")
+	col.add_child(oath_heading)
+	var heading_row: HBoxContainer = oath_heading.get_child(0)
+	var settings := UI.button("Settings", "ghost", 17)
+	settings.name = "SettingsButton"
+	settings.custom_minimum_size = Vector2(92, 40)
+	settings.tooltip_text = "Classic mode, table appearance and animations"
+	settings.pressed.connect(_open_settings)
+	heading_row.add_child(settings)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
 	col.add_child(row)
@@ -116,34 +124,12 @@ func _build() -> void:
 	col.add_child(_mode_list)
 	_build_modes()
 
-	# ---- classic toggle + stats ---------------------------------------
-	var opt := PanelContainer.new()
-	opt.add_theme_stylebox_override("panel", UI.panel())
-	col.add_child(opt)
-	var ob := HBoxContainer.new()
-	ob.add_theme_constant_override("separation", 12)
-	opt.add_child(ob)
-	var ol := VBoxContainer.new()
-	ol.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	ob.add_child(ol)
-	ol.add_child(UI.label("Classic Mode", 22, UI.TEXT, true))
-	ol.add_child(UI.label("Oaths off. Pure Scopa, no Favor.", 17, UI.TEXT_DIM, false, true))
-	_classic_toggle = _toggle(Profile.classic_mode)
-	_classic_toggle.pressed.connect(func():
-		Profile.classic_mode = not Profile.classic_mode
-		Profile.save_profile()
-		_refresh_toggle())
-	ob.add_child(_classic_toggle)
-
-	col.add_child(UI.spacer(4))
-	col.add_child(_cosmetics_panel())
-	col.add_child(UI.spacer(4))
-	col.add_child(_animation_panel())
+	# Settings live in their own dialog; keep the record on the title page.
 	col.add_child(UI.spacer(4))
 	col.add_child(_stats_panel())
 	col.add_child(UI.spacer(10))
 
-	var foot := UI.label("v1.0 · cosmetically yours, mechanically fair", 15, Color(UI.TEXT_DIM.r, UI.TEXT_DIM.g, UI.TEXT_DIM.b, 0.6))
+	var foot := UI.label("v1.0 · cosmetically yours, mechanically fair", 15, Color(UI.TEXT_DIM.r, UI.TEXT_DIM.g, UI.TEXT_DIM.b, 0.6), false, true)
 	foot.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	col.add_child(foot)
 
@@ -232,6 +218,8 @@ func _faction_card(f: int) -> Button:
 	nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	nm.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	nm.add_theme_font_size_override("font_size", 18)
+	# Keep four faction names readable without colliding in narrow columns.
+	b.resized.connect(func(): nm.add_theme_font_size_override("font_size", 14 if b.size.x < 80 else 18))
 	v.add_child(nm)
 
 	var pp := UI.label(info.people, 14, UI.TEXT_DIM)
@@ -266,14 +254,15 @@ func _toggle(on: bool) -> Button:
 	b.draw.connect(func():
 		var r := Rect2(Vector2.ZERO, b.size)
 		var cx := r.size.x * (0.66 if b.button_pressed else 0.34)
-		b.draw_circle(Vector2(cx, r.size.y * 0.5), 13.0, UI.GOLD if b.button_pressed else UI.TEXT_DIM)
-		b.draw_circle(Vector2(cx, r.size.y * 0.5), 13.0, Color(0, 0, 0, 0.0)))
+		# Dark on gold when enabled; the former gold-on-gold thumb was invisible.
+		b.draw_circle(Vector2(cx, r.size.y * 0.5), 13.0, UI.INK if b.button_pressed else UI.TEXT_DIM))
 	return b
 
 
 func _refresh_toggle() -> void:
-	_classic_toggle.button_pressed = Profile.classic_mode
-	_classic_toggle.queue_redraw()
+	if is_instance_valid(_classic_toggle):
+		_classic_toggle.set_pressed_no_signal(Profile.classic_mode)
+		_classic_toggle.queue_redraw()
 
 
 func _build_modes() -> void:
@@ -282,7 +271,8 @@ func _build_modes() -> void:
 		c.queue_free()
 	if Profile.has_saved_duel():
 		_mode_list.add_child(_mode_row("Resume duel", "Pick up where you left off.", "RESUME", _resume_duel, Color("9d7fe0")))
-	_mode_list.add_child(_mode_row("Quick Duel", "One hand. Oaths on. Four minutes.", "QUICK", func(): _launch(T.Mode.QUICK), UI.GOLD))
+	var quick_sub := "One hand. Oaths off. Four minutes." if Profile.classic_mode else "One hand. Oaths on. Four minutes."
+	_mode_list.add_child(_mode_row("Quick Duel", quick_sub, "QUICK", func(): _launch(T.Mode.QUICK), UI.GOLD))
 	_mode_list.add_child(_mode_row("Scopa di Quindici", "Fifteen or nothing. Rank matches never capture.", "XV", _launch_quindici, Color("6fa8d4")))
 	_mode_list.add_child(_mode_row("Ranked Duel", "Best of three. First to 11 Renown.", "RANKED", _open_ranked, Color("9d7fe0")))
 	_mode_list.add_child(_mode_row("Campaign", "Four bosses, four twists.", "CAMPAIGN", _open_campaign, Color("c86f4a")))
@@ -303,10 +293,10 @@ func _mode_row(title: String, sub: String, badge: String, cb: Callable, accent: 
 	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	v.add_theme_constant_override("separation", 1)
 	h.add_child(v)
-	var t := UI.label(title, 24, UI.TEXT, true)
+	var t := UI.label(title, 24, UI.TEXT, true, true)
 	t.add_theme_font_size_override("font_size", 22)
 	v.add_child(t)
-	v.add_child(UI.label(sub, 16, UI.TEXT_DIM))
+	v.add_child(UI.label(sub, 16, UI.TEXT_DIM, false, true))
 
 	var go := UI.button("", "ghost", 18)
 	go.custom_minimum_size = Vector2(52, 44)
@@ -325,10 +315,49 @@ func _mode_row(title: String, sub: String, badge: String, cb: Callable, accent: 
 	return p
 
 
+## One scrollable dialog for rules, cosmetics and animation preferences.
+func _open_settings() -> void:
+	var sheet := _sheet("SETTINGS")
+	var body: VBoxContainer = sheet.get_meta("body")
+	body.add_child(_classic_panel())
+	body.add_child(_cosmetics_panel())
+	body.add_child(_animation_panel())
+	var done := UI.button("Done", "primary", 20)
+	done.name = "SettingsDone"
+	done.pressed.connect(_codex_close)
+	body.add_child(done)
+
+
+func _classic_panel() -> Control:
+	var panel := PanelContainer.new()
+	panel.name = "ClassicSettings"
+	panel.add_theme_stylebox_override("panel", UI.panel())
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	panel.add_child(row)
+	var labels := VBoxContainer.new()
+	labels.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(labels)
+	labels.add_child(UI.label("Classic Mode", 22, UI.TEXT, true))
+	labels.add_child(UI.label("Oaths off. Pure Scopa, no Favor.", 17, UI.TEXT_DIM, false, true))
+	_classic_toggle = _toggle(Profile.classic_mode)
+	_classic_toggle.set_meta("setting_key", "classic_mode")
+	_classic_toggle.tooltip_text = "Enable or disable Classic Mode"
+	_classic_toggle.pressed.connect(func():
+		Profile.classic_mode = not Profile.classic_mode
+		Profile.save_profile()
+		_refresh_toggle()
+		_build_modes()
+		Sfx.play("select", -14.0))
+	row.add_child(_classic_toggle)
+	return panel
+
+
 ## Presentation settings. Every animation can be turned off and the game stays
 ## completely playable - they are flourish, not mechanics.
 func _animation_panel() -> Control:
 	var p := PanelContainer.new()
+	p.name = "AnimationSettings"
 	p.add_theme_stylebox_override("panel", UI.panel(UI.PANEL, 16, Color("3a3050")))
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 8)
@@ -339,7 +368,7 @@ func _animation_panel() -> Control:
 	var sp := Control.new()
 	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	h.add_child(sp)
-	h.add_child(UI.label("cosmetic · never affects play", 14, UI.TEXT_DIM))
+	h.add_child(UI.label("cosmetic · optional", 14, UI.TEXT_DIM))
 
 	var rows := [
 		["anim_enabled", "All animation", "Master switch. Off = instant, zero flourish."],
@@ -358,8 +387,9 @@ func _animation_panel() -> Control:
 		tv.add_theme_constant_override("separation", 0)
 		r.add_child(tv)
 		tv.add_child(UI.label(row[1], 19, UI.TEXT, true))
-		tv.add_child(UI.label(row[2], 15, UI.TEXT_DIM))
+		tv.add_child(UI.label(row[2], 15, UI.TEXT_DIM, false, true))
 		var t := _toggle(bool(Profile.get(key)))
+		t.set_meta("setting_key", key)
 		var k := key
 		t.pressed.connect(func():
 			Profile.set(k, not bool(Profile.get(k)))
@@ -461,6 +491,7 @@ func _resume_duel() -> void:
 
 func _cosmetics_panel() -> Control:
 	var p := PanelContainer.new()
+	p.name = "TableSettings"
 	p.add_theme_stylebox_override("panel", UI.panel(UI.PANEL, 16, Color("3a3050")))
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 8)
@@ -471,25 +502,33 @@ func _cosmetics_panel() -> Control:
 	var sp := Control.new()
 	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	h.add_child(sp)
-	h.add_child(UI.label("cosmetics only · no card power", 14, UI.TEXT_DIM))
+	h.add_child(UI.label("appearance only", 14, UI.TEXT_DIM))
 
 	# card backs
 	var back_row := HBoxContainer.new()
 	back_row.add_theme_constant_override("separation", 10)
 	v.add_child(back_row)
 	back_row.add_child(UI.label("Card back", 16, UI.TEXT_DIM))
+	var back_group := ButtonGroup.new()
 	for i in range(3):
 		var b := Button.new()
 		b.focus_mode = Control.FOCUS_NONE
 		b.custom_minimum_size = Vector2(46, 62)
+		b.toggle_mode = true
+		b.button_group = back_group
+		b.button_pressed = i == Profile.card_back
+		b.set_meta("card_back", i)
+		b.tooltip_text = "Card back %d" % (i + 1)
 		b.add_theme_stylebox_override("normal", UI.flat(Color(0, 0, 0, 0), 8))
 		b.add_theme_stylebox_override("hover", UI.flat(Color(1, 1, 1, 0.06), 8))
-		b.add_theme_stylebox_override("pressed", UI.flat(Color(1, 1, 1, 0.1), 8))
+		b.add_theme_stylebox_override("pressed", UI.flat(Color(0, 0, 0, 0), 8, UI.GOLD, 2))
 		b.add_theme_stylebox_override("focus", UI.flat(Color(0, 0, 0, 0), 8))
 		var cv := CardView.new()
 		cv.setup(-1, false, 42, 58)
 		cv.back_style = i
-		cv.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		# CardView._ready defaults to STOP for playable cards; this preview is
+		# added before its parent enters the tree, so override after _ready runs.
+		cv.ready.connect(func(): cv.mouse_filter = Control.MOUSE_FILTER_IGNORE)
 		b.add_child(cv)
 		cv.position = Vector2(2, 2)
 		var idx := i
@@ -508,10 +547,16 @@ func _cosmetics_panel() -> Control:
 	v.add_child(board_row)
 	board_row.add_child(UI.label("Board", 16, UI.TEXT_DIM))
 	var themes := [Color("1b2a24"), Color("1a2230"), Color("2a1c22"), Color("241f2e")]
+	var board_group := ButtonGroup.new()
 	for i in range(themes.size()):
 		var b2 := Button.new()
 		b2.focus_mode = Control.FOCUS_NONE
-		b2.custom_minimum_size = Vector2(44, 30)
+		b2.custom_minimum_size = Vector2(38, 32)
+		b2.toggle_mode = true
+		b2.button_group = board_group
+		b2.button_pressed = i == Profile.board_theme
+		b2.set_meta("board_theme", i)
+		b2.tooltip_text = "Board theme %d" % (i + 1)
 		b2.add_theme_stylebox_override("normal", UI.flat(themes[i], 8, Color("4a3f5e"), 1))
 		b2.add_theme_stylebox_override("hover", UI.flat(themes[i].lightened(0.12), 8, UI.GOLD, 2))
 		b2.add_theme_stylebox_override("pressed", UI.flat(themes[i], 8, UI.GOLD, 2))
@@ -708,6 +753,7 @@ func _codex_close() -> void:
 			part.queue_free()
 	_sheet_panel = null
 	_codex = null
+	_classic_toggle = null
 
 
 func _open_codex() -> void:

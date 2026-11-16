@@ -99,6 +99,8 @@ func run(m: Control) -> void:
 	await _test_table_fit()
 	await _test_display_scaling()
 	await _test_logo_layout()
+	await _test_settings_dialog()
+	await _test_settings_layout()
 	await _test_menu_sheets()
 	await _test_menu_pointer_input()
 	await _test_tap_play()
@@ -228,6 +230,194 @@ func _test_menu_sheets() -> void:
 	ok("campaign and codex sheets open without error")
 
 
+## Settings must be reachable through real pointer input and persist immediately.
+func _test_settings_dialog() -> void:
+	var title = main.current
+	title._codex_close()
+	await get_tree().process_frame
+	var keys := ["classic_mode", "card_back", "board_theme", "anim_enabled", "anim_spin", "anim_slow", "anim_match"]
+	var saved := {}
+	for key in keys:
+		saved[key] = Profile.get(key)
+	Profile.classic_mode = false
+	Profile.card_back = 0
+	Profile.board_theme = 0
+	Profile.anim_enabled = true
+	Profile.anim_spin = true
+	Profile.anim_slow = true
+	Profile.anim_match = true
+	Profile.save_profile()
+	title._build_modes()
+	title._scroll.scroll_vertical = 0
+	for i in range(4): await get_tree().process_frame
+	var button: Button = title.find_child("SettingsButton", true, false)
+	if button == null or title.find_child("ClassicSettings", true, false) != null or title.find_child("TableSettings", true, false) != null or title.find_child("AnimationSettings", true, false) != null:
+		fail("settings: missing button or controls still on title page")
+	else:
+		_send_mouse_click(button.get_global_rect().get_center())
+		for i in range(4): await get_tree().process_frame
+		if title._sheet_panel == null:
+			fail("settings: button did not open dialog via viewport click")
+		else:
+			ok("settings button opens dialog via viewport click; controls are absent from title")
+			var panel: Control = title._sheet_panel
+			var body: VBoxContainer = panel.get_meta("body")
+			var scroll: ScrollContainer = body.get_parent()
+			var controls := {}
+			var backs := {}
+			var boards := {}
+			for n in _walk_controls(panel):
+				if n is Button and n.has_meta("setting_key"): controls[n.get_meta("setting_key")] = n
+				if n is Button and n.has_meta("card_back"): backs[int(n.get_meta("card_back"))] = n
+				if n is Button and n.has_meta("board_theme"): boards[int(n.get_meta("board_theme"))] = n
+			if controls.size() != 5 or backs.size() != 3 or boards.size() != 4:
+				fail("settings: missing controls: toggles=%s backs=%s boards=%s" % [str(controls.keys()), str(backs.keys()), str(boards.keys())])
+			else:
+				for key in ["classic_mode", "anim_spin", "anim_slow", "anim_match"]:
+					var b: Button = controls[key]
+					scroll.ensure_control_visible(b)
+					for i in range(3): await get_tree().process_frame
+					_send_mouse_click(b.get_global_rect().get_center())
+					await get_tree().process_frame
+				var back: Button = backs[2]
+				var board: Button = boards[3]
+				for b in [back, board]:
+					scroll.ensure_control_visible(b)
+					for i in range(3): await get_tree().process_frame
+					_send_mouse_click(b.get_global_rect().get_center())
+					await get_tree().process_frame
+				var master: Button = controls["anim_enabled"]
+				scroll.ensure_control_visible(master)
+				for i in range(3): await get_tree().process_frame
+				_send_mouse_click(master.get_global_rect().get_center())
+				await get_tree().process_frame
+				var disabled := true
+				for key in ["anim_spin", "anim_slow", "anim_match"]:
+					disabled = disabled and controls[key].disabled
+				if Profile.classic_mode and Profile.card_back == 2 and Profile.board_theme == 3 and not Profile.anim_enabled and not Profile.anim_spin and not Profile.anim_slow and not Profile.anim_match and disabled and back.button_pressed and board.button_pressed:
+					ok("settings controls respond to clicks, show cosmetic selections and master disables sub-switches")
+				else:
+					fail("settings: click state classic=%s back=%s board=%s anim=%s,%s,%s,%s disabled=%s selected=%s,%s" % [Profile.classic_mode,Profile.card_back,Profile.board_theme,Profile.anim_enabled,Profile.anim_spin,Profile.anim_slow,Profile.anim_match,disabled,back.button_pressed,board.button_pressed])
+				_send_mouse_click(master.get_global_rect().get_center())
+				await get_tree().process_frame
+				if not controls["anim_spin"].disabled and not controls["anim_slow"].disabled and not controls["anim_match"].disabled:
+					ok("animation master re-enables its sub-switches")
+				else: fail("settings: sub-switches did not re-enable")
+				# Reload from disk, not just the in-memory values.
+				Profile.classic_mode = false
+				Profile.card_back = 0
+				Profile.board_theme = 0
+				Profile.anim_enabled = false
+				Profile.anim_spin = true
+				Profile.anim_slow = true
+				Profile.anim_match = true
+				Profile.load_profile()
+				if Profile.classic_mode and Profile.card_back == 2 and Profile.board_theme == 3 and Profile.anim_enabled and not Profile.anim_spin and not Profile.anim_slow and not Profile.anim_match:
+					ok("all settings persist through profile reload")
+				else: fail("settings: profile reload did not restore choices")
+				var done: Button = panel.find_child("SettingsDone", true, false)
+				scroll.ensure_control_visible(done)
+				for i in range(4): await get_tree().process_frame
+				_send_mouse_click(done.get_global_rect().get_center())
+				for i in range(3): await get_tree().process_frame
+				if title._sheet_panel != null or is_instance_valid(panel) or title._codex != null:
+					fail("settings: Done left a panel or dimmer")
+				else: ok("settings Done removes both modal layers")
+				title._scroll.scroll_vertical = 0
+				for i in range(3): await get_tree().process_frame
+				_send_mouse_click(button.get_global_rect().get_center())
+				for i in range(3): await get_tree().process_frame
+				panel = title._sheet_panel
+				var reopened := {}
+				var close: Button = null
+				if panel != null:
+					for n in _walk_controls(panel):
+						if n is Button and n.has_meta("setting_key"): reopened[n.get_meta("setting_key")] = n.button_pressed
+						if n is Button and n.text == "✕": close = n
+						if n is Button and n.has_meta("card_back") and n.get_meta("card_back") == 2: reopened["back"] = n.button_pressed
+						if n is Button and n.has_meta("board_theme") and n.get_meta("board_theme") == 3: reopened["board"] = n.button_pressed
+				if reopened.get("classic_mode", false) and reopened.get("anim_enabled", false) and not reopened.get("anim_spin", true) and not reopened.get("anim_slow", true) and not reopened.get("anim_match", true) and reopened.get("back", false) and reopened.get("board", false):
+					ok("reopened settings reflects saved rules, cosmetics and animations")
+				else: fail("settings: reopening does not reflect saved choices")
+				if close != null:
+					_send_mouse_click(close.get_global_rect().get_center())
+					for i in range(3): await get_tree().process_frame
+					if title._sheet_panel == null and title._codex == null and not is_instance_valid(panel): ok("settings X closes without stranded blockers")
+					else: fail("settings X did not remove modal")
+				else: fail("settings X missing")
+				var subtitle_found := false
+				for n in _walk_controls(title._mode_list):
+					if n is Label and n.text == "One hand. Oaths off. Four minutes.": subtitle_found = true
+				var launch: Array = []
+				title.start_duel.connect(func(cfg): launch.append(cfg), CONNECT_ONE_SHOT)
+				title._launch(T.Mode.QUICK)
+				if subtitle_found and not launch.is_empty() and not launch[0].oaths: ok("Quick Duel displays and launches with selected Classic setting")
+				else: fail("settings: Quick Duel ignored Classic Mode")
+	# The launch swaps screens, so restore preferences and return to title.
+	for key in keys: Profile.set(key, saved[key])
+	Profile.save_profile()
+	main.show_title()
+	for i in range(4): await get_tree().process_frame
+
+
+## Resize a real title instance to small and desktop-column dimensions. The
+## narrow case must both expose the Settings button and scroll to Done.
+func _test_settings_layout() -> void:
+	var old_seen: bool = Profile.seen_intro
+	var old_classic: bool = Profile.classic_mode
+	Profile.seen_intro = true
+	var host := Control.new()
+	main.add_child(host)
+	var title = load("res://scripts/screens/title.gd").new()
+	host.add_child(title)
+	var all_ok := true
+	for dims in [Vector2(320, 568), Vector2(360, 640), Vector2(540, 600)]:
+		host.size = dims
+		for i in range(6): await get_tree().process_frame
+		var settings: Button = title.find_child("SettingsButton", true, false)
+		var sr: Rect2 = settings.get_global_rect()
+		var hr: Rect2 = host.get_global_rect()
+		if sr.position.x < hr.position.x or sr.end.x > hr.end.x:
+			fail("settings layout: entry is outside %s column: %s" % [str(dims), str(sr)])
+			all_ok = false
+			continue
+		_send_mouse_click(sr.get_center())
+		for i in range(5): await get_tree().process_frame
+		var panel: Control = title._sheet_panel
+		if panel == null:
+			fail("settings layout: button not clickable in %s column" % str(dims))
+			all_ok = false
+			continue
+		var pr := panel.get_global_rect()
+		if pr.position.x < hr.position.x - 0.5 or pr.end.x > hr.end.x + 0.5 or pr.position.y < hr.position.y or pr.end.y > hr.end.y:
+			fail("settings layout: modal out of bounds at %s: %s" % [str(dims), str(pr)])
+			all_ok = false
+		var body: VBoxContainer = panel.get_meta("body")
+		var scroll: ScrollContainer = body.get_parent()
+		var done: Button = panel.find_child("SettingsDone", true, false)
+		if dims.x == 320 and scroll.get_v_scroll_bar().max_value <= scroll.get_v_scroll_bar().page:
+			fail("settings layout: narrow modal should scroll")
+			all_ok = false
+		scroll.ensure_control_visible(done)
+		for i in range(5): await get_tree().process_frame
+		var dr := done.get_global_rect()
+		var viewport_rect := scroll.get_global_rect()
+		if dr.position.x < viewport_rect.position.x - 0.5 or dr.end.x > viewport_rect.end.x + 0.5 or dr.position.y < viewport_rect.position.y - 0.5 or dr.end.y > viewport_rect.end.y + 0.5:
+			fail("settings layout: Done not visible after scroll at %s" % str(dims))
+			all_ok = false
+		_send_mouse_click(dr.get_center())
+		for i in range(3): await get_tree().process_frame
+		if title._sheet_panel != null:
+			fail("settings layout: Done not clickable at %s" % str(dims))
+			all_ok = false
+			title._codex_close()
+	if all_ok: ok("settings entry, modal bounds, scrolling and Done work at 320, 360 and desktop-column widths")
+	host.queue_free()
+	Profile.seen_intro = old_seen
+	Profile.classic_mode = old_classic
+	await get_tree().process_frame
+
+
 ## Exercise the actual viewport hit-testing path, including after dismissal.
 ## Calling _codex_close directly used to miss a stranded panel blocking the menu.
 func _test_menu_pointer_input() -> void:
@@ -313,6 +503,8 @@ func _test_menu_pointer_input() -> void:
 	if quick == null:
 		fail("menu input: Quick Duel row not found")
 		return
+	title._scroll.scroll_vertical = 0
+	await get_tree().process_frame
 	title._scroll.ensure_control_visible(quick)
 	for i in range(5):
 		await get_tree().process_frame
@@ -327,8 +519,10 @@ func _test_menu_pointer_input() -> void:
 		for i in range(4):
 			await get_tree().process_frame
 		return
-	if title._scroll.scroll_vertical <= scroll_before:
-		fail("menu input: mouse wheel did not scroll the menu")
+	if title._scroll.get_v_scroll_bar().max_value <= title._scroll.get_v_scroll_bar().page:
+		ok("menu fits viewport; wheel did not activate Quick Duel")
+	elif title._scroll.scroll_vertical <= scroll_before:
+		fail("menu input: mouse wheel did not scroll the menu (before=%d after=%d max=%s point=%s)" % [scroll_before, title._scroll.scroll_vertical, title._scroll.get_v_scroll_bar().max_value, str(point)])
 	else:
 		ok("mouse wheel over a mode row scrolls without starting a game")
 	# Reposition the row before testing other buttons and the normal click.
