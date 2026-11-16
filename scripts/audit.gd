@@ -92,6 +92,7 @@ func run(m: Control) -> void:
 	_test_spin()
 	await _test_bot_hand_scale()
 	await _test_card_corners()
+	_test_card_atlas()
 	await _test_table_fit()
 	await _test_display_scaling()
 	await _test_menu_sheets()
@@ -542,6 +543,55 @@ func _test_card_corners() -> void:
 	cv.queue_free()
 	UI.LOW_SPEC = was_low
 	await get_tree().process_frame
+
+
+## Validate the actual imported PNG, every face/back mapping, alpha corners, and
+## the safe fallback. This catches missing/blank assets and wrong atlas indices.
+func _test_card_atlas() -> void:
+	var tex: Texture2D = CardArt.atlas_texture()
+	if tex == null:
+		fail("card atlas: texture missing or wrong dimensions")
+		return
+	var image: Image = tex.get_image()
+	if image == null or image.is_empty():
+		fail("card atlas: imported image is blank")
+		return
+	var distinct := {}
+	var all_filled := true
+	var rounded := true
+	var mapping_ok := true
+	for i in range(43):
+		var region: Rect2 = CardArt.atlas_region(i if i < 40 else -1, maxi(0, i - 40))
+		var expected := Rect2((i % 8) * 208, (i / 8) * 292, 208, 292)
+		if region != expected:
+			mapping_ok = false
+		var tile: Image = image.get_region(Rect2i(region.position, region.size))
+		if tile.get_pixel(104, 146).a < 0.9:
+			all_filled = false
+		if tile.get_pixel(0, 0).a > 0.05 or tile.get_pixel(207, 0).a > 0.05:
+			rounded = false
+		distinct[hash(tile.get_data())] = true
+	if mapping_ok and distinct.size() == 43:
+		ok("static atlas maps all 40 distinct faces and 3 distinct backs")
+	else:
+		fail("card atlas: incorrect mapping or only %d distinct cells" % distinct.size())
+	if all_filled and rounded:
+		ok("all 43 atlas cards are visible and retain transparent curved corners")
+	else:
+		fail("card atlas contains blank cards or square/opaque corners")
+	var saved_checked: bool = CardArt._atlas_checked
+	var saved_tex: Texture2D = CardArt._atlas
+	CardArt._atlas_checked = true
+	CardArt._atlas = null
+	var dummy := Control.new()
+	var used_atlas: bool = CardArt.draw_atlas_face(dummy, Rect2(0, 0, 104, 146), 0)
+	dummy.free()
+	CardArt._atlas = saved_tex
+	CardArt._atlas_checked = saved_checked
+	if used_atlas:
+		fail("card atlas: missing texture did not trigger vector fallback")
+	else:
+		ok("missing atlas triggers vector artwork fallback")
 
 
 ## The opponent's hand is drawn smaller than a playfield card, and their played

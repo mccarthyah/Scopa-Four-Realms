@@ -1,12 +1,7 @@
 extends RefCounted
-## Card face artwork, drawn directly as vectors into any CanvasItem.
-##
-## This replaced a texture-baking atlas. Baking seemed clever — render each face
-## once, blit afterwards — but on the target machine (no GPU; ANGLE -> WARP
-## software rasteriser) every readback is a hard CPU/GPU sync costing
-## milliseconds, and a capture that came back empty produced invisible cards with
-## no error. With anti_aliasing off a rounded box is 2 triangles, so drawing
-## straight to the screen is cheap, direct, and cannot fail invisibly.
+## Vector source for card faces, plus an offline-generated static atlas.
+## The atlas is an imported PNG, generated before shipping: there is no runtime
+## viewport capture or GPU readback. The original vectors remain a safe fallback.
 class_name CardArt
 
 const UI := preload("res://scripts/ui/ui.gd")
@@ -24,6 +19,47 @@ const SUIT_ART := [
 ]
 
 static var _suit_tex := {}
+
+## 40 faces in card-id order followed by the 3 card-back styles. Each cell is
+## 104x146 artwork rendered at 2x. Kept as a single texture for batching.
+const ATLAS_PATH := "res://assets/cards/card_atlas.png"
+const ATLAS_COLS := 8
+const ATLAS_CELL := Vector2i(208, 292)
+const BACK_COUNT := 3
+static var _atlas: Texture2D = null
+static var _atlas_checked := false
+
+
+static func atlas_texture() -> Texture2D:
+	if not _atlas_checked:
+		_atlas_checked = true
+		if ResourceLoader.exists(ATLAS_PATH):
+			var tex = load(ATLAS_PATH)
+			if tex is Texture2D and tex.get_width() == ATLAS_COLS * ATLAS_CELL.x and tex.get_height() == 6 * ATLAS_CELL.y:
+				_atlas = tex
+		if _atlas == null:
+			push_warning("Scopa: card atlas unavailable; using vector artwork")
+	return _atlas
+
+
+static func atlas_region(card_id: int, back_style: int = 0) -> Rect2:
+	if card_id >= C.DECK_SIZE:
+		return Rect2()
+	var index := card_id if card_id >= 0 else C.DECK_SIZE + posmod(back_style, BACK_COUNT)
+	if index < 0 or index >= C.DECK_SIZE + BACK_COUNT:
+		return Rect2()
+	return Rect2((index % ATLAS_COLS) * ATLAS_CELL.x, (index / ATLAS_COLS) * ATLAS_CELL.y, ATLAS_CELL.x, ATLAS_CELL.y)
+
+
+## Returns false if the prebuilt asset is missing, allowing the caller to fall
+## back to vectors. The shader-independent draw is one textured rectangle.
+static func draw_atlas_face(target: CanvasItem, rect: Rect2, card_id: int, back_style: int = 0) -> bool:
+	var region := atlas_region(card_id, back_style)
+	var tex := atlas_texture()
+	if tex == null or region.size == Vector2.ZERO:
+		return false
+	target.draw_texture_rect_region(tex, rect, region, Color.WHITE, false, true)
+	return true
 
 
 static func suit_texture(f: int) -> Texture2D:
@@ -55,7 +91,7 @@ static func corner_radius(rect: Rect2) -> int:
 
 
 static func draw_face(target: CanvasItem, rect: Rect2, card_id: int, back_style: int = 0,
-		alpha: float = 1.0) -> void:
+		alpha: float = 1.0, atlas_art: bool = false) -> void:
 	if card_id < 0:
 		_draw_back(target, rect, back_style)
 		return
@@ -112,9 +148,14 @@ static func draw_face(target: CanvasItem, rect: Rect2, card_id: int, back_style:
 		str(r), HORIZONTAL_ALIGNMENT_LEFT, -1, num_size, deep)
 
 	# --- faction glyph, top-right
-	var glyph_w := UI.font_bold().get_string_size(T.SUIT_GLYPH[f], HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x
-	target.draw_string(UI.font_bold(), origin + Vector2(w - pad - glyph_w - 2, rank_band * 0.52),
-		T.SUIT_GLYPH[f], HORIZONTAL_ALIGNMENT_LEFT, -1, 20, col)
+	if atlas_art and emblem != null:
+		# Use the painted emblem rather than a platform-dependent Unicode glyph.
+		# Some systems have no font for Forge's symbol and would bake a tofu box.
+		target.draw_texture_rect(emblem, Rect2(origin + Vector2(w - pad - 24, rank_band * 0.18), Vector2(21, 21)), false)
+	else:
+		var glyph_w := UI.font_bold().get_string_size(T.SUIT_GLYPH[f], HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x
+		target.draw_string(UI.font_bold(), origin + Vector2(w - pad - glyph_w - 2, rank_band * 0.52),
+			T.SUIT_GLYPH[f], HORIZONTAL_ALIGNMENT_LEFT, -1, 20, col)
 
 	# thin rule between rank band and art
 	target.draw_line(origin + Vector2(pad + 2, rank_band - 3),

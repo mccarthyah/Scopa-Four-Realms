@@ -1,10 +1,7 @@
 extends Control
-## A single card, drawn directly as vectors (see card_art.gd).
-##
-## Everything animated — lift, glow rings, selection, capturable pulse — is live.
-## Drawing direct rather than from a baked texture is deliberate: baking needed a
-## pixel readback per card, which is a hard CPU/GPU sync and cost milliseconds on
-## a software rasteriser, and an empty capture silently produced blank cards.
+## A single card, with pre-rendered artwork on software renderers.
+## Live selection, highlights, lift and centre spin remain separate. The atlas
+## is generated offline; missing assets fall back to the original vector art.
 class_name CardView
 
 const UI := preload("res://scripts/ui/ui.gd")
@@ -185,8 +182,10 @@ func _draw() -> void:
 	_ensure_styles()
 	draw_style_box(_sb_shadow, Rect2(rect.position + Vector2(0, 3), rect.size))
 
-	# --- the card itself, drawn direct, always face up while it spins
-	CardArt.draw_face(self, rect, card_id, back_style)
+	# The face remains face up while spinning. On software renderers use the
+	# prebuilt atlas; do not capture/read back a viewport during gameplay.
+	if not UI.LOW_SPEC or not CardArt.draw_atlas_face(self, rect, card_id, back_style):
+		CardArt.draw_face(self, rect, card_id, back_style)
 
 	if spinning:
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)

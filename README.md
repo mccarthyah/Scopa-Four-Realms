@@ -59,7 +59,7 @@ Everything in the brief, playable end to end:
 
 | Spec | In the build |
 |---|---|
-| 40-card Scopa deck, four factions, Rank-large faces, Runestone | ✅ fully procedural card art (no image assets) |
+| 40-card Scopa deck, four factions, Rank-large faces, Runestone | ✅ vector artwork with a pre-rendered atlas for software renderers |
 | Standard capture rules: rank match **or** a sum to your rank, 10s only match 10s | ✅ with all legal sets enumerated and choosable |
 | **Scopa di Quindici** variant (first version) | ✅ separate game type: only totals of 15 capture, a card never takes its own value. Chosen per match, never mixed inside one |
 | Deal 3 + 3, 4 on the table, redeal in rounds, last capturer sweeps the rest | ✅ |
@@ -263,7 +263,7 @@ one marks it solved for the day on the title screen.
 ## Project layout
 
 ```
-project.godot            portrait 720×1280 canvas, GL Compatibility, autoloads
+project.godot            portrait 540×960 canvas, GL Compatibility, autoloads
 scenes/main.tscn         single root node; every screen is built in code
 scripts/
   tables.gd              factions, ranks, Primiera values, Oaths, quests, bosses, puzzles
@@ -276,13 +276,17 @@ scripts/
     ai.gd                heuristic opponent + hint engine (4 play styles)
   ui/
     ui.gd                palette, fonts, widget factories
-    card_view.gd         procedurally drawn cards (rank-first layout, four faction emblems)
+    card_view.gd         card interactions; atlas on software renderers, vector fallback
+    card_art.gd          card artwork, atlas mapping and vector source
     background.gd        painted sky, motes, vignette
     fx.gd                bursts, floating text, shake, flashes
   screens/
     title.gd             masthead, faction picker, modes, cosmetics, codex, resume
     duel.gd              HUD, table, hand, Oath sheets, score sheet, celebrations
   audit.gd               headless self-test + layout audit (dev only)
+assets/cards/            pre-rendered 40 card faces and 3 backs in one PNG atlas
+assets/suits/            static painted suit emblems
+tools/                   offline card atlas generator
 audio/                   generated WAVs: deal, capture, scopa, favor, oath, win, lose, tick…
 fonts/                   Cinzel (display) and Alegreya Sans (text), both OFL
 ```
@@ -290,9 +294,12 @@ fonts/                   Cinzel (display) and Alegreya Sans (text), both OFL
 Open `screenshots/card_sheet.html` in a browser (or the workspace previewer) for a static sheet of the
 card design — it mirrors the geometry and palette that `card_view.gd` draws.
 
-**No art or audio assets were downloaded into the game** — cards, emblems, felt, background and the
-sound effects are all generated (vector draw calls / synthesised WAVs), so the repository is 2 MB and
-everything is tweakable in one place.
+On software renderers the 40 faces and three backs use a single pre-rendered atlas; interactive
+selection, spin and highlights are still drawn separately. Other renderers keep the vector artwork,
+which also provides a fallback if the atlas is unavailable. The atlas is shipped with the game, so
+there is **no runtime baking or GPU readback**. To regenerate it after changing the card art, run
+`godot --path . -s res://tools/generate_card_atlas.gd` with a working rendering display, then re-import
+the PNG. The generator validates the cells before replacing the image.
 
 Everything a script needs is resolved with an explicit `const X := preload(...)` and a matching
 `class_name`, and the UI fonts are loaded lazily with a fallback — so a bare checkout parses and boots
@@ -311,7 +318,7 @@ The project ships with a headless audit that plays the game thousands of times a
 godot --headless --path . -- --audit
 ```
 
-It asserts (39 checks, all passing — verified across five consecutive runs):
+The audit checks, among other things:
 
 * card conservation (40 unique cards across deck, table, hands and piles) at deal **and** after 300
   complete AI-vs-AI games in Quick and Ranked modes,
