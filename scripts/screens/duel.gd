@@ -1274,12 +1274,31 @@ func _oath_sheet(title: String, sub: String) -> PanelContainer:
 
 
 func _close_overlay() -> void:
+	# Remove from the tree FIRST, then free. queue_free() alone is deferred, so a
+	# closing oath/score sheet left its full-screen dim panel (MOUSE_FILTER_STOP,
+	# z_index 100) in front of the table for the rest of the frame - and it sits
+	# above the cards (z 0). Any tap in that window hit the dim instead of a card:
+	# taps appeared to do nothing, a hand card could not be played while the very
+	# next tap (a fraction later) worked, and the dim's "tap to dismiss" fired and
+	# re-shuffled the table. That is exactly the "I had a 4, there was a 4 on the
+	# table, it would not let me play it" report.
 	if _overlay != null and is_instance_valid(_overlay):
-		_overlay.queue_free()
+		_remove_now(_overlay)
 	_overlay = null
 	for c in get_children():
 		if c is PanelContainer and c.z_index == 101:
-			c.queue_free()
+			_remove_now(c)
+
+
+## Detach a node immediately so it stops receiving input, then delete it at the
+## end of the frame (free() during a container callback throws "locked object").
+func _remove_now(n: Node) -> void:
+	if n == null or not is_instance_valid(n):
+		return
+	var parent := n.get_parent()
+	if parent != null:
+		parent.remove_child(n)
+	n.queue_free()
 
 
 # ---------------------------------------------------------------------------

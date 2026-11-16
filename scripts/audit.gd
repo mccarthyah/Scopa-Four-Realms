@@ -84,6 +84,7 @@ func run(m: Control) -> void:
 	_test_ai_speed()
 	_test_profile_io()
 	_test_deal()
+	_test_overlay_dismiss()
 	await _test_tap_play()
 	await _audit_screens()
 	print("=== AUDIT COMPLETE · failures=%d ===" % failures)
@@ -91,6 +92,39 @@ func run(m: Control) -> void:
 		ProjectSettings.get_setting("rendering/renderer/rendering_method", "?"), " · adapter ",
 		RenderingServer.get_video_adapter_name())
 	get_tree().quit()
+
+
+## Closing a sheet must stop blocking input in the SAME frame. queue_free() is
+## deferred, so the dim overlay used to linger with MOUSE_FILTER_STOP for the rest
+## of the frame, swallowing the next tap - which is how "I had a 4 and it would not
+## let me play it" happened.
+func _test_overlay_dismiss() -> void:
+	var d = load("res://scripts/screens/duel.gd").new()
+	d.config = {"mode": 0}
+	main.add_child(d)
+	for i in range(40):
+		await get_tree().process_frame
+	d._open_menu()
+	await get_tree().process_frame
+	var before := _dim_count(d)
+	d._close_overlay()
+	var after := _dim_count(d)
+	if before < 1:
+		fail("overlay test: opening a sheet produced no dim panel")
+	elif after != 0:
+		fail("overlay test: %d dim overlay(s) still blocking after close" % after)
+	else:
+		ok("closing a sheet clears its input-blocking overlay in the same frame")
+	d.queue_free()
+	await get_tree().process_frame
+
+
+func _dim_count(n: Node) -> int:
+	var c := 0
+	for ch in n.get_children():
+		if ch is ColorRect and (ch as ColorRect).color.a > 0.5:
+			c += 1
+	return c
 
 
 ## Deal integrity: every hand must start with TABLE_START on the table and
