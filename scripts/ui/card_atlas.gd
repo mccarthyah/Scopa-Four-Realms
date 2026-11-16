@@ -27,6 +27,11 @@ const C := preload("res://scripts/game/cards.gd")
 const FACE_W := 148
 const FACE_H := 208
 
+## In low-spec mode every card pixel is filtered and stretched on the CPU, so the
+## atlas bakes smaller and the cards are drawn at their natural size.
+const FACE_W_LOW := 120
+const FACE_H_LOW := 168
+
 static var _tex := {}          # key -> ImageTexture
 static var _queued := {}       # key -> true
 static var _queue: Array = []  # keys pending, front first
@@ -37,6 +42,11 @@ static var _reported := false
 
 static func _key(card_id: int, back_style: int) -> String:
 	return "b%d" % back_style if card_id < 0 else "c%d" % card_id
+
+
+## The size faces are baked at for this machine.
+static func bake_size() -> Vector2i:
+	return Vector2i(FACE_W_LOW, FACE_H_LOW) if UI.LOW_SPEC else Vector2i(FACE_W, FACE_H)
 
 
 static func is_available() -> bool:
@@ -110,15 +120,17 @@ static func _drain(tree: SceneTree) -> void:
 
 
 static func _bake(tree: SceneTree, card_id: int, back_style: int, k: String) -> bool:
+	var fw := FACE_W_LOW if UI.LOW_SPEC else FACE_W
+	var fh := FACE_H_LOW if UI.LOW_SPEC else FACE_H
 	var sub := SubViewport.new()
-	sub.size = Vector2i(FACE_W, FACE_H)
+	sub.size = Vector2i(fw, fh)
 	sub.transparent_bg = true
 	sub.disable_3d = true
 	sub.render_target_update_mode = SubViewport.UPDATE_ONCE
 	var painter := Painter.new()
 	painter.card_id = card_id
 	painter.back_style = back_style
-	painter.size = Vector2(FACE_W, FACE_H)
+	painter.size = Vector2(fw, fh)
 	painter.custom_minimum_size = painter.size
 	sub.add_child(painter)
 	tree.root.add_child(sub)
@@ -136,7 +148,7 @@ static func _bake(tree: SceneTree, card_id: int, back_style: int, k: String) -> 
 	# A capture that produced nothing usable means the renderer cannot be relied
 	# on for this; stop trying rather than spamming blank cards.
 	var used := img.get_used_rect()
-	if used.size.x < FACE_W / 2 or used.size.y < FACE_H / 2:
+	if used.size.x < fw / 2 or used.size.y < fh / 2:
 		return false
 	_tex[k] = ImageTexture.create_from_image(img)
 	return true

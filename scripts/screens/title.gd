@@ -71,7 +71,8 @@ func _build() -> void:
 
 	var title := UI.label("SCOPA", 62, UI.PARCHMENT, true)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.7))
+	if not UI.LOW_SPEC:
+		title.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.7))
 	title.add_theme_constant_override("shadow_offset_y", 4)
 	mast.add_child(title)
 	title.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)

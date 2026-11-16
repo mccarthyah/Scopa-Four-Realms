@@ -56,6 +56,9 @@ var _last_pulse := -1.0
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
+	# clip_contents forces a stencil pass for the node every frame. Cards are
+	# already drawn inside their own rect, so clipping buys nothing.
+	clip_contents = false
 	# setup() may already have sized us; only fall back to the default card size
 	if not _sized:
 		custom_minimum_size = Vector2(UI.CARD_W, UI.CARD_H)
@@ -138,7 +141,15 @@ func _draw() -> void:
 	var fig := clampf(_fig, 0.0, 1.0)
 	var ease_out := 1.0 - pow(1.0 - fig, 3.0)
 	var draw_pos := Vector2(0, (1.0 - ease_out) * 26.0 + _lift)
-	var rect := Rect2(draw_pos, size)
+	# In low-spec mode draw the card at exactly the baked texture size: any other
+	# size means every destination pixel is filtered from a scaled source, and on
+	# a CPU rasteriser that costs real time per pixel.
+	var draw_size := size
+	if UI.LOW_SPEC:
+		var tex_sz := CardAtlas.bake_size()
+		draw_size = Vector2(tex_sz.x, tex_sz.y)
+		draw_pos += (size - draw_size) * 0.5
+	var rect := Rect2(draw_pos, draw_size)
 	var alpha := fig
 	var base_alpha := alpha * (0.6 if dim else 1.0)
 

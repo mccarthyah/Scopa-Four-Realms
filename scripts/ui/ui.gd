@@ -86,10 +86,16 @@ const CARD_H_BIG := 174
 ## every panel. On a software rasteriser (any VM without a GPU) that was the
 ## single largest cost in the game — ~9,700 primitives per frame. Off, plus the
 ## optional freeze() helper so no StyleBox is ever mutated per frame.
+## Low-spec mode: set at boot when the machine has no real GPU (see main.gd).
+## Square corners are 2 triangles; a rounded corner is tessellated into ~50-100,
+## and on a software rasteriser every one of those triangles costs CPU time.
+static var LOW_SPEC := false
+
+
 static func flat(col: Color, radius: int = 12, border: Color = Color(0, 0, 0, 0), bw: int = 0) -> StyleBoxFlat:
 	var s := StyleBoxFlat.new()
 	s.bg_color = col
-	s.set_corner_radius_all(radius)
+	s.set_corner_radius_all(0 if LOW_SPEC else radius)
 	if bw > 0:
 		s.set_border_width_all(bw)
 		s.border_color = border
@@ -174,9 +180,12 @@ static func label(txt: String, size: int = 22, col: Color = TEXT, title: bool = 
 	l.add_theme_font_override("font", _font("", title, false))
 	l.add_theme_font_size_override("font_size", size)
 	l.add_theme_color_override("font_color", col)
-	l.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.55))
-	l.add_theme_constant_override("shadow_offset_x", 0)
-	l.add_theme_constant_override("shadow_offset_y", 2)
+	# A font shadow draws every glyph twice. That is affordable on a GPU and not
+	# on a CPU rasteriser, and text is the bulk of what is left on screen.
+	if not LOW_SPEC:
+		l.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.55))
+		l.add_theme_constant_override("shadow_offset_x", 0)
+		l.add_theme_constant_override("shadow_offset_y", 2)
 	return l
 
 

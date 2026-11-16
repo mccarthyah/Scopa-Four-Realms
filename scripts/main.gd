@@ -18,6 +18,7 @@ func _ready() -> void:
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	bg.z_index = -10
 	add_child(bg)
+	_detect_low_spec()
 	_report_environment()
 	show_title()
 	if OS.get_cmdline_user_args().has("--audit"):
@@ -43,6 +44,23 @@ func _swap(screen: Control) -> void:
 
 ## One line, printed at boot and visible in the log, that says everything needed
 ## to diagnose a rendering/display problem remotely.
+## Decide once, at boot, whether this machine can afford rounded corners and
+## animated full-screen effects. Corner radii are tessellated into ~50-100
+## triangles per rectangle, which is free on a GPU and expensive on a software
+## rasteriser. Everything still works, it is just drawn the cheap way.
+func _detect_low_spec() -> void:
+	var adapter := RenderingServer.get_video_adapter_name().to_lower()
+	var soft := adapter.contains("basic render") or adapter.contains("llvmpipe") \
+		or adapter.contains("swiftshader") or adapter.contains("warp") \
+		or adapter == ""
+	UI.LOW_SPEC = soft
+	print("[scopa] low_spec   : ", UI.LOW_SPEC,
+		" (square corners, no animated backdrop, exact-size cards)" if UI.LOW_SPEC else " (full visual style)")
+	if OS.get_cmdline_user_args().has("--full-visuals"):
+		UI.LOW_SPEC = false
+		print("[scopa] low_spec   : overridden to false by --full-visuals")
+
+
 func _report_environment() -> void:
 	var v := Engine.get_version_info()
 	var method: String = str(ProjectSettings.get_setting("rendering/renderer/rendering_method", "?"))

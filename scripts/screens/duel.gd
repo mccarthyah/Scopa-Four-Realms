@@ -1036,7 +1036,8 @@ func _scopa_celebration(who: int, glory: int) -> void:
 	FX.burst(self, center, T.FACTIONS[who].color if who == 0 else T.FACTIONS[duel.bot_faction].color, 26, 260)
 	var big := UI.label("SCOPA!", 54, UI.GOLD, true)
 	big.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	big.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.8))
+	if not UI.LOW_SPEC:
+		big.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.8))
 	big.add_theme_constant_override("shadow_offset_y", 4)
 	big.z_index = 95
 	big.modulate.a = 0.0

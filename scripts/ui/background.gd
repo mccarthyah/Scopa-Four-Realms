@@ -112,13 +112,13 @@ func _draw() -> void:
 	draw_texture_rect(_sky(), Rect2(0, 0, w, h), false)
 
 	# --- 2. soft glows: one quad each (was 21 nested circles)
-	if not _degraded:
+	if not _degraded and not UI.LOW_SPEC:
 		_glow(Vector2(w * 0.16, h * 0.10), h * 0.42, Color(accent.r, accent.g, accent.b, 0.10))
 		_glow(Vector2(w * 0.90, h * 0.30), h * 0.34, Color(accent2.r, accent2.g, accent2.b, 0.12))
 		_glow(Vector2(w * 0.55, h * 0.95), h * 0.50, Color(0, 0, 0, 0.35))
 
 	# --- 3. faint rune rings (3 thin arcs, cheap)
-	if not _degraded:
+	if not _degraded and not UI.LOW_SPEC:
 		for i in range(3):
 			var c := Vector2(w * (0.5 + 0.24 * sin(_t * 0.11 + i)), h * (0.22 + 0.05 * i))
 			draw_arc(c, h * (0.16 + 0.06 * i), 0, TAU, 48, Color(accent.r, accent.g, accent.b, 0.05), 1.5, true)
@@ -136,6 +136,8 @@ func _draw() -> void:
 
 ## The only live layer: 46 small dots drifting on top of the baked backdrop.
 func _draw_motes(w: float, h: float) -> void:
+	if UI.LOW_SPEC:
+		return  # 46 alpha-blended circles on top of a full-screen quad is real CPU time
 	for m in _motes:
 		var pos: Vector2 = m.p
 		var y := fmod(pos.y + _t * 0.012 * (0.4 + m.h), 1.0)
