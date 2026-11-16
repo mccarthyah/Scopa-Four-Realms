@@ -20,6 +20,11 @@ const T := preload("res://scripts/tables.gd")
 const C := preload("res://scripts/game/cards.gd")
 const CardArt := preload("res://scripts/ui/card_art.gd")
 
+## Corner radius of a card, in pixels at the card's own scale. Derived from the
+## card's size rather than fixed, so the rings and shadow around a card follow
+## exactly the same curve as the card face - otherwise a small hand card would get
+## a rounder halo than its own corners.
+
 var card_id := -1
 var face_up := true
 var playable := false
@@ -207,12 +212,18 @@ func _draw() -> void:
 			Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, alpha))
 
 
+## Corner radius for a rect of this size, matching the card art exactly.
+static func _radius_for(sz: Vector2) -> int:
+	return CardArt.corner_radius(Rect2(Vector2.ZERO, sz))
+
+
 func _ensure_styles() -> void:
 	if _styles_ready:
 		return
 	_styles_ready = true
-	_sb_ring = UI.flat(Color(0, 0, 0, 0), 12, UI.GOLD, 3)
-	_sb_glow = UI.flat(Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, 0.12), 14)
-	_sb_sel = UI.flat(Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, 0.10), 11)
-	_sb_cap = UI.flat(Color(0, 0, 0, 0), 12, UI.GOLD, 2)
-	_sb_shadow = UI.flat(Color(0, 0, 0, 0.28), 12)
+	var r := _radius_for(size)
+	_sb_ring = UI.flat(Color(0, 0, 0, 0), r, UI.GOLD, 3, true)
+	_sb_glow = UI.flat(Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, 0.12), _radius_for(size + Vector2(10, 10)), Color(0, 0, 0, 0), 0, true)
+	_sb_sel = UI.flat(Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, 0.10), r, Color(0, 0, 0, 0), 0, true)
+	_sb_cap = UI.flat(Color(0, 0, 0, 0), _radius_for(size + Vector2(6, 6)), UI.GOLD, 2, true)
+	_sb_shadow = UI.flat(Color(0, 0, 0, 0.28), r, Color(0,0,0,0), 0, true)

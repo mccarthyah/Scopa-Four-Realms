@@ -8,6 +8,8 @@ const T := preload("res://scripts/tables.gd")
 const C := preload("res://scripts/game/cards.gd")
 const DuelScript := preload("res://scripts/game/duel.gd")
 const DuelAI := preload("res://scripts/game/ai.gd")
+const CardArt := preload("res://scripts/ui/card_art.gd")
+const UI := preload("res://scripts/ui/ui.gd")
 
 var failures := 0
 var main: Control
@@ -89,6 +91,7 @@ func run(m: Control) -> void:
 	_test_animation_settings()
 	_test_spin()
 	await _test_bot_hand_scale()
+	await _test_card_corners()
 	await _test_tap_play()
 	await _audit_screens()
 	print("=== AUDIT COMPLETE · failures=%d ===" % failures)
@@ -160,6 +163,47 @@ func _tap_first_card(screen) -> bool:
 	# second tap confirms the selected play
 	screen._confirm_play(hand[0]) if screen._selection == hand[0] else screen._on_hand_card(hand[0])
 	return screen.duel.hands[0].size() < before or screen._busy
+
+
+## Cards must have curved corners like real playing cards - including under
+## LOW_SPEC, which is what the user's VM runs and which used to square every
+## corner in the game. The radius scales with the card and the rings around a card
+## must follow the same curve as its face.
+func _test_card_corners() -> void:
+	var was_low: bool = UI.LOW_SPEC
+	UI.LOW_SPEC = true
+	var small: int = CardArt.corner_radius(Rect2(Vector2.ZERO, Vector2(52, 74)))
+	var big: int = CardArt.corner_radius(Rect2(Vector2.ZERO, Vector2(116, 163)))
+	if big <= 0 or small <= 0:
+		fail("card corners: radius is 0 under LOW_SPEC, cards are square")
+	else:
+		ok("cards keep curved corners under LOW_SPEC (%d px small, %d px playfield)" % [small, big])
+	# proportion must hold across sizes, or small cards look rounder
+	var p_small := float(small) / 52.0
+	var p_big := float(big) / 116.0
+	if absf(p_small - p_big) > 0.03:
+		fail("card corner proportion drifts with size (%.3f vs %.3f)" % [p_small, p_big])
+	else:
+		ok("corner radius keeps its proportion at every card size (%.1f%%)" % (p_big * 100.0))
+	# chrome stays square, so this did not leak into popups
+	if UI.flat(Color.WHITE, 12).corner_radius_top_left != 0:
+		fail("card corners: popup chrome is now rounded too (LOW_SPEC lost)")
+	else:
+		ok("popups and chips stay square under LOW_SPEC")
+	# the rings around a card must follow its curve, not a fixed one
+	var cv := CardView.new()
+	cv.setup(5, true, 116, 163)
+	main.add_child(cv)
+	await get_tree().process_frame
+	cv._ensure_styles()
+	var face_r: int = CardArt.corner_radius(Rect2(Vector2.ZERO, Vector2(116, 163)))
+	if cv._sb_ring.corner_radius_top_left == face_r and cv._sb_shadow.corner_radius_top_left == face_r:
+		ok("selection ring and shadow follow the card's own curve")
+	else:
+		fail("ring radius %d does not match the card face %d" % [cv._sb_ring.corner_radius_top_left, face_r])
+	cv.queue_free()
+	UI.LOW_SPEC = was_low
+	await get_tree().process_frame
 
 
 ## The opponent's hand is drawn smaller than a playfield card, and their played

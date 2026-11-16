@@ -44,6 +44,16 @@ static func suit_texture(f: int) -> Texture2D:
 ## NaN, and a NaN modulate makes the control invisible for good — which is exactly
 ## why every card rendered blank. Fading is the node's job: CardView sets
 ## modulate.a in _process, never inside _draw.
+## Corner radius for a rect drawn as a card: about 4.5% of the short side, which
+## is what a real playing card uses. Scaled rather than fixed so a small card in
+## the opponent's hand keeps the same proportions as a full playfield card.
+static func corner_radius(rect: Rect2) -> int:
+	# 5% of the short side, rounded - a real card is about 5.5%. The clamp floor is
+	# low (2 px) so a small hand card keeps the same PROPORTION as a big one
+	# instead of looking proportionally rounder.
+	return int(clampf(roundf(minf(rect.size.x, rect.size.y) * 0.05), 2.0, 16.0))
+
+
 static func draw_face(target: CanvasItem, rect: Rect2, card_id: int, back_style: int = 0,
 		alpha: float = 1.0) -> void:
 	if card_id < 0:
@@ -61,15 +71,16 @@ static func draw_face(target: CanvasItem, rect: Rect2, card_id: int, back_style:
 	var pale: Color = info.pale
 	var rune := C.is_runestone(card_id)
 
-	# --- parchment face
-	target.draw_style_box(UI.flat(UI.PARCHMENT, 11), rect)
-	target.draw_style_box(UI.flat(Color(1, 1, 1, 0.30), 11),
+	# --- parchment face, with the curved corners a real card has
+	var cr := corner_radius(rect)
+	target.draw_style_box(UI.flat(UI.PARCHMENT, cr, Color(0, 0, 0, 0), 0, true), rect)
+	target.draw_style_box(UI.flat(Color(1, 1, 1, 0.30), cr, Color(0, 0, 0, 0), 0, true),
 		Rect2(origin, Vector2(w, h * 0.42)))
 
 	# --- border
 	var border_col := UI.GOLD if rune else Color(deep.r, deep.g, deep.b, 0.55)
 	var bw := 3 if rune else 2
-	target.draw_style_box(UI.flat(Color(0, 0, 0, 0), 11, border_col, bw), rect)
+	target.draw_style_box(UI.flat(Color(0, 0, 0, 0), cr, border_col, bw, true), rect)
 
 	# --- layout: big rank top-left, art window, name strip
 	var pad := 7.0
@@ -133,7 +144,8 @@ static func _draw_back(target: CanvasItem, rect: Rect2, back_style: int) -> void
 	var golds := [UI.GOLD, Color("7fd4c1"), Color("e0a08a")]
 	var base: Color = themes[back_style % themes.size()]
 	var gold: Color = golds[back_style % golds.size()]
-	target.draw_style_box(UI.flat(base, 11), rect)
+	var cr := corner_radius(rect)
+	target.draw_style_box(UI.flat(base, cr, Color(0, 0, 0, 0), 0, true), rect)
 	# diagonal weave
 	for i in range(-6, 12):
 		var x := rect.position.x + i * 18.0
@@ -156,7 +168,7 @@ static func _draw_back(target: CanvasItem, rect: Rect2, back_style: int) -> void
 		var ang := PI / 4 + i * TAU / 4.0
 		pts2.append(c + Vector2(cos(ang), sin(ang)) * minf(w, h) * 0.07)
 	target.draw_colored_polygon(pts2, Color(gold.r, gold.g, gold.b, 0.5))
-	target.draw_style_box(UI.flat(Color(0, 0, 0, 0), 11, gold, 2), rect)
+	target.draw_style_box(UI.flat(Color(0, 0, 0, 0), cr, gold, 2, true), rect)
 
 
 # ---------------------------------------------------------------------------

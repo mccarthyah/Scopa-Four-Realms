@@ -78,6 +78,20 @@ Everything in the brief, playable end to end:
 | Cosmetics only | ✅ card backs, board themes, saved in the profile; no card power anywhere |
 | **Card animation**, all optional | ✅ played cards spin 360° onto the field, captures flash a ring on every matched card, the opponent's hand sits face down above the playfield and thins as it plays. Slower play is a switch; **every** animation can be turned off in settings |
 
+### Card corners
+
+Cards have the curved corners of a real playing card — about 5% of the short side,
+which matches a real card's 5.5%, and it scales with the card so a small card in
+the opponent's hand has the same proportions as a playfield card. The corners are
+anti-aliased, since a curve drawn without AA is visibly jagged, and the selection
+rings and shadow follow the card's own curve rather than a fixed one.
+
+This matters because the low-spec mode squares off every panel, chip and button in
+the game to save time on a software rasteriser — which is why cards were square on
+the target machine. Cards are now the documented exception: `UI.flat()` takes a
+`keep_corners` flag, so DOM chrome stays cheap and cards stay card-shaped. An audit
+check asserts both halves of that, so it cannot regress in either direction.
+
 ### Animation settings
 
 Title screen → *Animation*. Nothing here changes the rules, and the game is fully

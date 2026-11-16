@@ -92,14 +92,21 @@ const CARD_H_BIG := 174
 static var LOW_SPEC := false
 
 
-static func flat(col: Color, radius: int = 12, border: Color = Color(0, 0, 0, 0), bw: int = 0) -> StyleBoxFlat:
+## LOW_SPEC squares off DOM chrome - popups, chips, buttons - because rounded
+## corners there are invisible and the rounding costs time on a software
+## rasteriser. Cards are the exception: a playing card's curved corners are a
+## defining feature, so anything drawn with keep_corners keeps them.
+static func flat(col: Color, radius: int = 12, border: Color = Color(0, 0, 0, 0), bw: int = 0,
+		keep_corners: bool = false) -> StyleBoxFlat:
 	var s := StyleBoxFlat.new()
 	s.bg_color = col
-	s.set_corner_radius_all(0 if LOW_SPEC else radius)
+	s.set_corner_radius_all(radius if (keep_corners or not LOW_SPEC) else 0)
 	if bw > 0:
 		s.set_border_width_all(bw)
 		s.border_color = border
-	s.anti_aliasing = false
+	# Rounded corners drawn without AA are visibly jagged, so only the card styles
+	# pay for it; everything squared-off stays on the cheap path.
+	s.anti_aliasing = keep_corners
 	return s
 
 
