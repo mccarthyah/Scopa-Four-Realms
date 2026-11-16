@@ -1537,9 +1537,21 @@ func _tutorial_glow() -> void:
 				break
 
 
+var _perf_checked := false
+
+
 func _process(delta: float) -> void:
 	if duel == null:
 		return
+	# On a software rasteriser every full-screen animated layer competes with the
+	# cards for draw time. Check once, a few seconds in, and let the backdrop rest
+	# if this machine cannot hold 30fps.
+	if not _perf_checked and Engine.get_process_frames() > 240:
+		_perf_checked = true
+		var fps := Engine.get_frames_per_second()
+		if fps < 30.0 and _bg != null and _bg.has_method("set_quiet"):
+			_bg.set_quiet()
+			print("[scopa] performance: ", fps, " fps — background animations paused")
 	if duel.is_my_turn(0) and not duel.hand_over and not _busy:
 		_turn_time -= delta
 		if _turn_time <= 5.0 and _turn_time > 0.0:

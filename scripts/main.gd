@@ -53,6 +53,11 @@ func _report_environment() -> void:
 	print("[scopa] rendering  : ", method, " / driver ", str(ProjectSettings.get_setting("rendering/rendering_device/driver", "?")),
 		" · gl driver ", str(ProjectSettings.get_setting("rendering/gl_compatibility/driver", "?")))
 	print("[scopa] adapter    : ", adapter if adapter != "" else "(none — headless/dummy)", " · ", vendor if vendor != "" else "-")
+	if adapter.to_lower().contains("basic render") or adapter.to_lower().contains("llvmpipe") \
+			or adapter.to_lower().contains("swiftshader") or adapter.to_lower().contains("warp"):
+		print("[scopa] WARNING    : software rasteriser — no GPU acceleration. Everything is")
+		print("[scopa]              drawn on the CPU, so full-screen effects cost real time.")
+		print("[scopa]              Keep the window near 540x960; maximising multiplies the cost.")
 	print("[scopa] display    : ", DisplayServer.get_name(), " · window ", DisplayServer.window_get_size(),
 		" · screen ", DisplayServer.screen_get_size())
 	print("[scopa] viewport   : ", str(get_viewport().get_visible_rect().size))
@@ -65,8 +70,16 @@ func _report_environment() -> void:
 	hb.wait_time = 5.0
 	hb.autostart = true
 	hb.timeout.connect(func():
-		print("[scopa] heartbeat pid=", OS.get_process_id(), " stage=", _stage,
-			" frames=", Engine.get_process_frames(), " fps=", Engine.get_frames_per_second()))
+		# frame_ms = script+CPU time per frame; draws/prims = how much the renderer
+		# is being asked to do. If fps is low and frame_ms is small, the machine is
+		# fill-rate bound (software rasteriser), not script bound.
+		print("[scopa] heartbeat stage=", _stage,
+			" fps=", Engine.get_frames_per_second(),
+			" frame_ms=", "%.1f" % (Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0),
+			" draws=", int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)),
+			" prims=", int(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME)),
+			" nodes=", int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT)),
+			" mem_mb=", "%.0f" % (Performance.get_monitor(Performance.MEMORY_STATIC) / 1048576.0)))
 	add_child(hb)
 
 
@@ -116,10 +129,13 @@ func _fatal_screen(msg: String) -> void:
 
 
 func _start_duel(config: Dictionary) -> void:
-	_stage = "duel:building mode=%d" % int(config.get("mode", -1))
+	_stage = "duel:building"
 	print("[scopa] stage -> duel (mode ", config.get("mode", -1), ")")
 	var s := DuelScreen.new()
 	s.config = config.duplicate(true)
 	s.exit_to_menu.connect(show_title)
 	s.play_again.connect(func(cfg): _start_duel(cfg))
 	_swap(s)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_stage = "duel:ready"

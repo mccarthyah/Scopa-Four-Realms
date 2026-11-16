@@ -45,6 +45,14 @@ func _ready() -> void:
 	set_process(true)
 
 
+## Stop animating entirely: keeps the painted sky, drops the moving layers and
+## the per-frame work. Used when the machine cannot afford the animation.
+func set_quiet() -> void:
+	_degraded = true
+	set_process(false)
+	queue_redraw()
+
+
 func set_accents(a: Color, b: Color) -> void:
 	accent = a
 	accent2 = b

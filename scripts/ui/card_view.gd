@@ -39,6 +39,8 @@ var _ring_col := Color.WHITE
 var _glow_col := Color.WHITE
 var _cap_col := Color.WHITE
 var _styles_ready := false
+var _ring_phase := 0.0
+var _last_pulse := -1.0
 var _fig := 0.0
 
 
@@ -83,6 +85,7 @@ func set_selected(v: bool) -> void:
 
 func _process(delta: float) -> void:
 	_t += delta
+	_ring_phase = fmod(_t * 5.0, TAU)
 	var dirty := false
 	if _fig < 1.0:
 		_fig = min(1.0, _fig + delta * 3.4)
@@ -96,8 +99,14 @@ func _process(delta: float) -> void:
 	if abs(_glow - target_glow) > 0.01:
 		_glow = lerp(_glow, target_glow, 1.0 - pow(0.002, delta))
 		dirty = true
+	# NOTE: this used to also mark the card dirty whenever it was playable or
+	# capturable, which forced a full card repaint every frame for most of the
+	# table — the single biggest per-frame cost on a software rasteriser. The
+	# pulse now only repaints while its value actually changes enough to see.
 	if playable or selected or capturable:
-		dirty = true
+		if abs(_ring_phase - _last_pulse) > 0.02:
+			_last_pulse = _ring_phase
+			dirty = true
 	if dirty:
 		queue_redraw()
 
@@ -205,7 +214,7 @@ func _draw() -> void:
 
 	# --- interactive rings
 	if playable or selected:
-		var pulse := 0.55 + 0.45 * sin(_t * 5.0)
+		var pulse := 0.55 + 0.45 * sin(_ring_phase)
 		_ring_col = Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, (0.55 + 0.45 * pulse) * alpha)
 		_sb_ring.border_color = _ring_col
 		draw_style_box(_sb_ring, rect.grow(2.0))
@@ -218,7 +227,7 @@ func _draw() -> void:
 		draw_style_box(_sb_sel, rect)
 
 	if capturable:
-		var pulse2 := 0.5 + 0.5 * sin(_t * 4.0)
+		var pulse2 := 0.5 + 0.5 * sin(_ring_phase * 0.8)
 		_cap_col = Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, (0.35 + 0.45 * pulse2) * alpha)
 		_sb_cap.border_color = _cap_col
 		draw_style_box(_sb_cap, rect.grow(3.0))
