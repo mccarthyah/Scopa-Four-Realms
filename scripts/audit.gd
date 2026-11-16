@@ -85,6 +85,9 @@ func run(m: Control) -> void:
 	_test_profile_io()
 	await _audit_screens()
 	print("=== AUDIT COMPLETE · failures=%d ===" % failures)
+	print("godot ", Engine.get_version_info().string, " · renderer ",
+		ProjectSettings.get_setting("rendering/renderer/rendering_method", "?"), " · adapter ",
+		RenderingServer.get_video_adapter_name())
 	get_tree().quit()
 
 

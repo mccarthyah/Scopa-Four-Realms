@@ -1,5 +1,15 @@
 # Getting logs out of Scopa: Four Realms
 
+> **Built and tested on Godot 4.7.2** (and still audited green on 4.4.1). Requires **4.4 or newer**.
+
+## Read this first: headless output is not a rendering test
+
+`--headless` forces Godot's **dummy renderer**, so it never touches your GPU, your
+window, or your drivers. On 4.7.2 headless all 57 automated checks pass while a
+real window can still fail to open. If the game dies with **no script errors** in
+headless but not on your machine, the fault is in the display/render layer — the
+log line described below tells me which one.
+
 Two ways, depending on whether the game closes itself or just sits there.
 
 ---
@@ -73,6 +83,25 @@ if the crash killed the process before it could flush.
 
 ---
 
+## The environment block
+
+Every run now prints this at boot and into the log:
+
+```
+[scopa] ---- environment ----
+[scopa] godot      : 4.7.2-stable (official)  (Windows)
+[scopa] rendering  : mobile / driver vulkan · gl driver opengl3
+[scopa] adapter    : NVIDIA GeForce RTX 3060 · NVIDIA Corporation
+[scopa] display    : windows · window (540, 960) · screen (2560, 1440)
+[scopa] viewport   : (720.0, 1280.0)
+[scopa] log file   : C:/Users/you/AppData/Roaming/Godot/app_userdata/Scopa- Four Realms/logs/godot.log
+[scopa] ---------------------
+```
+
+Send those six lines and I can usually tell what failed before seeing the trace.
+If `adapter` says *(none — headless/dummy)*, you ran with `--headless` and it
+proves nothing about rendering.
+
 ## What I need in the report
 
 Anything you can give, in rough order of usefulness:
@@ -94,7 +123,8 @@ These cover the most common first-open failures and take a minute:
 |---|---|
 | **Project → Reload Current Project** | forces Godot to re-import fonts/audio after a fresh clone |
 | Delete the `.godot` folder, reopen the project | clears a stale import cache |
-| Confirm **Godot 4.4+** (not 4.0–4.3) | the project declares `config/features=PackedStringArray("4.4", …)` |
+| Confirm **Godot 4.4+** | the project ships `config/features=PackedStringArray("4.7", …)`; 4.4 also passes the full audit |
+| **Try the other renderer** — the single most useful test | this project defaults to `mobile` (Vulkan/Metal). If Vulkan is the problem, force OpenGL: `--rendering-driver opengl3`, or switch *Project Settings → Rendering → Renderer → Rendering Method* to **Compatibility** |
 | On a phone/emulator, try `--rendering-driver opengl3` | rules out a GLES3 driver issue |
 | Run the built-in self-test (below) | if this passes, the rules/AI are fine and it's a scene/UI issue |
 | Try the window instead of fullscreen | rules out a windowing/monitor issue |

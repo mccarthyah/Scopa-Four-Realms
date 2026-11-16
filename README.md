@@ -1,6 +1,7 @@
 # Scopa: Four Realms
 
-A mobile-first fantasy reimagining of **Scopa**, built in **Godot 4.4** (GDScript, GL Compatibility renderer).
+A mobile-first fantasy reimagining of **Scopa**, built for **Godot 4.7.2** (GDScript).
+Verified green on **4.7.2 and 4.4.1** — requires 4.4 or newer.
 Your turn is three taps; a duel is four minutes; the depth is still Scopa's — matching ranks, setting up
 sums, denying captures, and sweeping the table for a scopa.
 
@@ -14,10 +15,21 @@ the Runestone    the 7 of Forge — the settebello
 
 ## Run it
 
-1. Install **Godot 4.4+** (standard build, no C# needed).
+1. Install **Godot 4.7.2** (or any 4.4+; standard build, no C# needed).
 2. Open `project.godot` → press **F5**.
 3. The viewport is a 720×1280 portrait phone canvas that stretches to any window; the window opens at
    540×960 for desktop testing.
+
+If the window fails to open, try the other renderer first — the project ships on
+`mobile` (Vulkan/Metal) and everything here is 2D, so Compatibility works fine:
+
+```bash
+godot --path . --rendering-driver opengl3    # or set Rendering Method = Compatibility
+```
+
+Every run prints an environment block (Godot version, renderer, GPU adapter,
+display server, viewport) at the top of `user://logs/godot.log`. See
+`CRASH_REPORT.md` for where that log lives on each platform.
 
 Export presets for **Android / iOS / Web / Linux** are in `export_presets.cfg` — Godot recognises all
 four presets; you supply the export templates and SDK paths in *Project → Export*.

@@ -17,8 +17,7 @@ func _ready() -> void:
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	bg.z_index = -10
 	add_child(bg)
-	print("[scopa] boot: ", OS.get_name(), " · godot ", Engine.get_version_info().string,
-		" · renderer ", RenderingServer.get_video_adapter_name())
+	_report_environment()
 	show_title()
 	if OS.get_cmdline_user_args().has("--audit"):
 		var audit = load("res://scripts/audit.gd").new()
@@ -39,6 +38,25 @@ func _swap(screen: Control) -> void:
 	screen.modulate.a = 0.0
 	var t := create_tween()
 	t.tween_property(screen, "modulate:a", 1.0, 0.22)
+
+
+## One line, printed at boot and visible in the log, that says everything needed
+## to diagnose a rendering/display problem remotely.
+func _report_environment() -> void:
+	var v := Engine.get_version_info()
+	var method: String = str(ProjectSettings.get_setting("rendering/renderer/rendering_method", "?"))
+	var adapter := RenderingServer.get_video_adapter_name()
+	var vendor := RenderingServer.get_video_adapter_vendor()
+	print("[scopa] ---- environment ----")
+	print("[scopa] godot      : ", v.get("string", "?"), "  (", OS.get_name(), ")")
+	print("[scopa] rendering  : ", method, " / driver ", str(ProjectSettings.get_setting("rendering/rendering_device/driver", "?")),
+		" · gl driver ", str(ProjectSettings.get_setting("rendering/gl_compatibility/driver", "?")))
+	print("[scopa] adapter    : ", adapter if adapter != "" else "(none — headless/dummy)", " · ", vendor if vendor != "" else "-")
+	print("[scopa] display    : ", DisplayServer.get_name(), " · window ", DisplayServer.window_get_size(),
+		" · screen ", DisplayServer.screen_get_size())
+	print("[scopa] viewport   : ", str(get_viewport().get_visible_rect().size))
+	print("[scopa] log file   : ", ProjectSettings.globalize_path("user://logs/godot.log"))
+	print("[scopa] ---------------------")
 
 
 func show_title() -> void:
