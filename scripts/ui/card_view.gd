@@ -1,11 +1,10 @@
 extends Control
-## A single card. The face is a baked texture (see card_atlas.gd) drawn as one
-## quad, so a table of cards costs a handful of draw calls per frame instead of
-## ~250. Everything animated — lift, glow rings, selection, capturable pulse —
-## stays live and cheap.
+## A single card, drawn directly as vectors (see card_art.gd).
 ##
-## If the atlas cannot bake (headless, or a renderer that refuses capture) the
-## card falls back to a light vector drawing. It never renders nothing.
+## Everything animated — lift, glow rings, selection, capturable pulse — is live.
+## Drawing direct rather than from a baked texture is deliberate: baking needed a
+## pixel readback per card, which is a hard CPU/GPU sync and cost milliseconds on
+## a software rasteriser, and an empty capture silently produced blank cards.
 class_name CardView
 
 const UI := preload("res://scripts/ui/ui.gd")
@@ -14,7 +13,7 @@ signal pressed(card_id: int)
 
 const T := preload("res://scripts/tables.gd")
 const C := preload("res://scripts/game/cards.gd")
-const CardAtlas := preload("res://scripts/ui/card_atlas.gd")
+const CardArt := preload("res://scripts/ui/card_art.gd")
 
 var card_id := -1
 var face_up := true
@@ -40,15 +39,6 @@ var _sb_sel: StyleBoxFlat
 var _sb_cap: StyleBoxFlat
 var _sb_shadow: StyleBoxFlat
 
-# Frozen (textured) copies of the ring styles, made once per card so a pulsing
-# ring costs 2 primitives instead of ~57.
-var _tx_ring: StyleBoxTexture
-var _tx_glow: StyleBoxTexture
-var _tx_cap: StyleBoxTexture
-var _tx_sel: StyleBoxTexture
-var _tx_shadow: StyleBoxTexture
-var _frozen := false
-var _freeze_running := false
 var _styles_ready := false
 var _ring_phase := 0.0
 var _last_pulse := -1.0
@@ -64,7 +54,6 @@ func _ready() -> void:
 		custom_minimum_size = Vector2(UI.CARD_W, UI.CARD_H)
 		size = custom_minimum_size
 	set_process(true)
-	_request_texture()
 
 
 func setup(id: int, up: bool = true, w: int = UI.CARD_W, h: int = UI.CARD_H) -> CardView:
@@ -76,13 +65,7 @@ func setup(id: int, up: bool = true, w: int = UI.CARD_W, h: int = UI.CARD_H) -> 
 	_t = 0.0
 	_fig = 0.0
 	queue_redraw()
-	_request_texture()
 	return self
-
-
-func _request_texture() -> void:
-	if is_inside_tree():
-		CardAtlas.request(self, card_id, back_style)
 
 
 func enter_anim(delay: float = 0.0) -> void:
@@ -141,30 +124,20 @@ func _draw() -> void:
 	var fig := clampf(_fig, 0.0, 1.0)
 	var ease_out := 1.0 - pow(1.0 - fig, 3.0)
 	var draw_pos := Vector2(0, (1.0 - ease_out) * 26.0 + _lift)
-	# In low-spec mode draw the card at exactly the baked texture size: any other
-	# size means every destination pixel is filtered from a scaled source, and on
-	# a CPU rasteriser that costs real time per pixel.
-	var draw_size := size
-	if UI.LOW_SPEC:
-		var tex_sz := CardAtlas.bake_size()
-		draw_size = Vector2(tex_sz.x, tex_sz.y)
-		draw_pos += (size - draw_size) * 0.5
-	var rect := Rect2(draw_pos, draw_size)
+	var rect := Rect2(draw_pos, size)
 	var alpha := fig
 	var base_alpha := alpha * (0.6 if dim else 1.0)
 
 	# --- drop shadow: one cheap quad, no blur pass
 	_ensure_styles()
-	draw_style_box(_tx_shadow if _tx_shadow != null else _sb_shadow,
-		Rect2(rect.position + Vector2(0, 3), rect.size))
+	draw_style_box(_sb_shadow, Rect2(rect.position + Vector2(0, 3), rect.size))
 
-	# --- the card itself: one textured quad
-	var tex := CardAtlas.texture(card_id, back_style)
-	if tex != null:
-		draw_texture_rect(tex, rect, false, Color(1, 1, 1, base_alpha))
+	# --- the card itself, drawn direct
+	if base_alpha < 0.999:
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		CardArt.draw_face(self, rect, card_id, back_style, base_alpha)
 	else:
-		_draw_fallback(rect, base_alpha)
-		_request_texture()
+		CardArt.draw_face(self, rect, card_id, back_style)
 
 	# --- interaction feedback, still live
 	if dim:
@@ -172,31 +145,19 @@ func _draw() -> void:
 
 	if playable or selected:
 		var pulse := 0.55 + 0.45 * sin(_ring_phase)
-		if _tx_ring != null:
-			draw_style_box(_tx_ring, rect.grow(2.0))
-		else:
-			_sb_ring.border_color = Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, (0.55 + 0.45 * pulse) * alpha)
-			draw_style_box(_sb_ring, rect.grow(2.0))
-		if _tx_glow != null:
-			draw_style_box(_tx_glow, rect.grow(5.0))
-		else:
-			_sb_glow.bg_color = Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, 0.12 * alpha)
-			draw_style_box(_sb_glow, rect.grow(5.0))
+		_sb_ring.border_color = Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, (0.55 + 0.45 * pulse) * alpha)
+		draw_style_box(_sb_ring, rect.grow(2.0))
+		_sb_glow.bg_color = Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, 0.12 * alpha)
+		draw_style_box(_sb_glow, rect.grow(5.0))
 
 	if selected:
-		if _tx_sel != null:
-			draw_style_box(_tx_sel, rect)
-		else:
-			_sb_sel.bg_color = Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, 0.10 * alpha)
-			draw_style_box(_sb_sel, rect)
+		_sb_sel.bg_color = Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, 0.10 * alpha)
+		draw_style_box(_sb_sel, rect)
 
 	if capturable:
 		var pulse2 := 0.5 + 0.5 * sin(_ring_phase * 0.8)
-		if _tx_cap != null:
-			draw_style_box(_tx_cap, rect.grow(3.0))
-		else:
-			_sb_cap.border_color = Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, (0.35 + 0.45 * pulse2) * alpha)
-			draw_style_box(_sb_cap, rect.grow(3.0))
+		_sb_cap.border_color = Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, (0.35 + 0.45 * pulse2) * alpha)
+		draw_style_box(_sb_cap, rect.grow(3.0))
 		draw_string(UI.font_bold(), rect.position + Vector2(size.x - 20, 20), "◆",
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, alpha))
 
@@ -205,38 +166,10 @@ func _draw() -> void:
 			Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, alpha))
 
 
-## Deliberately crude: shown only for a frame or two while the texture bakes, or
-## if capture is impossible. Keeping it cheap matters more than making it pretty.
-func _draw_fallback(rect: Rect2, a: float) -> void:
-	var face := Color(UI.PARCHMENT.r, UI.PARCHMENT.g, UI.PARCHMENT.b, a) if face_up \
-		else Color(0.13, 0.10, 0.19, a)
-	draw_rect(rect, face)
-	if not face_up or card_id < 0:
-		return
-	var info: Dictionary = T.FACTIONS[C.faction(card_id)]
-	var col: Color = info.color
-	draw_rect(Rect2(rect.position + Vector2(7, size.y * 0.44),
-		Vector2(size.x - 14, size.y * 0.42)), Color(col.r, col.g, col.b, 0.35 * a))
-	draw_string(UI.font_title(), rect.position + Vector2(10, size.y * 0.34), str(C.rank(card_id)),
-		HORIZONTAL_ALIGNMENT_LEFT, -1, int(size.y * 0.34), Color(0.05, 0.04, 0.08, a))
-
-
-## Deliberately does NOT bake anything. An earlier version froze these styles into
-## textures per card, which meant five SubViewport render + get_image() readbacks
-## for every card created — and on a software rasteriser a readback is a hard
-## CPU/GPU sync costing milliseconds each. That produced 25-85ms stalls whenever
-## the table repopulated, which is exactly the lag being reported. With
-## anti-aliasing off a StyleBox is 2 triangles, so drawing it directly is cheaper
-## than any texture lookup.
-func _freeze_styles() -> void:
-	_frozen = true
-
-
 func _ensure_styles() -> void:
 	if _styles_ready:
 		return
 	_styles_ready = true
-	_freeze_styles()
 	_sb_ring = UI.flat(Color(0, 0, 0, 0), 12, UI.GOLD, 3)
 	_sb_glow = UI.flat(Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, 0.12), 14)
 	_sb_sel = UI.flat(Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, 0.10), 11)
