@@ -131,6 +131,8 @@ func _build() -> void:
 	col.add_child(UI.spacer(4))
 	col.add_child(_cosmetics_panel())
 	col.add_child(UI.spacer(4))
+	col.add_child(_animation_panel())
+	col.add_child(UI.spacer(4))
 	col.add_child(_stats_panel())
 	col.add_child(UI.spacer(10))
 
@@ -292,6 +294,61 @@ func _mode_row(title: String, sub: String, badge: String, cb: Callable, accent: 
 		if e is InputEventMouseButton and e.pressed:
 			cb.call())
 	p.mouse_filter = Control.MOUSE_FILTER_STOP
+	return p
+
+
+## Presentation settings. Every animation can be turned off and the game stays
+## completely playable - they are flourish, not mechanics.
+func _animation_panel() -> Control:
+	var p := PanelContainer.new()
+	p.add_theme_stylebox_override("panel", UI.panel(UI.PANEL, 16, Color("3a3050")))
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 8)
+	p.add_child(v)
+	var h := HBoxContainer.new()
+	v.add_child(h)
+	h.add_child(UI.label("ANIMATION", 18, UI.GOLD))
+	var sp := Control.new()
+	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	h.add_child(sp)
+	h.add_child(UI.label("cosmetic · never affects play", 14, UI.TEXT_DIM))
+
+	var rows := [
+		["anim_enabled", "All animation", "Master switch. Off = instant, zero flourish."],
+		["anim_spin", "Card spin", "Played cards turn a full 360 as they land."],
+		["anim_slow", "Slower play", "Holds the beat so captures stay readable."],
+		["anim_match", "Match cue", "Flash a ring on each card being taken."],
+	]
+	var toggles := {}
+	for row in rows:
+		var key: String = row[0]
+		var r := HBoxContainer.new()
+		r.add_theme_constant_override("separation", 12)
+		v.add_child(r)
+		var tv := VBoxContainer.new()
+		tv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		tv.add_theme_constant_override("separation", 0)
+		r.add_child(tv)
+		tv.add_child(UI.label(row[1], 19, UI.TEXT, true))
+		tv.add_child(UI.label(row[2], 15, UI.TEXT_DIM))
+		var t := _toggle(bool(Profile.get(key)))
+		var k := key
+		t.pressed.connect(func():
+			Profile.set(k, not bool(Profile.get(k)))
+			Profile.save_profile()
+			Sfx.play("select", -14.0))
+		r.add_child(t)
+		toggles[key] = t
+	# the sub-switches only mean anything while the master is on
+	var dim_subs := func() -> void:
+		var on: bool = Profile.anim_enabled
+		for k in ["anim_spin", "anim_slow", "anim_match"]:
+			var b: Button = toggles[k]
+			b.disabled = not on
+			b.modulate.a = 1.0 if on else 0.4
+	dim_subs.call()
+	var m: Button = toggles["anim_enabled"]
+	m.pressed.connect(dim_subs)
 	return p
 
 

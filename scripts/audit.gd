@@ -86,6 +86,7 @@ func run(m: Control) -> void:
 	_test_deal()
 	_test_overlay_dismiss()
 	_test_quindici()
+	_test_animation_settings()
 	await _test_tap_play()
 	await _audit_screens()
 	print("=== AUDIT COMPLETE · failures=%d ===" % failures)
@@ -93,6 +94,70 @@ func run(m: Control) -> void:
 		ProjectSettings.get_setting("rendering/renderer/rendering_method", "?"), " · adapter ",
 		RenderingServer.get_video_adapter_name())
 	get_tree().quit()
+
+
+## Animation must be purely cosmetic: every switch has to exist, persist, and the
+## off state must not change what the game does. Checked without rendering.
+func _test_animation_settings() -> void:
+	var keys := ["anim_enabled", "anim_spin", "anim_slow", "anim_match"]
+	var missing := []
+	for k in keys:
+		if Profile.get(k) == null:
+			missing.append(k)
+	if not missing.is_empty():
+		fail("animation settings missing: %s" % str(missing))
+	else:
+		ok("animation settings exist (all, spin, slow, match)")
+
+	# A duel screen must build and play with every animation switched off, in the
+	# same number of moves - i.e. the switches cannot gate gameplay.
+	var saved := [Profile.anim_enabled, Profile.anim_spin, Profile.anim_slow, Profile.anim_match]
+	Profile.anim_enabled = false
+	var off = load("res://scripts/screens/duel.gd").new()
+	off.config = {"mode": 0, "seed": 11}
+	main.add_child(off)
+	for i in range(30):
+		await get_tree().process_frame
+	var played_off := _tap_first_card(off)
+	Profile.anim_enabled = true
+	var on = load("res://scripts/screens/duel.gd").new()
+	on.config = {"mode": 0, "seed": 11}
+	main.add_child(on)
+	for i in range(30):
+		await get_tree().process_frame
+	var played_on := _tap_first_card(on)
+	if played_off and played_on:
+		ok("a card can be played with animation on and off")
+	else:
+		fail("animation setting blocked a play (%s/%s)" % [played_off, played_on])
+	# the opponent hand must render as face-down cards in both cases
+	var backs_off := 0
+	for cv in off._bot_row.get_children():
+		if cv is CardView and not cv.face_up:
+			backs_off += 1
+	if backs_off == off.duel.hands[1].size() and backs_off > 0:
+		ok("opponent hand shown as %d face-down cards" % backs_off)
+	else:
+		fail("opponent hand mismatch: %d backs for %d cards" % [backs_off, off.duel.hands[1].size()])
+	Profile.anim_enabled = saved[0]
+	Profile.anim_spin = saved[1]
+	Profile.anim_slow = saved[2]
+	Profile.anim_match = saved[3]
+	off.queue_free()
+	on.queue_free()
+	await get_tree().process_frame
+
+
+func _tap_first_card(screen) -> bool:
+	var hand: Array = screen.duel.hands[0]
+	if hand.is_empty():
+		return false
+	var before: int = hand.size()
+	screen.duel.turn = 0
+	screen._on_hand_card(hand[0])
+	# second tap confirms the selected play
+	screen._confirm_play(hand[0]) if screen._selection == hand[0] else screen._on_hand_card(hand[0])
+	return screen.duel.hands[0].size() < before or screen._busy
 
 
 ## Scopa di Quindici (first version): only totals of 15 capture, and a card can

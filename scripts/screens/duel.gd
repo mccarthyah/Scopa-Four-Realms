@@ -33,6 +33,7 @@ var _renown1: Label
 var _renown_bar: Control
 var _turn_label: Label
 var _turn_meter: Control
+var _bot_row: HBoxContainer
 var _table_box: Control
 var _table_grid: HBoxContainer
 var _table_sub: Label
@@ -118,6 +119,9 @@ func _build_duel() -> void:
 	var mid := _build_mid()
 	mid.name = "TurnBar"
 	root.add_child(mid)
+	var bot := _build_bot_hand()
+	bot.name = "BotHand"
+	root.add_child(bot)
 	var tbl := _build_table()
 	tbl.name = "Table"
 	root.add_child(tbl)
@@ -249,6 +253,43 @@ func _build_mid() -> Control:
 	_score_chip = UI.chip("", Color("2b2338"), UI.TEXT_DIM, 14)
 	h.add_child(_score_chip)
 	return p
+
+
+## The opponent's hand, face down, sitting above the playfield. Cards shrink as
+## the hand grows so it never eats the felt.
+func _build_bot_hand() -> Control:
+	var box := Control.new()
+	box.custom_minimum_size = Vector2(0, 54)
+	box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_bot_row = HBoxContainer.new()
+	_bot_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	_bot_row.add_theme_constant_override("separation", 7)
+	_bot_row.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	box.add_child(_bot_row)
+	return box
+
+
+func _refresh_bot_hand() -> void:
+	if _bot_row == null:
+		return
+	for c in _bot_row.get_children():
+		c.get_parent().remove_child(c)
+		c.queue_free()
+	var n: int = duel.hands[1].size()
+	if n == 0:
+		_bot_row.add_child(UI.label("no cards left", 13, UI.TEXT_DIM))
+		return
+	# three small backs cost about 60 px of height instead of a full card row
+	var ch: float = clampf(size.x * 0.115, 46.0, 62.0)
+	var cw: float = ch / 1.404
+	for i in range(n):
+		var cv := CardView.new()
+		cv.setup(-1, false, int(cw), int(ch))
+		cv.back_style = Profile.card_back
+		cv.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		cv.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		_bot_row.add_child(cv)
+		cv.enter_anim(0.04 * i)
 
 
 func _build_table() -> Control:
@@ -456,6 +497,7 @@ func _draw_table_felt() -> void:
 # REFRESH
 # ---------------------------------------------------------------------------
 func _refresh_all() -> void:
+	_refresh_bot_hand()
 	var bot: Dictionary = T.FACTIONS[duel.bot_faction]
 	var mine: Dictionary = T.FACTIONS[duel.player_faction]
 	var camp: Dictionary = config.get("campaign", {})
@@ -700,10 +742,26 @@ func _play_card(card: int, group_idx: int) -> void:
 	if from_center == Vector2.ZERO:
 		from_center = _hand_box.global_position + _hand_box.size * Vector2(0.5, 0.6)
 
-	# pre-compute what will be captured so the animation can fly the cards
+	# pre-compute what will be captured so the animation can fly the cards, and so
+	# the match can be shown on the real table cards before they leave it
 	var captured: Array = []
 	if groups.size() > 0:
 		captured = groups[clampi(group_idx, 0, groups.size() - 1)] + [card]
+	var matched: Array = captured.duplicate()
+	matched.erase(card)
+
+	if anim_on("all"):
+		# 1. the played card travels to the playfield, spinning
+		Sfx.play("tap", -14.0)
+		var landing := target_center if matched.is_empty() else _card_slot_center(matched[0])
+		var ch: float = clampf(maxf(_table_box.size.y, 260.0) * 0.40, 148.0, 208.0)
+		var cw: float = ch / 1.404
+		_fly_card_in(card, from_center, landing, int(cw), int(ch))
+		await get_tree().create_timer(_beat(0.30, 0.12)).timeout
+		# 2. whatever it matched lights up, so the pairing is legible
+		if not matched.is_empty() and anim_on("match"):
+			_mark_match(matched)
+			await get_tree().create_timer(_beat(0.42, 0.10)).timeout
 
 	duel.play(0, card, group_idx)
 	_handle_events()
@@ -719,11 +777,20 @@ func _play_card(card: int, group_idx: int) -> void:
 		Sfx.play("deal", -12.0)
 
 	# a scopa holds the beat so the celebration lands before the next turn
-	await get_tree().create_timer(1.15 if _scopa_held else 0.42).timeout
+	var hold: float = _beat(2.05, 0.9) if _scopa_held else _beat(0.95, 0.24)
+	await get_tree().create_timer(hold).timeout
 	_scopa_held = false
 	_busy = false
 	_refresh_all()
 	_after_turn()
+
+
+## Where a table card currently sits, so a played card can land beside it.
+func _card_slot_center(c: int) -> Vector2:
+	var node := _table_card_node(c)
+	if node != null:
+		return node.global_position + node.size * 0.5
+	return _table_center()
 
 
 func _save_state() -> void:
@@ -749,7 +816,7 @@ func _run_bot() -> void:
 	var token := _ai_token
 	_busy = true
 	_refresh_all()
-	await get_tree().create_timer(0.65).timeout
+	await get_tree().create_timer(_beat(0.9, 0.4)).timeout
 	if token != _ai_token or duel.hand_over:
 		_busy = false
 		return
@@ -782,6 +849,34 @@ func _run_bot() -> void:
 	var captured: Array = []
 	if not groups.is_empty():
 		captured = groups[clampi(gi, 0, groups.size() - 1)] + [card]
+	var matched: Array = captured.duplicate()
+	matched.erase(card)
+
+	if anim_on("all"):
+		# the opponent's card visibly leaves their hand and travels down
+		var ch: float = clampf(maxf(_table_box.size.y, 260.0) * 0.40, 148.0, 208.0)
+		var cw: float = ch / 1.404
+		var origin: Vector2 = _bot_row.global_position + _bot_row.size * Vector2(0.5, 0.5)
+		if _bot_row.get_child_count() > 0:
+			var first := _bot_row.get_child(0) as Control
+			if first != null:
+				origin = first.global_position + first.size * 0.5
+		var landing := _table_center() if matched.is_empty() else _card_slot_center(matched[0])
+		_fly_card_in(card, origin, landing, int(cw), int(ch))
+		# the opponent's hand thins as the card leaves it
+		var backs := _bot_row.get_child_count()
+		if backs > 0:
+			var leaving := _bot_row.get_child(backs - 1)
+			if leaving != null:
+				leaving.queue_free()
+		await get_tree().create_timer(_beat(0.34, 0.10)).timeout
+		if not matched.is_empty() and anim_on("match"):
+			_mark_match(matched)
+			await get_tree().create_timer(_beat(0.40, 0.08)).timeout
+		if token != _ai_token:
+			_busy = false
+			return
+
 	duel.play(1, card, gi)
 	_handle_events()
 	_save_state()
@@ -791,7 +886,7 @@ func _run_bot() -> void:
 	else:
 		Sfx.play("deal", -16.0, 0.9)
 	_refresh_all()
-	await get_tree().create_timer(0.45).timeout
+	await get_tree().create_timer(_beat(0.85, 0.3)).timeout
 	_busy = false
 	if duel.hand_over:
 		_show_hand_summary()
@@ -1064,6 +1159,98 @@ func _scopa_celebration(who: int, glory: int) -> void:
 	FX.float_text(self, center + Vector2(0, 30), sub, UI.PARCHMENT, 22)
 	if who == 1:
 		_toast("%s sweeps the table!" % T.FACTIONS[duel.bot_faction].people, "+%d Glory" % glory)
+
+
+# ---------------------------------------------------------------------------
+# CARD ANIMATION
+# Every one of these honours the settings, and all of them are purely cosmetic:
+# with animations off the same moves resolve on the same frames, just instantly.
+# ---------------------------------------------------------------------------
+func anim_on(kind: String = "all") -> bool:
+	if not Profile.anim_enabled:
+		return false
+	match kind:
+		"spin":
+			return Profile.anim_spin
+		"slow":
+			return Profile.anim_slow
+		"match":
+			return Profile.anim_match
+	return true
+
+
+## Seconds to wait for a beat that is only there for the animation's sake.
+## Collapses to ~0 when slow-motion is off, so the game never feels padded.
+func _beat(long_s: float, short_s: float = 0.0) -> float:
+	return long_s if anim_on("slow") else short_s
+
+
+## Fly a card from `from` onto the playfield. With the spin enabled it turns a
+## full 360 about its vertical axis on the way, showing its back for the middle
+## of the turn. One tween, one property, no shader.
+func _fly_card_in(c: int, from: Vector2, to: Vector2, w: int, h: int, delay: float = 0.0) -> void:
+	var cv := CardView.new()
+	cv.setup(c, true, w, h)
+	cv.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cv.z_index = 80
+	add_child(cv)
+	cv.position = from - Vector2(w, h) * 0.5
+	var spin: bool = anim_on("spin")
+	var dur: float = 0.46 if spin else 0.26
+	if not anim_on("all"):
+		cv.queue_free()
+		return
+	if not spin:
+		cv.modulate.a = 1.0
+	var t := create_tween()
+	t.set_parallel(true)
+	t.tween_property(cv, "position", to - Vector2(w, h) * 0.5, dur).set_delay(delay) \
+		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	if spin:
+		# 0..1 across the flight, mapped to a full turn
+		t.tween_method(func(v: float) -> void:
+			cv.squash = cos(v * TAU)
+			cv.queue_redraw(), 0.0, 1.0, dur).set_delay(delay)
+	else:
+		cv.squash = 1.0
+	t.chain().tween_callback(cv.queue_free)
+
+
+## Flash a ring on every card involved in a capture, so it is obvious what was
+## matched before the cards leave the table.
+func _mark_match(cards: Array, from_hand: int = -1) -> void:
+	if not anim_on("match"):
+		return
+	for c in cards:
+		var node := _table_card_node(c)
+		if node == null:
+			continue
+		var ring := Panel.new()
+		ring.add_theme_stylebox_override("panel", UI.panel(Color(0, 0, 0, 0), 8, UI.GOLD, 3))
+		ring.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		ring.z_index = 60
+		ring.size = node.size + Vector2(12, 12)
+		ring.position = node.global_position - Vector2(6, 6) - global_position
+		ring.modulate.a = 0.0
+		add_child(ring)
+		var t := create_tween()
+		t.tween_property(ring, "modulate:a", 1.0, 0.12)
+		t.chain().tween_property(ring, "modulate:a", 0.0, 0.34).set_delay(0.16)
+		t.chain().tween_callback(ring.queue_free)
+
+
+func _table_card_node(id: int) -> Control:
+	for cv in _table_grid.get_children():
+		if cv is CardView and cv.card_id == id:
+			return cv
+	return null
+
+
+func _hand_card_node(id: int) -> Control:
+	for cv in _hand_row.get_children():
+		if cv is CardView and cv.card_id == id:
+			return cv
+	return null
 
 
 func _fly_to_pile(cards: Array, from: Vector2) -> void:

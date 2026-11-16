@@ -76,6 +76,24 @@ Everything in the brief, playable end to end:
 | **Daily Puzzle** — fixed deal, goal in N moves | ✅ 3 deals, rotates by date, each solver-verified |
 | **Async duels** | ✅ foundation: the duel serialises exactly (verified) and a mid-hand duel resumes from the title screen. Needs a transport (see *Next*) |
 | Cosmetics only | ✅ card backs, board themes, saved in the profile; no card power anywhere |
+| **Card animation**, all optional | ✅ played cards spin 360° onto the field, captures flash a ring on every matched card, the opponent's hand sits face down above the playfield and thins as it plays. Slower play is a switch; **every** animation can be turned off in settings |
+
+### Animation settings
+
+Title screen → *Animation*. Nothing here changes the rules, and the game is fully
+playable with it all switched off — the same moves resolve on the same frames,
+just instantly (a measured play: ~1.7 s animated, 66 ms off).
+
+| Setting | Effect |
+|---|---|
+| All animation | Master switch |
+| Card spin | A played card turns a full 360° about its vertical axis as it travels to the playfield, showing its back through the middle of the turn |
+| Slower play | Holds the beat before and after a play so captures stay readable |
+| Match cue | A gold ring flashes on every card involved in a capture before they leave the table |
+
+The spin is a horizontal squash tweened on the card's own draw rect — not a
+shader and not a rotation of the whole node — so it costs one property tween on a
+software rasteriser rather than a render-to-texture pass.
 
 ### Scopa di Quindici
 

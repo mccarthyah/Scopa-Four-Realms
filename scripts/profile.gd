@@ -17,6 +17,12 @@ var quests_done := 0
 var puzzles_solved := 0
 var campaign_cleared: Array = []
 var classic_mode := false
+## Presentation settings.  Animations are purely cosmetic: the game is fully
+## playable with every one of them off.
+var anim_enabled := true
+var anim_spin := true
+var anim_slow := true
+var anim_match := true
 var seen_intro := false
 var card_back := 0
 var board_theme := 0
@@ -57,6 +63,10 @@ func load_profile() -> void:
 	seen_intro = d.get("seen_intro", false)
 	card_back = d.get("card_back", 0)
 	board_theme = d.get("board_theme", 0)
+	anim_enabled = bool(d.get("anim_enabled", true))
+	anim_spin = bool(d.get("anim_spin", true))
+	anim_slow = bool(d.get("anim_slow", true))
+	anim_match = bool(d.get("anim_match", true))
 	last_puzzle_date = d.get("last_puzzle_date", "")
 	last_puzzle_won = d.get("last_puzzle_won", false)
 	# JSON turns dictionary keys into strings, so map them back to ints
@@ -73,6 +83,8 @@ func save_profile() -> void:
 		"quests_done": quests_done, "puzzles_solved": puzzles_solved,
 		"campaign_cleared": campaign_cleared, "classic_mode": classic_mode,
 		"seen_intro": seen_intro, "card_back": card_back, "board_theme": board_theme,
+		"anim_enabled": anim_enabled, "anim_spin": anim_spin,
+		"anim_slow": anim_slow, "anim_match": anim_match,
 		"last_puzzle_date": last_puzzle_date, "last_puzzle_won": last_puzzle_won,
 		"faction_wins": faction_wins, "faction_plays": faction_plays,
 	}

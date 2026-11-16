@@ -28,6 +28,10 @@ var dim := false
 var hinted := false
 var capturable := false
 var animated_in := false
+## Horizontal squash used to fake a card spinning about its vertical axis: at
+## 1.0 the card faces you, at 0.0 it is edge-on, below 0 it is showing its back.
+## Tweened, not shader-driven, so it costs the same on a software rasteriser.
+var squash := 1.0
 var back_style := 0
 var _sized := false
 
@@ -140,6 +144,15 @@ func _draw() -> void:
 	var ease_out := 1.0 - pow(1.0 - fig, 3.0)
 	var draw_pos := Vector2(0, (1.0 - ease_out) * 26.0 + _lift)
 	var rect := Rect2(draw_pos, size)
+
+	# --- spin: squeeze horizontally about the card's centre. Only the destination
+	# rect changes; the art is still one direct draw, so this stays cheap.
+	if absf(squash) < 0.999:
+		var sq := clampf(squash, 0.0, 1.0)
+		if absf(squash) < 0.02:
+			sq = 0.02
+		var nw := maxf(size.x * sq, 2.0)
+		rect = Rect2(Vector2(draw_pos.x + (size.x - nw) * 0.5, draw_pos.y), Vector2(nw, size.y))
 	var alpha := 1.0  # the node's modulate carries fade/dim; see _process
 
 
@@ -147,8 +160,9 @@ func _draw() -> void:
 	_ensure_styles()
 	draw_style_box(_sb_shadow, Rect2(rect.position + Vector2(0, 3), rect.size))
 
-	# --- the card itself, drawn direct
-	CardArt.draw_face(self, rect, card_id, back_style)
+	# --- the card itself, drawn direct (its back while the spin is past edge-on)
+	var shown_id := card_id if squash >= 0.0 else -1
+	CardArt.draw_face(self, rect, shown_id, back_style)
 
 	# --- interaction feedback, still live (dim is handled by modulate)
 
