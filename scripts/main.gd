@@ -6,6 +6,7 @@ const TitleScreen := preload("res://scripts/screens/title.gd")
 const DuelScreen := preload("res://scripts/screens/duel.gd")
 
 var current: Control = null
+var _stage := "boot"
 
 
 func _ready() -> void:
@@ -56,10 +57,22 @@ func _report_environment() -> void:
 		" · screen ", DisplayServer.screen_get_size())
 	print("[scopa] viewport   : ", str(get_viewport().get_visible_rect().size))
 	print("[scopa] log file   : ", ProjectSettings.globalize_path("user://logs/godot.log"))
+	print("[scopa] process    : pid ", OS.get_process_id(), " · ", Engine.get_physics_ticks_per_second(), " physics tps")
 	print("[scopa] ---------------------")
+	# A heartbeat every 5s proves whether the process is alive-but-stuck or gone,
+	# and the stage marker says which screen was being built when it stopped.
+	var hb := Timer.new()
+	hb.wait_time = 5.0
+	hb.autostart = true
+	hb.timeout.connect(func():
+		print("[scopa] heartbeat pid=", OS.get_process_id(), " stage=", _stage,
+			" frames=", Engine.get_process_frames(), " fps=", Engine.get_frames_per_second()))
+	add_child(hb)
 
 
 func show_title() -> void:
+	_stage = "title:building"
+	print("[scopa] stage -> title")
 	var s := TitleScreen.new()
 	s.start_duel.connect(_start_duel)
 	_swap(s)
@@ -67,6 +80,7 @@ func show_title() -> void:
 	# blank window with no explanation
 	await get_tree().process_frame
 	await get_tree().process_frame
+	_stage = "title:ready"
 	if is_instance_valid(s) and s.get_child_count() == 0:
 		push_error("Scopa: the title screen failed to build — see the log above")
 		_fatal_screen("The title screen could not be built.\nCheck the log for the first error.")
@@ -102,6 +116,8 @@ func _fatal_screen(msg: String) -> void:
 
 
 func _start_duel(config: Dictionary) -> void:
+	_stage = "duel:building mode=%d" % int(config.get("mode", -1))
+	print("[scopa] stage -> duel (mode ", config.get("mode", -1), ")")
 	var s := DuelScreen.new()
 	s.config = config.duplicate(true)
 	s.exit_to_menu.connect(show_title)

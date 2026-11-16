@@ -2,6 +2,45 @@
 
 > **Built and tested on Godot 4.7.2** (and still audited green on 4.4.1). Requires **4.4 or newer**.
 
+## If the game freezes your VM
+
+Do not debug a renderer inside the VM you are working in. Run the headless
+checks first — they create no window and no GPU context, so they cannot wedge
+anything:
+
+```bash
+GODOT=/path/to/godot ./safe-check.sh       # import + boot + 57 self-tests
+GODOT=/path/to/godot ./safe-check.sh log   # the log from the frozen run
+```
+
+**The renderer was the cause of the earlier freeze.** An interim change switched
+this project from GL Compatibility to Vulkan/Metal (`mobile`); on a GPU-poor or
+virtualised machine that can hard-lock the graphics driver instead of failing
+cleanly — no error, no window, just a wedged VM. It is now back on
+`gl_compatibility`, with `rendering_device/fallback_to_vulkan=false` so the
+engine can never silently escalate to Vulkan.
+
+If you ever change the renderer yourself, note the trade-off:
+
+| Rendering method | Risk on a VM |
+|---|---|
+| `gl_compatibility` (current) | safest; software/llvmpipe friendly |
+| `mobile` (Vulkan/Metal) | can lock the GPU driver on old/virtual GPUs |
+| `forward_plus` (Vulkan) | same, plus more GPU work |
+
+Everything in this game is 2D vector drawing, so Compatibility loses nothing.
+
+### After a freeze, the log is still there
+
+Verified by killing a running instance with SIGKILL: the log file retains every
+line written up to the kill. So after End Task, run `./safe-check.sh log`.
+
+A `[scopa] heartbeat ... stage=...` line every 5 seconds proves the process was
+alive but stuck, and tells you which screen it was stuck on. **No heartbeat at
+all** means it died before the main loop — a renderer/display failure, not a
+script bug. A `[scopa] stage -> ...` line with nothing after it localises the
+hang to that transition.
+
 ## Read this first: headless output is not a rendering test
 
 `--headless` forces Godot's **dummy renderer**, so it never touches your GPU, your

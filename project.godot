@@ -39,20 +39,32 @@ pointing/emulate_mouse_from_touch=true
 
 [rendering]
 
-; Godot 4.7: "mobile" (Vulkan/Metal) is the best-tested path on desktop and
-; phones; the engine falls back to OpenGL3 automatically if Vulkan is
-; missing (rendering/rendering_device/fallback_to_opengl3). Web stays GL.
-renderer/rendering_method="mobile"
-renderer/rendering_method.mobile="mobile"
+; GL Compatibility on purpose: this is a 2D card game, and the Vulkan/Metal
+; ("mobile"/"forward_plus") paths can hard-lock a GPU-poor or virtualised
+; machine — a wedged VM rather than a crash. Compatibility is the safest,
+; most portable path and costs nothing for 2D.
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
 renderer/rendering_method.web="gl_compatibility"
+; Never silently fall back to Vulkan: if OpenGL fails we want a clean error.
+rendering_device/fallback_to_vulkan=false
 environment/defaults/default_clear_color=Color(0.078, 0.071, 0.109, 1)
 textures/vram_compression/import_etc2_astc=true
 anti_aliasing/quality/msaa_2d=0
 
 [debug]
 
+; Log to disk and flush every line, so a freeze or hard kill still leaves a
+; readable log behind (verified against SIGKILL).
 file_logging/enable_file_logging=true
 file_logging/enable_file_logging.pc=true
+file_logging/log_to_stdout=true
+; The editor should not auto-run the game on open: an unwanted run is how a
+; renderer can lock up a VM you are working in.
+editor/run/main_run_args=""
+editor/run/auto_run_on_open=false
+; Avoid the extra GPU work of a second editor window path.
+editor/rendering/use_hdr_2d=false
 gdscript/warnings/untyped_declaration=0
 gdscript/warnings/unsafe_property_access=0
 gdscript/warnings/unsafe_method_access=0

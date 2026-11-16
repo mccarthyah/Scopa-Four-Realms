@@ -20,11 +20,15 @@ the Runestone    the 7 of Forge — the settebello
 3. The viewport is a 720×1280 portrait phone canvas that stretches to any window; the window opens at
    540×960 for desktop testing.
 
-If the window fails to open, try the other renderer first — the project ships on
-`mobile` (Vulkan/Metal) and everything here is 2D, so Compatibility works fine:
+The project ships on the **GL Compatibility** renderer deliberately: the Vulkan
+paths can hard-lock a virtualised or GPU-poor machine instead of failing, and a
+2D card game gains nothing from them.
+
+**Safe health check — no window, no GPU context, so it cannot freeze a VM:**
 
 ```bash
-godot --path . --rendering-driver opengl3    # or set Rendering Method = Compatibility
+GODOT=/path/to/godot ./safe-check.sh          # import + boot + 57 self-tests
+GODOT=/path/to/godot ./safe-check.sh log      # the log from a frozen run
 ```
 
 Every run prints an environment block (Godot version, renderer, GPU adapter,

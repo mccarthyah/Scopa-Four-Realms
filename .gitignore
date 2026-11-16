@@ -1,5 +1,45 @@
-# Godot 4
+# ---- Godot 4 -----------------------------------------------------------
+# The import cache and editor state are regenerated on open. Never commit.
 .godot/
-build/
+# Godot 3 leftovers, in case anyone opens this with an older editor.
+.import/
 *.translation
+
+# Export output and credentials.
+build/
+*.pck
+*.zip
 export_credentials.cfg
+export_credentials.cfg.*
+
+# ---- DO commit these (do not add them to .gitignore) -------------------
+#   *.import   — per-asset import settings + resource UIDs
+#   *.uid      — script/shader UIDs (Godot 4.4+)
+# Ignoring them re-imports assets with default settings and breaks every
+# UID reference on a fresh clone. Godot's docs are explicit about this.
+
+# ---- OS / editor junk --------------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*~
+.vscode/
+.idea/
+*.code-workspace
+
+# ---- Logs and captures ------------------------------------------------
+# Scopa writes its log to user:// (outside the project), so nothing belongs
+# here, but keep stray local runs out of the repo anyway.
+*.log
+godot.log*
+movie.avi
+*.avi
+capture_*.png
+screenshot_*.png
+
+# ---- Never commit credentials ----------------------------------------
+*.pat
+*_token*
+.env
+.env.*
