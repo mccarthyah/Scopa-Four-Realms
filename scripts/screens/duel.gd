@@ -1207,12 +1207,11 @@ func _fly_card_in(c: int, from: Vector2, to: Vector2, w: int, h: int, delay: flo
 	t.tween_property(cv, "position", to - Vector2(w, h) * 0.5, dur).set_delay(delay) \
 		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 	if spin:
-		# 0..1 across the flight, mapped to a full turn
+		# 0..1 across the flight mapped to exactly one full turn about the card's
+		# centre. Face up the whole way; the art does not flip.
 		t.tween_method(func(v: float) -> void:
-			cv.squash = cos(v * TAU)
+			cv.spin = v * TAU
 			cv.queue_redraw(), 0.0, 1.0, dur).set_delay(delay)
-	else:
-		cv.squash = 1.0
 	t.chain().tween_callback(cv.queue_free)
 
 

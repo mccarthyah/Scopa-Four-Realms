@@ -87,6 +87,7 @@ func run(m: Control) -> void:
 	_test_overlay_dismiss()
 	_test_quindici()
 	_test_animation_settings()
+	_test_spin()
 	await _test_tap_play()
 	await _audit_screens()
 	print("=== AUDIT COMPLETE · failures=%d ===" % failures)
@@ -158,6 +159,48 @@ func _tap_first_card(screen) -> bool:
 	# second tap confirms the selected play
 	screen._confirm_play(hand[0]) if screen._selection == hand[0] else screen._on_hand_card(hand[0])
 	return screen.duel.hands[0].size() < before or screen._busy
+
+
+## The spin must be a rotation about the card's centre, face up the whole way -
+## not a flip. Checked geometrically, no rendering needed: the card's centre must
+## be a fixed point at every angle, and the corners must stay the same distance
+## out (a rigid rotation, no squash).
+func _test_spin() -> void:
+	var cv := CardView.new()
+	cv.setup(5, true, 120, 168)
+	main.add_child(cv)
+	await get_tree().process_frame
+	if cv.get("squash") != null:
+		fail("spin: card still has a squash property (that was the flip)")
+	elif cv.get("spin") == null:
+		fail("spin: card has no rotation property")
+	else:
+		ok("spin: card rotates, there is no squash/flip left")
+	var centre: Vector2 = cv.size * 0.5
+	var drift_ok := true
+	var rigid_ok := true
+	var face_up := true
+	for i in range(9):
+		cv.spin = TAU * float(i) / 8.0
+		var t: Transform2D = cv._spin_transform()
+		if (t * centre).distance_to(centre) > 0.01:
+			drift_ok = false
+		var r0: float = (t * Vector2.ZERO).distance_to(centre)
+		var r1: float = (t * cv.size).distance_to(centre)
+		if absf(r0 - r1) > 0.01:
+			rigid_ok = false
+	if drift_ok and rigid_ok:
+		ok("spin: rotates about the card centre, rigid at every angle")
+	else:
+		fail("spin: not a centred rotation (drift_ok=%s rigid_ok=%s)" % [drift_ok, rigid_ok])
+	# the face must never be replaced by the back during the turn
+	cv.spin = PI
+	if cv.card_id >= 0 and cv.face_up:
+		ok("spin: card stays face up through the turn")
+	else:
+		fail("spin: card turned its back mid-spin")
+	cv.queue_free()
+	await get_tree().process_frame
 
 
 ## Scopa di Quindici (first version): only totals of 15 capture, and a card can

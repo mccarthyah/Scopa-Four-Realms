@@ -28,10 +28,10 @@ var dim := false
 var hinted := false
 var capturable := false
 var animated_in := false
-## Horizontal squash used to fake a card spinning about its vertical axis: at
-## 1.0 the card faces you, at 0.0 it is edge-on, below 0 it is showing its back.
-## Tweened, not shader-driven, so it costs the same on a software rasteriser.
-var squash := 1.0
+## Rotation of the card about its own centre, in radians. A full turn is a real
+## spin: the art stays face up throughout and the whole card rotates, rather than
+## the card flattening and flipping to its back.
+var spin := 0.0
 var back_style := 0
 var _sized := false
 
@@ -139,20 +139,36 @@ func _gui_input(event: InputEvent) -> void:
 		accept_event()
 
 
+## The transform used for the spin, exposed so it can be checked without
+## rendering: a rotation about the card's CENTRE with no scale.
+##
+## Transform2D(angle, origin) rotates about the node origin, so passing the centre
+## as `origin` rotates the card about (0,0) and swings its centre away by |centre|
+## pixels - measured at 103 px for a 120x168 card. Rotating in place about point p
+## needs origin = p - R*p, which is what this does.
+func _spin_transform() -> Transform2D:
+	var p := size * 0.5
+	var basis := Transform2D(spin, Vector2.ZERO)
+	return Transform2D(spin, p - basis.basis_xform(p))
+
+
 func _draw() -> void:
 	var fig := clampf(_fig, 0.0, 1.0)
 	var ease_out := 1.0 - pow(1.0 - fig, 3.0)
 	var draw_pos := Vector2(0, (1.0 - ease_out) * 26.0 + _lift)
 	var rect := Rect2(draw_pos, size)
 
-	# --- spin: squeeze horizontally about the card's centre. Only the destination
-	# rect changes; the art is still one direct draw, so this stays cheap.
-	if absf(squash) < 0.999:
-		var sq := clampf(squash, 0.0, 1.0)
-		if absf(squash) < 0.02:
-			sq = 0.02
-		var nw := maxf(size.x * sq, 2.0)
-		rect = Rect2(Vector2(draw_pos.x + (size.x - nw) * 0.5, draw_pos.y), Vector2(nw, size.y))
+	# --- spin: rotate about the card's centre. The Art draws in local space and
+	# this rotates the whole drawing context; the art itself is untouched and stays
+	# face up, so a full turn reads as a spin rather than a flip.
+	var spinning: bool = absf(spin) > 0.0001
+	var spin_origin := Vector2.ZERO
+	if spinning:
+		# rotate about the centre of the card where it currently sits
+		var mid := draw_pos + size * 0.5
+		var basis := Transform2D(spin, Vector2.ZERO)
+		spin_origin = mid - basis.basis_xform(mid)
+		draw_set_transform(spin_origin, spin, Vector2.ONE)
 	var alpha := 1.0  # the node's modulate carries fade/dim; see _process
 
 
@@ -160,9 +176,11 @@ func _draw() -> void:
 	_ensure_styles()
 	draw_style_box(_sb_shadow, Rect2(rect.position + Vector2(0, 3), rect.size))
 
-	# --- the card itself, drawn direct (its back while the spin is past edge-on)
-	var shown_id := card_id if squash >= 0.0 else -1
-	CardArt.draw_face(self, rect, shown_id, back_style)
+	# --- the card itself, drawn direct, always face up while it spins
+	CardArt.draw_face(self, rect, card_id, back_style)
+
+	if spinning:
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 	# --- interaction feedback, still live (dim is handled by modulate)
 

@@ -87,13 +87,16 @@ just instantly (a measured play: ~1.7 s animated, 66 ms off).
 | Setting | Effect |
 |---|---|
 | All animation | Master switch |
-| Card spin | A played card turns a full 360° about its vertical axis as it travels to the playfield, showing its back through the middle of the turn |
+| Card spin | A played card turns a full 360° **about its own centre**, face up the whole way, as it travels to the playfield |
 | Slower play | Holds the beat before and after a play so captures stay readable |
 | Match cue | A gold ring flashes on every card involved in a capture before they leave the table |
 
-The spin is a horizontal squash tweened on the card's own draw rect — not a
-shader and not a rotation of the whole node — so it costs one property tween on a
-software rasteriser rather than a render-to-texture pass.
+The spin is a real rotation of the card's drawing context about its centre — the
+art stays face up throughout, so it reads as a spin and not a flip. It rotates in
+place via `draw_set_transform`, so it costs one angle tween on a software
+rasteriser rather than a render-to-texture pass. An audit check asserts
+geometrically that the card's centre is a fixed point at every angle and that the
+corners stay equidistant (a rigid rotation, no squash).
 
 ### Scopa di Quindici
 
