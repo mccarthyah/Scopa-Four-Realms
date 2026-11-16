@@ -5,6 +5,11 @@ config_version=5
 
 [application]
 
+; Cap the frame rate. A card game does not need more, and on a VM without a
+; working vsync a 2D game can otherwise spin at several hundred fps and pin a
+; CPU core — which reads as a freeze.
+run/max_fps=60
+
 config/name="Scopa: Four Realms"
 config/description="A mobile-first fantasy reimagining of Scopa: four factions, faction Oaths, public quests and short duels."
 run/main_scene="res://scenes/main.tscn"

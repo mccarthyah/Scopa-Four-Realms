@@ -26,6 +26,19 @@ var _t := 0.0
 var _lift := 0.0
 var _target_lift := 0.0
 var _glow := 0.0
+
+# These were allocated inside _draw(), i.e. every frame for every playable card.
+# StyleBoxFlat is a live object, not a drawing command, so the old code churned
+# several objects plus a font measurement per card per frame and still left them
+# for the garbage collector. Built once now, and only recoloured when needed.
+var _sb_ring: StyleBoxFlat
+var _sb_glow: StyleBoxFlat
+var _sb_sel: StyleBoxFlat
+var _sb_cap: StyleBoxFlat
+var _ring_col := Color.WHITE
+var _glow_col := Color.WHITE
+var _cap_col := Color.WHITE
+var _styles_ready := false
 var _fig := 0.0
 
 
@@ -188,26 +201,27 @@ func _draw() -> void:
 		draw_string(UI.font_bold(), rect.position + Vector2(w - pad - sw - 2, h - 6.0), star,
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(UI.GOLD_DEEP.r, UI.GOLD_DEEP.g, UI.GOLD_DEEP.b, base_alpha))
 
+	_ensure_styles()
+
 	# --- interactive rings
 	if playable or selected:
 		var pulse := 0.55 + 0.45 * sin(_t * 5.0)
-		var ring_col := UI.GOLD
-		ring_col.a = (0.55 + 0.45 * pulse) * alpha
-		var ring := UI.flat(Color(0, 0, 0, 0), 12, ring_col, 3)
-		draw_style_box(ring, rect.grow(2.0))
-		var glow := UI.flat(Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, 0.12 * alpha), 14)
-		draw_style_box(glow, rect.grow(5.0))
+		_ring_col = Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, (0.55 + 0.45 * pulse) * alpha)
+		_sb_ring.border_color = _ring_col
+		draw_style_box(_sb_ring, rect.grow(2.0))
+		_glow_col = Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, 0.12 * alpha)
+		_sb_glow.bg_color = _glow_col
+		draw_style_box(_sb_glow, rect.grow(5.0))
 
 	if selected:
-		var sel := UI.flat(Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, 0.10 * alpha), 11)
-		draw_style_box(sel, rect)
+		_sb_sel.bg_color = Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, 0.10 * alpha)
+		draw_style_box(_sb_sel, rect)
 
 	if capturable:
 		var pulse2 := 0.5 + 0.5 * sin(_t * 4.0)
-		var ring2 := UI.GOLD
-		ring2.a = (0.35 + 0.45 * pulse2) * alpha
-		var r2 := UI.flat(Color(0, 0, 0, 0), 12, ring2, 2)
-		draw_style_box(r2, rect.grow(3.0))
+		_cap_col = Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, (0.35 + 0.45 * pulse2) * alpha)
+		_sb_cap.border_color = _cap_col
+		draw_style_box(_sb_cap, rect.grow(3.0))
 		draw_string(UI.font_bold(), rect.position + Vector2(w - 20, 20), "◆",
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, alpha))
 
@@ -335,3 +349,14 @@ func _draw_crown(c: Vector2, s: float, ink: Color, accent: Color) -> void:
 	])
 	draw_colored_polygon(crown, accent)
 	draw_circle(c + Vector2(1, 22) * s, 2.4 * s, ink)
+
+
+## StyleBoxes for the interactive rings, created once per card.
+func _ensure_styles() -> void:
+	if _styles_ready:
+		return
+	_styles_ready = true
+	_sb_ring = UI.flat(Color(0, 0, 0, 0), 12, UI.GOLD, 3)
+	_sb_glow = UI.flat(Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, 0.12), 14)
+	_sb_sel = UI.flat(Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, 0.10), 11)
+	_sb_cap = UI.flat(Color(0, 0, 0, 0), 12, UI.GOLD, 2)
