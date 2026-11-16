@@ -593,18 +593,22 @@ func _mini_deal(pz: Dictionary) -> Control:
 	tr.add_theme_constant_override("separation", 8)
 	tr.alignment = BoxContainer.ALIGNMENT_CENTER
 	v.add_child(tr)
-	for c in pz.table:
+	# The deal is authored as [rank, faction] PAIRS (see tables.gd PUZZLES), so each
+	# one has to be converted to a card id. Passing the pair straight through gave
+	# "Invalid type in function 'setup' ... Cannot convert argument 1 from Array
+	# to int" the moment the Daily Puzzle sheet opened.
+	for pair in pz.table:
 		var cv := CardView.new()
-		cv.setup(c, true, 58, 82)
+		cv.setup(C.make(int(pair[0]), int(pair[1])), true, 58, 82)
 		tr.add_child(cv)
 	v.add_child(UI.label("YOUR HAND", 13, UI.TEXT_DIM))
 	var hr := HBoxContainer.new()
 	hr.add_theme_constant_override("separation", 8)
 	hr.alignment = BoxContainer.ALIGNMENT_CENTER
 	v.add_child(hr)
-	for c in pz.hand:
+	for pair in pz.hand:
 		var cv2 := CardView.new()
-		cv2.setup(c, true, 58, 82)
+		cv2.setup(C.make(int(pair[0]), int(pair[1])), true, 58, 82)
 		hr.add_child(cv2)
 	if pz.has("hint"):
 		var h := UI.label("Hint: " + pz.hint, 15, UI.TEXT_DIM)

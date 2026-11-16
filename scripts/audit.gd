@@ -94,6 +94,7 @@ func run(m: Control) -> void:
 	await _test_card_corners()
 	await _test_table_fit()
 	await _test_display_scaling()
+	await _test_menu_sheets()
 	await _test_tap_play()
 	await _audit_screens()
 	print("=== AUDIT COMPLETE · failures=%d ===" % failures)
@@ -165,6 +166,66 @@ func _tap_first_card(screen) -> bool:
 	# second tap confirms the selected play
 	screen._confirm_play(hand[0]) if screen._selection == hand[0] else screen._on_hand_card(hand[0])
 	return screen.duel.hands[0].size() < before or screen._busy
+
+
+## EVERY entry on the title menu must actually open. The Daily Puzzle sheet threw
+## "Invalid type in function 'setup' ... Cannot convert argument 1 from Array to
+## int" because it handed [rank, faction] pairs to CardView.setup(), which wants a
+## card id - and no check had ever opened these sheets. They hold data in shapes
+## the rest of the app does not use, so they fail in ways nothing else would catch.
+func _test_menu_sheets() -> void:
+	var title = main.current
+	if title == null:
+		fail("menu sheets: no title screen mounted")
+		return
+	# Daily puzzle: open the sheet, then build the preview for every deal.
+	var opened := 0
+	for i in range(T.PUZZLES.size()):
+		var pz: Dictionary = T.PUZZLES[i]
+		title._open_puzzle()
+		await get_tree().process_frame
+		opened += 1
+		# the preview is where the crash was; walk the cards it produced
+		var card = title._mini_deal(pz)
+		if card == null:
+			fail("puzzle '%s': preview did not build" % pz.name)
+			continue
+		main.add_child(card)
+		await get_tree().process_frame
+		var ids: Array = []
+		for n in _walk_controls(card):
+			if n is Control and n.get("card_id") != null and n.card_id >= 0:
+				ids.append(n.card_id)
+		var want: int = pz.table.size() + pz.hand.size()
+		if ids.size() != want:
+			fail("puzzle '%s': preview shows %d cards, deal has %d" % [pz.name, ids.size(), want])
+		elif ids.any(func(x): return x < 0 or x >= 40):
+			fail("puzzle '%s': preview produced an out-of-range card id" % pz.name)
+		card.queue_free()
+		title._codex_close()
+		await get_tree().process_frame
+	if opened == T.PUZZLES.size():
+		ok("every Daily Puzzle sheet opens and its preview lays out real cards (%d deals)" % T.PUZZLES.size())
+
+	# The other menu sheets, same treatment.
+	for entry in [["campaign", "campaign"], ["codex", "codex"]]:
+		match entry[1]:
+			"campaign":
+				title._open_campaign()
+			"codex":
+				title._open_codex()
+		await get_tree().process_frame
+		title._codex_close()
+		await get_tree().process_frame
+	ok("campaign and codex sheets open without error")
+
+
+func _walk_controls(n: Node) -> Array:
+	var out: Array = []
+	for c in n.get_children():
+		out.append(c)
+		out += _walk_controls(c)
+	return out
 
 
 ## Stretch must actually be ENABLED. It was configured as
