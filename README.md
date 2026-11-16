@@ -92,6 +92,11 @@ scoring are identical; only the capture rule changes.
   takes an 8. Two 10s can never be taken by a 10.
 * Three fives (`5+5+5`) are a legal 15.
 
+**Scoring is identical to Classic** — Loot, Treasury, Runestone, Banner, Glory,
+Renown, Favor and the Oaths all work exactly as they do in the standard game.
+Only the capture rule changes. This is enforced by an audit check that scores the
+same captured piles under both rulesets and requires byte-identical results.
+
 When a card you have selected could not capture, the status line says so
 explicitly ("matching a value never captures — only cards totalling 15") so the
 variant's rule never reads as a broken tap.

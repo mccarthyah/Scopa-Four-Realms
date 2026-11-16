@@ -193,6 +193,27 @@ func _test_quindici() -> void:
 	else:
 		fail("quindici: duel did not complete")
 
+	# Scoring must be IDENTICAL under both rulesets: the variant changes the
+	# capture rule and nothing else. Same piles in, same Renown out.
+	var piles := [
+		[[0, 1, 2, 3, 4, 5, 6, 24, 25], [7, 8, 9, 10, 11, 12, 13, 14]],
+		[[], [0, 4, 8, 12, 16, 20, 24, 28, 32, 36]],
+	]
+	var same := true
+	for pair in piles:
+		var scored := []
+		for rule in [C.RULE_CLASSIC, C.RULE_QUINDICI]:
+			var sd = load("res://scripts/game/duel.gd").new({"mode": 0, "rule": rule, "seed": 31, "player_faction": 0, "bot_faction": 2})
+			sd.captured = [(pair[0] as Array).duplicate(), (pair[1] as Array).duplicate()]
+			sd.scopa_count = [2, 1]
+			scored.append(str(sd.score_hand()))
+		if scored[0] != scored[1]:
+			same = false
+	if same:
+		ok("quindici: scoring is identical to Classic for the same captured piles")
+	else:
+		fail("quindici: scoring differs by ruleset")
+
 	# Classic must be untouched by the variant existing.
 	var cd = load("res://scripts/game/duel.gd").new({"mode": T.Mode.QUICK, "seed": 77})
 	if cd.rule == C.RULE_CLASSIC and C.capture_groups_rule([C.make(4, 0)], C.make(4, 1), C.RULE_CLASSIC).size() == 1:
