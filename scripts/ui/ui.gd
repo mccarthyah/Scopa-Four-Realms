@@ -98,10 +98,12 @@ static func panel(col: Color = PANEL, radius: int = 18, border: Color = Color("4
 	s.content_margin_right = 16
 	s.content_margin_top = 12
 	s.content_margin_bottom = 12
-	# soft inner glow line
-	s.shadow_color = Color(0, 0, 0, 0.45)
-	s.shadow_size = 8
-	s.shadow_offset = Vector2(0, 4)
+	# No shadow_size: every StyleBoxFlat with a shadow blur costs a gaussian pass
+	# each time it is drawn, and these panels are on screen constantly. A 2px
+	# darker border gives the same sense of depth for free.
+	s.shadow_color = Color(0, 0, 0, 0.0)
+	s.shadow_size = 0
+	s.border_color = Color(border.r, border.g, border.b, maxf(border.a, 0.55))
 	return s
 
 

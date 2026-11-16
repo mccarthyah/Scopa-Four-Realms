@@ -434,15 +434,16 @@ const BOARD_THEMES := [
 func _draw_table_felt() -> void:
 	var r := Rect2(Vector2.ZERO, _table_box.size)
 	var theme: Array = BOARD_THEMES[clampi(Profile.board_theme, 0, BOARD_THEMES.size() - 1)]
-	var sb := UI.flat(theme[0], 20, theme[1], 2)
-	sb.shadow_color = Color(0, 0, 0, 0.35)
-	sb.shadow_size = 12
-	_table_box.draw_style_box(sb, r)
-	# radial felt light
+	# No shadow_size here: a 12px shadow blur is a gaussian pass over the whole
+	# board on every repaint, which is ruinous on a software rasteriser. A flat
+	# offset block reads the same at this size.
+	var sb := UI.flat(Color(0, 0, 0, 0.30), 20)
+	_table_box.draw_style_box(sb, Rect2(r.position + Vector2(0, 4), r.size))
+	var sb2 := UI.flat(theme[0], 20, theme[1], 2)
+	_table_box.draw_style_box(sb2, r)
+	# radial felt light: one soft quad instead of six overlapping circles
 	var c := r.size * Vector2(0.5, 0.45)
-	for i in range(6):
-		var f := 1.0 - i / 6.0
-		_table_box.draw_circle(c, r.size.x * 0.55 * f, Color(1, 1, 1, 0.012))
+	_table_box.draw_circle(c, r.size.x * 0.55, Color(1, 1, 1, 0.05))
 	# corner sigils
 	for sx in [0.0, 1.0]:
 		for sy in [0.0, 1.0]:
