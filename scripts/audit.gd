@@ -418,8 +418,12 @@ func _test_tap_play() -> void:
 			ev.global_position = center
 			main.get_viewport().push_input(ev)
 			await get_tree().process_frame
-		for k in range(30):
+		# a play is animated now, so wait until it has resolved rather than for a
+		# fixed number of frames - but never hang the audit if it does not
+		var guard := 0
+		while d._busy and guard < 240:
 			await get_tree().process_frame
+			guard += 1
 	var after: Array = []
 	for i in range(d._hand_row.get_child_count()):
 		after.append(d._hand_row.get_child(i).card_id)

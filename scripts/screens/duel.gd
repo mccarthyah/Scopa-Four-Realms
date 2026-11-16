@@ -757,11 +757,11 @@ func _play_card(card: int, group_idx: int) -> void:
 		var ch: float = clampf(maxf(_table_box.size.y, 260.0) * 0.40, 148.0, 208.0)
 		var cw: float = ch / 1.404
 		_fly_card_in(card, from_center, landing, int(cw), int(ch))
-		await get_tree().create_timer(_beat(0.30, 0.12)).timeout
+		await get_tree().create_timer(_beat(0.26, 0.10)).timeout
 		# 2. whatever it matched lights up, so the pairing is legible
 		if not matched.is_empty() and anim_on("match"):
 			_mark_match(matched)
-			await get_tree().create_timer(_beat(0.42, 0.10)).timeout
+			await get_tree().create_timer(_beat(0.34, 0.08)).timeout
 
 	duel.play(0, card, group_idx)
 	_handle_events()
@@ -777,7 +777,7 @@ func _play_card(card: int, group_idx: int) -> void:
 		Sfx.play("deal", -12.0)
 
 	# a scopa holds the beat so the celebration lands before the next turn
-	var hold: float = _beat(2.05, 0.9) if _scopa_held else _beat(0.95, 0.24)
+	var hold: float = _beat(1.9, 0.9) if _scopa_held else _beat(0.62, 0.24)
 	await get_tree().create_timer(hold).timeout
 	_scopa_held = false
 	_busy = false
@@ -816,7 +816,7 @@ func _run_bot() -> void:
 	var token := _ai_token
 	_busy = true
 	_refresh_all()
-	await get_tree().create_timer(_beat(0.9, 0.4)).timeout
+	await get_tree().create_timer(_beat(0.45, 0.3)).timeout
 	if token != _ai_token or duel.hand_over:
 		_busy = false
 		return
@@ -869,10 +869,10 @@ func _run_bot() -> void:
 			var leaving := _bot_row.get_child(backs - 1)
 			if leaving != null:
 				leaving.queue_free()
-		await get_tree().create_timer(_beat(0.34, 0.10)).timeout
+		await get_tree().create_timer(_beat(0.30, 0.10)).timeout
 		if not matched.is_empty() and anim_on("match"):
 			_mark_match(matched)
-			await get_tree().create_timer(_beat(0.40, 0.08)).timeout
+			await get_tree().create_timer(_beat(0.32, 0.08)).timeout
 		if token != _ai_token:
 			_busy = false
 			return
@@ -886,7 +886,7 @@ func _run_bot() -> void:
 	else:
 		Sfx.play("deal", -16.0, 0.9)
 	_refresh_all()
-	await get_tree().create_timer(_beat(0.85, 0.3)).timeout
+	await get_tree().create_timer(_beat(0.36, 0.22)).timeout
 	_busy = false
 	if duel.hand_over:
 		_show_hand_summary()
