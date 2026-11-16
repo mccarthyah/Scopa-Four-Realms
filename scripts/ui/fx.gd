@@ -1,6 +1,7 @@
 extends RefCounted
-class_name FX
 ## Tiny juice helpers: particle bursts, floating text, screen shake.
+
+const UI := preload("res://scripts/ui/ui.gd")
 
 
 

@@ -1,5 +1,4 @@
 extends RefCounted
-class_name Duel
 ## The whole rules engine, with no UI at all.
 ##
 ## Standard Scopa:

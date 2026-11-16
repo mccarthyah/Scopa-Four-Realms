@@ -1,5 +1,4 @@
 extends RefCounted
-class_name DuelAI
 ## Heuristic Scopa opponent.  It only ever sees its own hand plus the table, and
 ## its personality changes which heuristics it weighs.
 
@@ -20,7 +19,7 @@ static func _card_value(c: int) -> float:
 
 
 ## Returns {"card": int, "group": int} — group is the index of the capture group.
-static func choose_move(duel: Duel, who: int) -> Dictionary:
+static func choose_move(duel, who: int) -> Dictionary:
 	var style: String = duel.campaign.get("ai", "smart")
 	var hand: Array = duel.hands[who]
 	if hand.is_empty():
@@ -44,7 +43,7 @@ static func choose_move(duel: Duel, who: int) -> Dictionary:
 	return best
 
 
-static func _capture_score(duel: Duel, who: int, card: int, group: Array, style: String) -> float:
+static func _capture_score(duel, who: int, card: int, group: Array, style: String) -> float:
 	var s := 0.0
 	for c in group:
 		s += _card_value(c)
@@ -72,7 +71,7 @@ static func _capture_score(duel: Duel, who: int, card: int, group: Array, style:
 	return s
 
 
-static func _place_score(duel: Duel, who: int, card: int, style: String) -> float:
+static func _place_score(duel, who: int, card: int, style: String) -> float:
 	# Dumping a card is a weak move: score it in the negative, penalising the
 	# cards that are most valuable to leave lying around.
 	var s := -3.0 - _card_value(card) * 0.5
@@ -90,7 +89,7 @@ static func _place_score(duel: Duel, who: int, card: int, style: String) -> floa
 
 ## Decide whether to spend Favor this turn.  Returns an action dictionary for
 ## the caller to apply, or {} to just play a card.
-static func choose_oath(duel: Duel, who: int) -> Dictionary:
+static func choose_oath(duel, who: int) -> Dictionary:
 	if not duel.can_use_oath(who):
 		return {}
 	# keep Oaths for the mid-game unless they are clearly useful

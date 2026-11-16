@@ -1,6 +1,10 @@
 extends Control
 ## Title + mode select.  Also hosts the faction picker and the codex.
 
+const UI := preload("res://scripts/ui/ui.gd")
+const CardView := preload("res://scripts/ui/card_view.gd")
+const RealmBackground := preload("res://scripts/ui/background.gd")
+
 signal start_duel(config: Dictionary)
 
 const T := preload("res://scripts/tables.gd")

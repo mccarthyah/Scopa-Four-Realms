@@ -1,5 +1,4 @@
 extends RefCounted
-class_name Cards
 ## Card helpers.  Cards are plain integers, so decks, hands and the table are
 ## trivially serialisable (useful later for async duels / online play).
 ##

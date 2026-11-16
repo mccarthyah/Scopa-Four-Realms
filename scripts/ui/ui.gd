@@ -1,5 +1,4 @@
 extends RefCounted
-class_name UI
 ## Palette, fonts and widget factories.  Everything is built in code so the
 ## project is a handful of readable scripts with no scene-graph sprawl.
 

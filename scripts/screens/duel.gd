@@ -2,6 +2,12 @@ extends Control
 ## The duel table: HUD, opponent, table cards, your hand, Oath controls,
 ## scoring sheet and the campaign puzzle goals.  Portrait-first, one-handed.
 
+const UI := preload("res://scripts/ui/ui.gd")
+const FX := preload("res://scripts/ui/fx.gd")
+const CardView := preload("res://scripts/ui/card_view.gd")
+const DuelAI := preload("res://scripts/game/ai.gd")
+const RealmBackground := preload("res://scripts/ui/background.gd")
+
 signal exit_to_menu
 signal play_again(config)
 

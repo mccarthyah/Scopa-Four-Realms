@@ -1,6 +1,7 @@
 extends Control
-class_name RealmBackground
 ## Painted-sky background with drifting motes, drawn procedurally.
+
+const UI := preload("res://scripts/ui/ui.gd")
 
 
 var accent := UI.GOLD
