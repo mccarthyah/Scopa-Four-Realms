@@ -21,6 +21,9 @@ func _ready() -> void:
 	_detect_low_spec()
 	_report_environment()
 	show_title()
+	# Bake every card face in one pass, at boot, while the title screen is up.
+	# One render + one readback, instead of one per card as they are dealt.
+	_prebake_cards.call_deferred()
 	if OS.get_cmdline_user_args().has("--audit"):
 		var audit = load("res://scripts/audit.gd").new()
 		add_child(audit)
@@ -59,6 +62,16 @@ func _detect_low_spec() -> void:
 	if OS.get_cmdline_user_args().has("--full-visuals"):
 		UI.LOW_SPEC = false
 		print("[scopa] low_spec   : overridden to false by --full-visuals")
+
+
+func _prebake_cards() -> void:
+	await get_tree().process_frame
+	var atlas = load("res://scripts/ui/card_atlas.gd")
+	var ok: bool = await atlas.bake_all(get_tree())
+	if ok:
+		print("[scopa] cards      : ", 43, " faces baked in one pass")
+	else:
+		print("[scopa] cards      : no real renderer, using flat fallback faces")
 
 
 func _report_environment() -> void:

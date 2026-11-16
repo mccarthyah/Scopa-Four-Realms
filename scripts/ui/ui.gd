@@ -105,6 +105,11 @@ static func flat(col: Color, radius: int = 12, border: Color = Color(0, 0, 0, 0)
 
 ## Convert a StyleBox into a cheap textured quad.
 ##
+## WARNING: this renders a SubViewport and reads the pixels back, which is a hard
+## CPU/GPU sync costing milliseconds on a software rasteriser. Use it for
+## long-lived, rarely created boxes only — never inside a per-item loop, and never
+## per frame. With anti_aliasing off a plain StyleBox is already 2 triangles.
+##
 ## A plain rectangle with square corners is only 2 triangles, but a StyleBox with
 ## corner radii is tessellated on every draw. freeze() rasterises the box once
 ## into a texture (one quad, alpha preserved) and returns a StyleBoxTexture, so a

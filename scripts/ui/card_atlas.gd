@@ -33,11 +33,8 @@ const FACE_W_LOW := 120
 const FACE_H_LOW := 168
 
 static var _tex := {}          # key -> ImageTexture
-static var _queued := {}       # key -> true
-static var _queue: Array = []  # keys pending, front first
-static var _busy := false
+static var _all_done := false
 static var _failed := false
-static var _reported := false
 
 
 static func _key(card_id: int, back_style: int) -> String:
@@ -73,84 +70,81 @@ static func texture(card_id: int, back_style: int = 0) -> Texture2D:
 	return _tex.get(_key(card_id, back_style), null)
 
 
-## Ask for a face to be baked. Cheap and idempotent: safe to call every frame.
-static func request(host: Node, card_id: int, back_style: int = 0) -> void:
-	if _failed or not is_instance_valid(host) or not host.is_inside_tree():
+## Safety net: if the boot-time bake did not happen (it normally runs from
+## main.gd before any card exists), make sure it does. Never bakes per card.
+static func request(host: Node, _card_id: int = 0, _back_style: int = 0) -> void:
+	if _failed or _all_done or not is_instance_valid(host) or not host.is_inside_tree():
 		return
 	if not _renderer_can_bake():
-		_failed = true  # headless / dummy: cards use the vector fallback
+		_failed = true  # headless / dummy renderer: cards use flat fallback faces
 		return
-	var k := _key(card_id, back_style)
-	if _tex.has(k) or _queued.has(k):
-		return
-	_queued[k] = true
-	_queue.append({"k": k, "id": card_id, "back": back_style})
-	if not _busy:
-		_busy = true
-		# Fire and forget. _drain() awaits a frame before touching the tree, which
-		# both avoids add_child() during a parent's setup and gives the tree a
-		# chance to exist. (A static func has no Object to call_deferred on.)
-		_drain(host.get_tree())
+	bake_all(host.get_tree())
 
 
-static func _drain(tree: SceneTree) -> void:
-	if tree == null:
-		_busy = false
-		return
-	# Let the current frame finish setting up nodes before we add viewports.
-	await tree.process_frame
-	while not _queue.is_empty():
-		if _failed:
-			break
-		var job: Dictionary = _queue.pop_front()
-		var ok := await _bake(tree, int(job.id), int(job.back), str(job.k))
-		if not ok:
-			_failed = true
-			_queue.clear()
-			break
-		# one per frame: never stall the game to bake art
-		await tree.process_frame
-	_busy = false
-	_queue.clear()
-	_queued.clear()
-	if _failed and not _reported:
-		_reported = true
-		push_warning("CardAtlas: could not bake card textures; using the vector fallback "
-			+ "(this is expected in --headless, and harmless otherwise)")
-
-
-static func _bake(tree: SceneTree, card_id: int, back_style: int, k: String) -> bool:
-	var fw := FACE_W_LOW if UI.LOW_SPEC else FACE_W
-	var fh := FACE_H_LOW if UI.LOW_SPEC else FACE_H
-	var sub := SubViewport.new()
-	sub.size = Vector2i(fw, fh)
-	sub.transparent_bg = true
-	sub.disable_3d = true
-	sub.render_target_update_mode = SubViewport.UPDATE_ONCE
-	var painter := Painter.new()
-	painter.card_id = card_id
-	painter.back_style = back_style
-	painter.size = Vector2(fw, fh)
-	painter.custom_minimum_size = painter.size
-	sub.add_child(painter)
-	tree.root.add_child(sub)
-	# Two frames, not RenderingServer.frame_post_draw: that signal never fires on
-	# some renderers (notably the headless dummy one), which would wedge the whole
-	# queue with _busy stuck true. Frame counting always makes progress.
+static func bake_all(tree: SceneTree) -> bool:
+	if _failed or _all_done or not _renderer_can_bake():
+		return _all_done
+	_all_done = true
+	var fw := bake_size().x
+	var fh := bake_size().y
+	var cols := 5
+	var ids: Array = []
+	for i in range(C.DECK_SIZE):
+		ids.append(i)
+	var rows := int(ceil(float(ids.size()) / float(cols)))
+	var sheet := SubViewport.new()
+	sheet.size = Vector2i(fw * cols, fh * rows)
+	sheet.transparent_bg = true
+	sheet.disable_3d = true
+	sheet.render_target_update_mode = SubViewport.UPDATE_ONCE
+	# backs go in the last row
+	var back_count := 3
+	var grid := Control.new()
+	grid.size = Vector2(sheet.size)
+	grid.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	sheet.add_child(grid)
+	for idx in range(ids.size()):
+		var p := Painter.new()
+		p.card_id = int(ids[idx])
+		p.size = Vector2(fw, fh)
+		p.position = Vector2((idx % cols) * fw, (idx / cols) * fh)
+		grid.add_child(p)
+	for b in range(back_count):
+		var p2 := Painter.new()
+		p2.card_id = -1
+		p2.back_style = b
+		p2.size = Vector2(fw, fh)
+		var slot: int = ids.size() + b
+		p2.position = Vector2((slot % cols) * fw, (slot / cols) * fh)
+		grid.add_child(p2)
+	tree.root.add_child(sheet)
+	# Frames, not RenderingServer.frame_post_draw: that signal never fires on
+	# some renderers and awaiting it would hang here forever.
 	await tree.process_frame
 	await tree.process_frame
-	var vtex := sub.get_texture()
-	var img: Image = vtex.get_image() if vtex != null else null
-	tree.root.remove_child(sub)
-	sub.free()
+	await tree.process_frame
+	var vt := sheet.get_texture()
+	var img: Image = vt.get_image() if vt != null else null
+	tree.root.remove_child(sheet)
+	sheet.free()
 	if img == null:
+		_failed = true
 		return false
-	# A capture that produced nothing usable means the renderer cannot be relied
-	# on for this; stop trying rather than spamming blank cards.
-	var used := img.get_used_rect()
-	if used.size.x < fw / 2 or used.size.y < fh / 2:
+	# slice the sheet into individual textures
+	for idx in range(ids.size()):
+		var r := Rect2i((idx % cols) * fw, (idx / cols) * fh, fw, fh)
+		var sub := img.get_region(r)
+		if sub != null and not sub.is_empty():
+			_tex["c%d" % int(ids[idx])] = ImageTexture.create_from_image(sub)
+	for b in range(back_count):
+		var slot2: int = ids.size() + b
+		var r2 := Rect2i((slot2 % cols) * fw, (slot2 / cols) * fh, fw, fh)
+		var sub2 := img.get_region(r2)
+		if sub2 != null and not sub2.is_empty():
+			_tex["b%d" % b] = ImageTexture.create_from_image(sub2)
+	if _tex.is_empty():
+		_failed = true
 		return false
-	_tex[k] = ImageTexture.create_from_image(img)
 	return true
 
 

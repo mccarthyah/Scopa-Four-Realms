@@ -221,25 +221,15 @@ func _draw_fallback(rect: Rect2, a: float) -> void:
 		HORIZONTAL_ALIGNMENT_LEFT, -1, int(size.y * 0.34), Color(0.05, 0.04, 0.08, a))
 
 
-## Rasterise the ring styles once for this card's size. Finished asynchronously so
-## it never stalls a frame; until then the flat StyleBoxes are used directly.
+## Deliberately does NOT bake anything. An earlier version froze these styles into
+## textures per card, which meant five SubViewport render + get_image() readbacks
+## for every card created — and on a software rasteriser a readback is a hard
+## CPU/GPU sync costing milliseconds each. That produced 25-85ms stalls whenever
+## the table repopulated, which is exactly the lag being reported. With
+## anti-aliasing off a StyleBox is 2 triangles, so drawing it directly is cheaper
+## than any texture lookup.
 func _freeze_styles() -> void:
-	if _frozen or _freeze_running or not is_inside_tree():
-		return
-	if DisplayServer.get_name() == "headless" or RenderingServer.get_video_adapter_name() == "":
-		_frozen = true  # no real renderer: keep the (now AA-free) StyleBoxes
-		return
-	_freeze_running = true
-	var w := int(clampi(int(size.x) + 12, 8, 512))
-	var h := int(clampi(int(size.y) + 12, 8, 512))
-	_tx_shadow = await UI.freeze(UI.flat(Color(0, 0, 0, 0.28), 12), w, h)
-	_tx_ring = await UI.freeze(UI.flat(Color(0, 0, 0, 0), 12, UI.GOLD, 3), w, h)
-	_tx_glow = await UI.freeze(UI.flat(Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, 0.12), 14), w, h)
-	_tx_sel = await UI.freeze(UI.flat(Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, 0.10), 11), w, h)
-	_tx_cap = await UI.freeze(UI.flat(Color(0, 0, 0, 0), 12, UI.GOLD, 2), w, h)
 	_frozen = true
-	_freeze_running = false
-	queue_redraw()
 
 
 func _ensure_styles() -> void:
