@@ -88,6 +88,7 @@ func run(m: Control) -> void:
 	_test_quindici()
 	_test_animation_settings()
 	_test_spin()
+	await _test_bot_hand_scale()
 	await _test_tap_play()
 	await _audit_screens()
 	print("=== AUDIT COMPLETE · failures=%d ===" % failures)
@@ -159,6 +160,46 @@ func _tap_first_card(screen) -> bool:
 	# second tap confirms the selected play
 	screen._confirm_play(hand[0]) if screen._selection == hand[0] else screen._on_hand_card(hand[0])
 	return screen.duel.hands[0].size() < before or screen._busy
+
+
+## The opponent's hand is drawn smaller than a playfield card, and their played
+## card must grow from that size to full as it flies. Also guards that the
+## container actually gives the cards their proper height: an undersized row
+## silently squashes them out of aspect (91 px cards in a 54 px box).
+func _test_bot_hand_scale() -> void:
+	var d = load("res://scripts/screens/duel.gd").new()
+	d.config = {"mode": 0, "seed": 12}
+	main.add_child(d)
+	d.size = Vector2(540, 960)
+	for i in range(40):
+		await get_tree().process_frame
+	if d._bot_row.get_child_count() == 0:
+		fail("bot hand: no cards rendered")
+		d.queue_free()
+		return
+	var back := d._bot_row.get_child(0) as Control
+	if back == null:
+		fail("bot hand: rows are not controls")
+		d.queue_free()
+		return
+	var aspect: float = back.size.y / maxf(back.size.x, 1.0)
+	if absf(aspect - 1.404) > 0.08:
+		fail("bot hand card aspect is %.2f, cards are squashed (want ~1.40)" % aspect)
+	else:
+		ok("opponent hand cards keep their aspect (%.2f)" % aspect)
+	var table_h: float = clampf(maxf(d._table_box.size.y, 260.0) * 0.40, 148.0, 208.0)
+	var ratio: float = back.size.x / (table_h / 1.404)
+	if ratio > 0.35 and ratio < 0.75:
+		ok("opponent hand is drawn smaller than the playfield (%.2fx)" % ratio)
+	else:
+		fail("opponent hand ratio to the playfield is %.2fx, expected 0.35-0.75" % ratio)
+	# and the flight must start from that ratio, not pop in at full size
+	if is_equal_approx(d.BOT_HAND_SCALE, ratio) or absf(d.BOT_HAND_SCALE - ratio) < 0.05:
+		ok("a played opponent card starts at hand size and scales to full (%.2f -> 1.0)" % d.BOT_HAND_SCALE)
+	else:
+		fail("bot hand scale %.2f does not match the drawn ratio %.2f" % [d.BOT_HAND_SCALE, ratio])
+	d.queue_free()
+	await get_tree().process_frame
 
 
 ## The spin must be a rotation about the card's centre, face up the whole way -

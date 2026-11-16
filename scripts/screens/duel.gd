@@ -34,6 +34,8 @@ var _renown_bar: Control
 var _turn_label: Label
 var _turn_meter: Control
 var _bot_row: HBoxContainer
+## Opponent hand cards are drawn this fraction of a playfield card.
+const BOT_HAND_SCALE := 0.5
 var _table_box: Control
 var _table_grid: HBoxContainer
 var _table_sub: Label
@@ -269,6 +271,17 @@ func _build_bot_hand() -> Control:
 	return box
 
 
+## Height and width of one opponent hand card.
+func _bot_card_size() -> Vector2:
+	var fh: float = clampf(maxf(_table_box.size.y, 260.0) * 0.40, 148.0, 208.0)
+	return Vector2(fh / 1.404, fh) * BOT_HAND_SCALE
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_RESIZED and is_node_ready() and _bot_row != null:
+		_refresh_bot_hand()
+
+
 func _refresh_bot_hand() -> void:
 	if _bot_row == null:
 		return
@@ -279,9 +292,17 @@ func _refresh_bot_hand() -> void:
 	if n == 0:
 		_bot_row.add_child(UI.label("no cards left", 13, UI.TEXT_DIM))
 		return
-	# three small backs cost about 60 px of height instead of a full card row
-	var ch: float = clampf(size.x * 0.115, 46.0, 62.0)
-	var cw: float = ch / 1.404
+	# Sized as a fraction of a PLAYFIELD card rather than of the window, so the card
+	# the opponent plays grows by a known factor (BOT_HAND_SCALE) and the window
+	# size never makes the hand and the felt disagree.
+	var sz := _bot_card_size()
+	var cw: float = maxf(sz.x, 28.0)
+	var ch: float = maxf(sz.y, 40.0)
+	# The row must be at least as tall as the cards, or the container compresses
+	# them out of aspect (measured: 91 px cards squashed into a 54 px box).
+	var holder := _bot_row.get_parent() as Control
+	if holder != null:
+		holder.custom_minimum_size = Vector2(0, ch + 6.0)
 	for i in range(n):
 		var cv := CardView.new()
 		cv.setup(-1, false, int(cw), int(ch))
@@ -340,7 +361,7 @@ func _build_quests() -> Control:
 func _build_hand() -> Control:
 	UI.resolve_fonts()
 	_hand_box = Control.new()
-	_hand_box.custom_minimum_size = Vector2(0, int(clampf(size.x * 0.235, 116.0, 154.0) * 1.404) + 44)
+	_hand_box.custom_minimum_size = Vector2(0, int(clampf(size.x * 0.215, 112.0, 150.0) * 1.404) + 36)
 	_hand_box.size_flags_vertical = Control.SIZE_SHRINK_END
 
 	_hand_row = HBoxContainer.new()
@@ -564,7 +585,7 @@ func _refresh_hand() -> void:
 	var hand: Array = duel.hands[0].duplicate()
 	hand.sort_custom(C.sort_by_faction)
 	var my_turn := duel.is_my_turn(0) and not _busy
-	var hw: float = clampf(size.x * 0.235, 116.0, 154.0)
+	var hw: float = clampf(size.x * 0.215, 112.0, 150.0)
 	for c in hand:
 		var cv := CardView.new()
 		cv.setup(c, true, int(hw), int(hw * 1.404))
@@ -862,9 +883,16 @@ func _run_bot() -> void:
 			if first != null:
 				origin = first.global_position + first.size * 0.5
 		var landing := _table_center() if matched.is_empty() else _card_slot_center(matched[0])
-		_fly_card_in(card, origin, landing, int(cw), int(ch))
-		# the opponent's hand thins as the card leaves it
+		# How small their hand card is drawn, relative to a playfield card, so the
+		# card grows from that size to full as it flies and spins.
+		var hand_scale := BOT_HAND_SCALE
 		var backs := _bot_row.get_child_count()
+		if backs > 0:
+			var back_node := _bot_row.get_child(backs - 1) as Control
+			if back_node != null and cw > 0.0:
+				hand_scale = clampf(back_node.size.x / cw, 0.2, 1.0)
+		_fly_card_in(card, origin, landing, int(cw), int(ch), 0.0, hand_scale)
+		# their hand thins as the card leaves it
 		if backs > 0:
 			var leaving := _bot_row.get_child(backs - 1)
 			if leaving != null:
@@ -1188,24 +1216,33 @@ func _beat(long_s: float, short_s: float = 0.0) -> float:
 ## Fly a card from `from` onto the playfield. With the spin enabled it turns a
 ## full 360 about its vertical axis on the way, showing its back for the middle
 ## of the turn. One tween, one property, no shader.
-func _fly_card_in(c: int, from: Vector2, to: Vector2, w: int, h: int, delay: float = 0.0) -> void:
+func _fly_card_in(c: int, from: Vector2, to: Vector2, w: int, h: int, delay: float = 0.0,
+		start_scale: float = 1.0) -> void:
 	var cv := CardView.new()
 	cv.setup(c, true, w, h)
 	cv.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	cv.z_index = 80
 	add_child(cv)
-	cv.position = from - Vector2(w, h) * 0.5
 	var spin: bool = anim_on("spin")
 	var dur: float = 0.46 if spin else 0.26
 	if not anim_on("all"):
 		cv.queue_free()
 		return
-	if not spin:
-		cv.modulate.a = 1.0
+	# Scale about the card's centre, so a card that starts small (an opponent's
+	# card, drawn small in their hand) grows out of its own middle while it travels
+	# and turns, and arrives at exactly playfield size.
+	cv.pivot_offset = Vector2(w, h) * 0.5
+	var from_scale := maxf(start_scale, 0.05)
+	cv.scale = Vector2(from_scale, from_scale)
+	cv.position = from - Vector2(w, h) * 0.5
+
 	var t := create_tween()
 	t.set_parallel(true)
 	t.tween_property(cv, "position", to - Vector2(w, h) * 0.5, dur).set_delay(delay) \
 		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	if not is_equal_approx(from_scale, 1.0):
+		t.tween_property(cv, "scale", Vector2.ONE, dur).set_delay(delay) \
+			.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 	if spin:
 		# 0..1 across the flight mapped to exactly one full turn about the card's
 		# centre. Face up the whole way; the art does not flip.

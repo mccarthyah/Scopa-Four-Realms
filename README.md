@@ -87,7 +87,7 @@ just instantly (a measured play: ~1.7 s animated, 66 ms off).
 | Setting | Effect |
 |---|---|
 | All animation | Master switch |
-| Card spin | A played card turns a full 360° **about its own centre**, face up the whole way, as it travels to the playfield |
+| Card spin | A played card turns a full 360° **about its own centre**, face up the whole way, as it travels to the playfield. An opponent's card is drawn small in their hand (half a playfield card) and **scales up to full playfield size** during the spin |
 | Slower play | Holds the beat before and after a play so captures stay readable |
 | Match cue | A gold ring flashes on every card involved in a capture before they leave the table |
 
