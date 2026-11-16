@@ -1518,7 +1518,7 @@ func _oath_sheet(title: String, sub: String) -> PanelContainer:
 	dim.mouse_filter = Control.MOUSE_FILTER_STOP
 	dim.z_index = 100
 	dim.gui_input.connect(func(e):
-		if e is InputEventMouseButton and e.pressed:
+		if e is InputEventMouseButton and e.button_index == MOUSE_BUTTON_LEFT and e.pressed:
 			_close_overlay())
 	add_child(dim)
 	_overlay = dim

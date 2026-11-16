@@ -278,6 +278,17 @@ func _test_menu_pointer_input() -> void:
 		title._scroll.ensure_control_visible(mode_row)
 		for i in range(5):
 			await get_tree().process_frame
+		var mode_point: Vector2 = mode_row.get_global_rect().position + Vector2(35, mode_row.size.y * 0.5)
+		_send_mouse_button(mode_point, MOUSE_BUTTON_WHEEL_DOWN)
+		await get_tree().process_frame
+		if title._sheet_panel != null or main.current != title:
+			fail("menu input: mouse wheel opened %s" % mode_name)
+			title._codex_close()
+		else:
+			ok("mouse wheel does not open %s" % mode_name)
+		title._scroll.ensure_control_visible(mode_row)
+		for i in range(5):
+			await get_tree().process_frame
 		_send_mouse_click(arrow.get_global_rect().get_center())
 		await get_tree().process_frame
 		if title._sheet_panel == null:
@@ -299,6 +310,50 @@ func _test_menu_pointer_input() -> void:
 	for i in range(5):
 		await get_tree().process_frame
 	var point: Vector2 = quick.get_global_rect().position + Vector2(35, quick.size.y * 0.5)
+	var scroll_before: int = title._scroll.scroll_vertical
+	_send_mouse_button(point, MOUSE_BUTTON_WHEEL_DOWN)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	if main.current != title or title._sheet_panel != null:
+		fail("menu input: mouse wheel activated Quick Duel instead of scrolling")
+		main.show_title()
+		for i in range(4):
+			await get_tree().process_frame
+		return
+	if title._scroll.scroll_vertical <= scroll_before:
+		fail("menu input: mouse wheel did not scroll the menu")
+	else:
+		ok("mouse wheel over a mode row scrolls without starting a game")
+	# Reposition the row before testing other buttons and the normal click.
+	title._scroll.ensure_control_visible(quick)
+	for i in range(5):
+		await get_tree().process_frame
+	point = quick.get_global_rect().position + Vector2(35, quick.size.y * 0.5)
+	_send_mouse_button(point, MOUSE_BUTTON_WHEEL_UP)
+	await get_tree().process_frame
+	if main.current != title or title._sheet_panel != null:
+		fail("menu input: wheel up activated Quick Duel")
+		main.show_title()
+		for i in range(4):
+			await get_tree().process_frame
+		return
+	title._scroll.ensure_control_visible(quick)
+	for i in range(5):
+		await get_tree().process_frame
+	point = quick.get_global_rect().position + Vector2(35, quick.size.y * 0.5)
+	_send_mouse_button(point, MOUSE_BUTTON_RIGHT)
+	await get_tree().process_frame
+	if main.current != title or title._sheet_panel != null:
+		fail("menu input: right click activated Quick Duel")
+		main.show_title()
+		for i in range(4):
+			await get_tree().process_frame
+		return
+	ok("wheel up and right click do not activate mode rows")
+	title._scroll.ensure_control_visible(quick)
+	for i in range(5):
+		await get_tree().process_frame
+	point = quick.get_global_rect().position + Vector2(35, quick.size.y * 0.5)
 	_send_mouse_click(point)
 	for i in range(5):
 		await get_tree().process_frame
@@ -312,13 +367,17 @@ func _test_menu_pointer_input() -> void:
 
 
 func _send_mouse_click(pos: Vector2) -> void:
+	_send_mouse_button(pos, MOUSE_BUTTON_LEFT)
+
+
+func _send_mouse_button(pos: Vector2, button: MouseButton) -> void:
 	var motion := InputEventMouseMotion.new()
 	motion.position = pos
 	motion.global_position = pos
 	get_viewport().push_input(motion, true)
 	for down in [true, false]:
 		var event := InputEventMouseButton.new()
-		event.button_index = MOUSE_BUTTON_LEFT
+		event.button_index = button
 		event.pressed = down
 		event.position = pos
 		event.global_position = pos
@@ -713,6 +772,16 @@ func _test_overlay_dismiss() -> void:
 	d._open_menu()
 	await get_tree().process_frame
 	var before := _dim_count(d)
+	var dim: Control = d._overlay
+	for button in [MOUSE_BUTTON_WHEEL_DOWN, MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_RIGHT]:
+		var event := InputEventMouseButton.new()
+		event.button_index = button
+		event.pressed = true
+		dim.gui_input.emit(event)
+	if d._overlay == null:
+		fail("wheel or right click dismissed the duel overlay")
+	else:
+		ok("wheel and right click do not dismiss the duel overlay")
 	d._close_overlay()
 	var after := _dim_count(d)
 	if before < 1:

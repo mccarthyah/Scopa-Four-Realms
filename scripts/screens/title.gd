@@ -296,7 +296,7 @@ func _mode_row(title: String, sub: String, badge: String, cb: Callable, accent: 
 
 	# whole row is tappable
 	p.gui_input.connect(func(e):
-		if e is InputEventMouseButton and e.pressed:
+		if e is InputEventMouseButton and e.button_index == MOUSE_BUTTON_LEFT and e.pressed:
 			cb.call())
 	p.mouse_filter = Control.MOUSE_FILTER_STOP
 	return p
