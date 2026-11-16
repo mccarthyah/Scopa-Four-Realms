@@ -78,6 +78,29 @@ Everything in the brief, playable end to end:
 | Cosmetics only | ✅ card backs, board themes, saved in the profile; no card power anywhere |
 | **Card animation**, all optional | ✅ played cards spin 360° onto the field, captures flash a ring on every matched card, the opponent's hand sits face down above the playfield and thins as it plays. Slower play is a switch; **every** animation can be turned off in settings |
 
+### Table layout
+
+However many cards are on the felt, they all fit on it. The layout is solved
+rather than delegated to a container: for each possible column count it computes
+the largest card that fits both the width and the height, keeps the best, then
+wraps the cards into rows and centres the block (with a short final row centred
+too). Cards shrink as the table crowds and grow back as it empties.
+
+At 540 wide the felt is 516 x 293, giving:
+
+| Cards | Grid | Card size |
+|---|---|---|
+| 1-3 | 1 row | 148 x 208 |
+| 4 | 1 row | 124 x 175 |
+| 5-8 | 2 rows | 102 x 143 |
+| 9-10 | 2 rows | 98 x 138 |
+| 11-14 | 2 rows | 81 x 113 down to 69 x 96 |
+| 15-16 | 3 rows | 67 x 94 |
+
+This used to be a single-row `HBoxContainer` with a 112 px minimum card width, so
+a fifth card hung off both sides of the screen. A resize re-solves the layout, so
+maximising the window grows the cards instead of leaving them at the old size.
+
 ### Card corners
 
 Cards have the curved corners of a real playing card — about 5% of the short side,

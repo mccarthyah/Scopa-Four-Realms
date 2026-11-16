@@ -92,6 +92,7 @@ func run(m: Control) -> void:
 	_test_spin()
 	await _test_bot_hand_scale()
 	await _test_card_corners()
+	await _test_table_fit()
 	await _test_tap_play()
 	await _audit_screens()
 	print("=== AUDIT COMPLETE · failures=%d ===" % failures)
@@ -163,6 +164,62 @@ func _tap_first_card(screen) -> bool:
 	# second tap confirms the selected play
 	screen._confirm_play(hand[0]) if screen._selection == hand[0] else screen._on_hand_card(hand[0])
 	return screen.duel.hands[0].size() < before or screen._busy
+
+
+## However many cards end up on the table, they must all stay on the felt. The
+## layout used to be a single-row HBoxContainer with a 112 px minimum card width,
+## so a fifth card simply hung off both sides of the screen.
+func _test_table_fit() -> void:
+	var d = load("res://scripts/screens/duel.gd").new()
+	d.config = {"mode": 0, "seed": 4}
+	main.add_child(d)
+	d.size = Vector2(540, 960)
+	for i in range(40):
+		await get_tree().process_frame
+	var avail: Vector2 = d._table_grid.size
+	if avail.x < 100.0:
+		fail("table fit: the felt has no usable size (%.0f wide)" % avail.x)
+		d.queue_free()
+		return
+	var bad := []
+	for n in range(1, 17):
+		var L: Dictionary = d._table_layout(n, avail)
+		var cw: float = L.cw
+		var ch: float = L.ch
+		if cw < 20.0 or L.at.size() != n:
+			bad.append("%d cards: bad layout" % n)
+			continue
+		if absf(ch / cw - CardView.ASPECT) > 0.01:
+			bad.append("%d cards: aspect %.2f" % [n, ch / cw])
+		for p in L.at:
+			var pos: Vector2 = p
+			if pos.x < -1.0 or pos.y < -1.0 or \
+					pos.x + cw > avail.x + 1.0 or pos.y + ch > avail.y + 1.0:
+				bad.append("%d cards: one sits outside the felt" % n)
+				break
+	if bad.is_empty():
+		ok("every table size 1-16 fits inside the felt, at the right aspect")
+	else:
+		fail("table overflow: %s" % str(bad))
+	# and the crowded cases must actually render inside the felt
+	var worst := 0
+	for n in [4, 6, 11, 16]:
+		d.duel.table = []
+		for i in range(n):
+			d.duel.table.append(i * 2)
+		d._refresh_table()
+		await get_tree().process_frame
+		var felt: Rect2 = d._table_grid.get_global_rect()
+		for cv in d._table_grid.get_children():
+			if not felt.grow(2.0).encloses((cv as Control).get_global_rect()):
+				worst = maxi(worst, n)
+	if worst == 0:
+		ok("crowded tables draw inside the felt (tested 4, 6, 11 and 16 cards)")
+	else:
+		fail("cards hung off the felt with %d on the table" % worst)
+	d.duel.table = []
+	d.queue_free()
+	await get_tree().process_frame
 
 
 ## Cards must have curved corners like real playing cards - including under

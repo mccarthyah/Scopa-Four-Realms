@@ -20,6 +20,10 @@ const T := preload("res://scripts/tables.gd")
 const C := preload("res://scripts/game/cards.gd")
 const CardArt := preload("res://scripts/ui/card_art.gd")
 
+## Height / width of a card. One constant, shared with the table layout so the
+## grid and the cards can never disagree about how tall a card is.
+const ASPECT := 1.404
+
 ## Corner radius of a card, in pixels at the card's own scale. Derived from the
 ## card's size rather than fixed, so the rings and shadow around a card follow
 ## exactly the same curve as the card face - otherwise a small hand card would get

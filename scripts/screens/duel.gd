@@ -37,7 +37,7 @@ var _bot_row: HBoxContainer
 ## Opponent hand cards are drawn this fraction of a playfield card.
 const BOT_HAND_SCALE := 0.5
 var _table_box: Control
-var _table_grid: HBoxContainer
+var _table_grid: Control
 var _table_sub: Label
 var _hand_box: Control
 var _hand_row: HBoxContainer
@@ -278,7 +278,13 @@ func _bot_card_size() -> Vector2:
 
 
 func _notification(what: int) -> void:
-	if what == NOTIFICATION_RESIZED and is_node_ready() and _bot_row != null:
+	if what != NOTIFICATION_RESIZED or not is_node_ready():
+		return
+	# The table layout is solved from the felt's size, so a window resize (or the
+	# user maximising) has to re-solve it or the cards keep their old size.
+	if _table_grid != null:
+		_refresh_table()
+	if _bot_row != null:
 		_refresh_bot_hand()
 
 
@@ -319,9 +325,11 @@ func _build_table() -> Control:
 	_table_box.custom_minimum_size = Vector2(0, 200)
 	_table_box.draw.connect(_draw_table_felt)
 
-	_table_grid = HBoxContainer.new()
-	_table_grid.alignment = BoxContainer.ALIGNMENT_CENTER
-	_table_grid.add_theme_constant_override("separation", 6)
+	# A plain Control, not an HBoxContainer: a box lays every card out in ONE row
+	# and simply overflows once they are wider than the felt, which is how cards
+	# ended up off both sides. We solve the layout ourselves - see _table_layout().
+	_table_grid = Control.new()
+	_table_grid.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_table_grid.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_table_grid.offset_top = 6
 	_table_grid.offset_bottom = -26
@@ -604,6 +612,57 @@ func _refresh_hand() -> void:
 		_hand_row.add_child(l)
 
 
+## Work out where `n` table cards go inside `avail`, shrinking them as needed and
+## wrapping onto extra rows. Cards keep their aspect, grow no bigger than the old
+## fixed maximum, and never leave the felt.
+##
+## Returns {cw, ch, cols, rows, at: Array[Vector2]} where `at` holds each card's
+## top-left corner, the whole block centred.
+##
+## A container cannot do this: an HBoxContainer keeps every card on one row at its
+## minimum width and lets the overflow hang off both sides of the table.
+func _table_layout(n: int, avail: Vector2) -> Dictionary:
+	var out := {"cw": 0.0, "ch": 0.0, "cols": 0, "rows": 0, "at": []}
+	if n <= 0:
+		return out
+	const GAP := 6.0
+	const MAX_CH := 208.0   # what cards were capped at on a roomy table before
+	const MIN_CW := 34.0    # small, but still a readable card
+	var w: float = maxf(avail.x, 80.0)
+	var h: float = maxf(avail.y, 80.0)
+
+	# Try every column count, keep whichever yields the largest card that still
+	# fits both ways: more columns = wider but shorter, fewer = taller.
+	var best_cw := 0.0
+	var best_cols := 1
+	for cols in range(1, n + 1):
+		var rows: int = int(ceil(float(n) / float(cols)))
+		var cw_by_width: float = (w - GAP * float(cols - 1)) / float(cols)
+		var ch_by_height: float = (h - GAP * float(rows - 1)) / float(rows)
+		var cw_by_height: float = ch_by_height / CardView.ASPECT
+		var cw: float = minf(minf(cw_by_width, cw_by_height), MAX_CH / CardView.ASPECT)
+		if cw > best_cw:
+			best_cw = cw
+			best_cols = cols
+	best_cw = maxf(best_cw, MIN_CW)
+	var ch: float = best_cw * CardView.ASPECT
+	var rows_n: int = int(ceil(float(n) / float(best_cols)))
+
+	var total_w: float = best_cw * float(best_cols) + GAP * float(best_cols - 1)
+	var total_h: float = ch * float(rows_n) + GAP * float(rows_n - 1)
+	var y0: float = (h - total_h) * 0.5
+	var at: Array = []
+	for i in range(n):
+		var col: int = i % best_cols
+		var row: int = i / best_cols
+		# centre a short final row instead of left-aligning it
+		var in_row: int = mini(best_cols, n - row * best_cols)
+		var row_w: float = best_cw * float(in_row) + GAP * float(in_row - 1)
+		at.append(Vector2((w - row_w) * 0.5 + float(col) * (best_cw + GAP),
+			y0 + float(row) * (ch + GAP)))
+	return {"cw": best_cw, "ch": ch, "cols": best_cols, "rows": rows_n, "at": at}
+
+
 func _refresh_table() -> void:
 	for c in _table_grid.get_children():
 		c.get_parent().remove_child(c)
@@ -620,24 +679,21 @@ func _refresh_table() -> void:
 			highlight.append(c)
 
 	var n := vis.size()
-	# cards grow with the felt, then shrink again when the table gets crowded
-	var felt_h: float = maxf(_table_box.size.y, 260.0)
-	var ch: float = clampf(felt_h * 0.40, 148.0, 208.0)
-	var cw := ch / 1.404
-	var room: float = maxf(_table_box.size.x - 24.0, 200.0)
-	var max_w: float = (room - 6.0 * maxf(0, n - 1)) / maxf(1, n)
-	max_w = maxf(max_w, 112.0)
-	if n > 0 and cw > max_w:
-		cw = max_w
-		ch = cw * 1.404
-	for c in vis:
+	# Fit the cards to the felt rather than letting them overflow it: shrink to fit
+	# and wrap onto extra rows as the table gets crowded.
+	var layout := _table_layout(n, _table_grid.size)
+	var cw: float = layout.cw
+	var ch: float = layout.ch
+	var at: Array = layout.at
+	for i in range(n):
+		var c: int = vis[i]
 		var cv := CardView.new()
 		cv.setup(c, true, int(cw), int(ch))
-		cv.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		cv.capturable = highlight.has(c)
 		cv.pressed.connect(_on_table_card.bind(c))
 		_table_grid.add_child(cv)
-		cv.enter_anim(0.05 * _table_grid.get_child_count())
+		cv.position = at[i]
+		cv.enter_anim(0.05 * i)
 
 	if n == 0:
 		_table_sub.text = "the table is clear"
