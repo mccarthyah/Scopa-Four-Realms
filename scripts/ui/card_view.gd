@@ -36,7 +36,6 @@ var _lift := 0.0
 var _target_lift := 0.0
 var _glow := 0.0
 var _fig := 0.0
-var _reported := false
 
 # Interactive styles, built once per card and only recoloured.
 var _sb_ring: StyleBoxFlat
@@ -119,6 +118,10 @@ func _process(delta: float) -> void:
 	if not is_finite(a):
 		a = 1.0
 	modulate.a = a
+	# If the animation ever fails to advance we must not leave the card invisible:
+	# a card the player cannot see is worse than a card that pops in.
+	if _fig >= 1.0 and modulate.a < 0.999 and not dim:
+		modulate.a = 1.0
 	if dirty:
 		queue_redraw()
 
@@ -139,13 +142,6 @@ func _draw() -> void:
 	var rect := Rect2(draw_pos, size)
 	var alpha := 1.0  # the node's modulate carries fade/dim; see _process
 
-	# One-time proof that a card really drew, with the numbers that would reveal a
-	# degenerate rect or a bad modulate — so a blank card can be diagnosed from the
-	# log instead of guessed at.
-	if not _reported:
-		_reported = true
-		print("[scopa] card draw    : id=", card_id, " view=", size, " rect=", rect,
-			" alpha=", snappedf(modulate.a, 0.01), " clip=", clip_contents)
 
 	# --- drop shadow: one cheap quad, no blur pass
 	_ensure_styles()

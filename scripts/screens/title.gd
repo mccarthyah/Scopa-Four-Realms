@@ -248,6 +248,7 @@ func _refresh_toggle() -> void:
 
 func _build_modes() -> void:
 	for c in _mode_list.get_children():
+		c.get_parent().remove_child(c)
 		c.queue_free()
 	if Profile.has_saved_duel():
 		_mode_list.add_child(_mode_row("Resume duel", "Pick up where you left off.", "RESUME", _resume_duel, Color("9d7fe0")))

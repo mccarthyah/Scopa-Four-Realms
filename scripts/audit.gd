@@ -83,6 +83,7 @@ func run(m: Control) -> void:
 	_test_save_resume()
 	_test_ai_speed()
 	_test_profile_io()
+	_test_deal()
 	await _test_tap_play()
 	await _audit_screens()
 	print("=== AUDIT COMPLETE · failures=%d ===" % failures)
@@ -90,6 +91,66 @@ func run(m: Control) -> void:
 		ProjectSettings.get_setting("rendering/renderer/rendering_method", "?"), " · adapter ",
 		RenderingServer.get_video_adapter_name())
 	get_tree().quit()
+
+
+## Deal integrity: every hand must start with TABLE_START on the table and
+## HAND_SIZE in each hand, drawn from a full 40-card deck with no duplicates, and
+## every round of every hand must deal the right number of cards.
+##
+## This is asserted because "the deal looks wrong" has been reported twice; if the
+## deal is provably correct then the problem is presentation, not the deal.
+func _test_deal() -> void:
+	var d = load("res://scripts/game/duel.gd").new({"mode": 0, "seed": 7})
+	var need_table: int = d.TABLE_START
+	var need_hand: int = d.HAND_SIZE
+	if d.table.size() != need_table:
+		fail("deal: table has %d cards, expected %d" % [d.table.size(), need_table])
+	elif d.hands[0].size() != need_hand or d.hands[1].size() != need_hand:
+		fail("deal: hands are %d/%d, expected %d each" % [d.hands[0].size(), d.hands[1].size(), need_hand])
+	elif d.table.size() + d.hands[0].size() + d.hands[1].size() + d.deck.size() != 40:
+		fail("deal: cards do not add up to 40")
+	else:
+		var all: Array = d.table.duplicate()
+		all.append_array(d.hands[0])
+		all.append_array(d.hands[1])
+		all.append_array(d.deck)
+		var uniq := {}
+		for c in all:
+			uniq[c] = true
+		if uniq.size() != 40:
+			fail("deal: %d unique cards in play, expected 40" % uniq.size())
+		else:
+			ok("deal: %d on the table, %d each in hand, 40 unique cards" % [need_table, need_hand])
+
+	# every subsequent round of every hand must also deal correctly
+	var rounds_ok := true
+	var hands := 0
+	var guard := 0
+	while not d.match_over and guard < 3000:
+		guard += 1
+		if d.hand_over:
+			hands += 1
+			if d.match_over:
+				break
+			d.next_hand()
+			if d.table.size() != need_table or d.hands[0].size() != need_hand or d.hands[1].size() != need_hand:
+				fail("deal: hand %d started with table=%d hands=%d/%d" % [
+					d.hand_no, d.table.size(), d.hands[0].size(), d.hands[1].size()])
+				rounds_ok = false
+			if hands > 6:
+				break
+			continue
+		var who: int = d.turn
+		if d.hands[who].is_empty():
+			d._advance_turn()
+			if not d.hand_over and d.deck.size() > 0 \
+					and (d.hands[0].size() > need_hand or d.hands[1].size() > need_hand):
+				fail("deal: a round dealt more than %d cards" % need_hand)
+				rounds_ok = false
+			continue
+		d.play(who, d.hands[who][0], 0)
+	if rounds_ok:
+		ok("deal: every hand and round dealt correctly across %d hands" % hands)
 
 
 ## End-to-end input test: build a real duel, send a real mouse click at a hand

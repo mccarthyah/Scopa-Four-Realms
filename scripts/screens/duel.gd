@@ -512,6 +512,7 @@ func _refresh_all() -> void:
 
 func _refresh_hand() -> void:
 	for c in _hand_row.get_children():
+		c.get_parent().remove_child(c)
 		c.queue_free()
 	if duel.puzzle.size() > 0:
 		pass
@@ -539,6 +540,7 @@ func _refresh_hand() -> void:
 
 func _refresh_table() -> void:
 	for c in _table_grid.get_children():
+		c.get_parent().remove_child(c)
 		c.queue_free()
 	var vis: Array = duel.visible_table(0)
 	vis.sort_custom(C.sort_by_rank)
@@ -590,6 +592,7 @@ func _refresh_table() -> void:
 
 func _refresh_quests() -> void:
 	for c in _quest_list.get_children():
+		c.get_parent().remove_child(c)
 		c.queue_free()
 	if duel.quests.is_empty():
 		_quest_list.add_child(UI.label("Classic rules · no quests in puzzles", 15, UI.TEXT_DIM))
