@@ -93,6 +93,7 @@ func run(m: Control) -> void:
 	await _test_bot_hand_scale()
 	await _test_card_corners()
 	await _test_table_fit()
+	await _test_display_scaling()
 	await _test_tap_play()
 	await _audit_screens()
 	print("=== AUDIT COMPLETE · failures=%d ===" % failures)
@@ -164,6 +165,61 @@ func _tap_first_card(screen) -> bool:
 	# second tap confirms the selected play
 	screen._confirm_play(hand[0]) if screen._selection == hand[0] else screen._on_hand_card(hand[0])
 	return screen.duel.hands[0].size() < before or screen._busy
+
+
+## Stretch must actually be ENABLED. It was configured as
+## display/window/size/stretch/* - a key Godot does not read - so stretch was
+## silently disabled and the game laid out at raw window pixels, clipping on any
+## window that was not exactly 540x960. That is what broke the desktop layout.
+func _test_display_scaling() -> void:
+	if not ProjectSettings.has_setting("display/window/stretch/mode"):
+		fail("display scaling: display/window/stretch/mode is missing")
+		return
+	var mode: String = str(ProjectSettings.get_setting("display/window/stretch/mode"))
+	var aspect: String = str(ProjectSettings.get_setting("display/window/stretch/aspect"))
+	if mode == "canvas_items" and aspect == "expand":
+		ok("stretch is configured under the key Godot reads (canvas_items / expand)")
+	else:
+		fail("stretch misconfigured: mode=%s aspect=%s" % [mode, aspect])
+	# the bogus key must not creep back in, since it looks plausible and does nothing
+	if ProjectSettings.has_setting("display/window/size/stretch/mode"):
+		fail("display/window/size/stretch/* is back - Godot ignores that key")
+	else:
+		ok("no dead display/window/size/stretch/* key")
+
+	# A wide window must get a centred phone-shaped page, not a stretched canvas.
+	var win: Window = main.get_window()
+	var saved: Vector2i = win.size
+	win.size = Vector2i(780, 654)
+	win.content_scale_size = Vector2i(540, 960)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var m = load("res://scripts/main.gd").new()
+	main.add_child(m)
+	m.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	for i in range(20):
+		await get_tree().process_frame
+	var page: Control = m.current
+	if page == null:
+		fail("display scaling: no screen mounted")
+	else:
+		# A window wider than the 540 design only becomes a wide CANVAS when it is
+		# also wider than tall. A tall window (a phone, or the 720x1280 test window)
+		# legitimately gets a wider canvas with the same height, which is what
+		# aspect "expand" is for; the page then fills it and nothing clips.
+		var vp: Vector2 = main.get_viewport_rect().size
+		var wide: bool = vp.x > vp.y * 0.72
+		if wide and page.size.x > 620.0:
+			fail("a wide window stretched the page to %.0f px instead of ~540" % page.size.x)
+		elif wide:
+			ok("a wide window keeps the page a %.0f px column" % page.size.x)
+		elif absf(page.size.x - vp.x) < 2.0:
+			ok("a tall window fills its %.0f x %.0f canvas with no clipping" % [vp.x, vp.y])
+		else:
+			fail("page %.0f px does not match the %.0f px canvas" % [page.size.x, vp.x])
+	m.queue_free()
+	win.size = saved
+	await get_tree().process_frame
 
 
 ## However many cards end up on the table, they must all stay on the felt. The
@@ -1159,6 +1215,8 @@ func _test_ui_paths() -> void:
 		fail("ranked match never ended")
 
 
+## Called once per sampled deal, so it reports info only - no pass line. Counting
+## it as a pass inflated the check total with identical repeats.
 func _check_duel_layout(d) -> void:
 	# every direct child of the duel root must stay inside the viewport
 	for c in d.get_children():
@@ -1172,15 +1230,13 @@ func _check_duel_layout(d) -> void:
 	var hand_h: float = hand_row.size.y
 	if hand_h < 140:
 		fail("hand cards squeezed to %.0f px" % hand_h)
-	else:
-		ok("hand row height %.0f px" % hand_h)
 	var table_grid = d._table_grid
 	for cv in table_grid.get_children():
 		if cv is Control:
 			var r: Rect2 = cv.get_global_rect()
 			if r.position.x < -1 or r.end.x > 721:
 				fail("table card off screen at x=%.0f" % r.position.x)
-	ok("table grid width %d for %d cards" % [table_grid.size.x, table_grid.get_child_count()])
+	print("  info  table grid %.0f px wide for %d cards" % [table_grid.size.x, table_grid.get_child_count()])
 	print("  info  table box %.0fx%.0f · hand box %.0fx%.0f · actions %.0f" % [
 		d._table_box.size.x, d._table_box.size.y, d._hand_box.size.x, d._hand_box.size.y, d._btn_oath.size.y])
 

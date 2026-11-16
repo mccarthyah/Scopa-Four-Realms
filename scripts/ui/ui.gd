@@ -186,9 +186,15 @@ static func panel(col: Color = PANEL, radius: int = 18, border: Color = Color("4
 	return s
 
 
-static func label(txt: String, size: int = 22, col: Color = TEXT, title: bool = false) -> Label:
+## `wrap` makes a label break across lines instead of growing arbitrarily wide,
+## which is what a long line does on a wide desktop window.
+static func label(txt: String, size: int = 22, col: Color = TEXT, title: bool = false,
+		wrap: bool = false) -> Label:
 	var l := Label.new()
 	l.text = txt
+	if wrap:
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	l.add_theme_font_override("font", _font("", title, false))
 	l.add_theme_font_size_override("font_size", size)
 	l.add_theme_color_override("font_color", col)

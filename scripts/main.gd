@@ -9,6 +9,12 @@ var current: Control = null
 var _stage := "boot"
 
 
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_RESIZED and is_node_ready() and current != null \
+			and is_instance_valid(current):
+		_layout_stage(current)
+
+
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	# paint the backdrop immediately so a slow first frame is never a black window
@@ -31,15 +37,42 @@ func _ready() -> void:
 		smoke.smoke_test(self)
 
 
+## The design is a 540x960 phone page. With stretch mode "canvas_items" and aspect
+## "expand", a WIDE window expands the design canvas horizontally instead of
+## scaling up - on a desktop window that produced a 1144 px page with the layout
+## smeared across it. So on anything wider than tall, draw the page at a fixed
+## design width and centre it, letting the margins be margin.
+const DESIGN_WIDTH := 540.0
+
+
+func _is_wide() -> bool:
+	var v := get_viewport_rect().size
+	return v.x > v.y * 0.72
+
+
 func _swap(screen: Control) -> void:
 	if current != null and is_instance_valid(current):
 		current.queue_free()
 	current = screen
 	add_child(screen)
-	screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_layout_stage(screen)
 	screen.modulate.a = 0.0
 	var t := create_tween()
 	t.tween_property(screen, "modulate:a", 1.0, 0.22)
+
+
+## Keep the page a phone page: full-bleed on a tall/near-square window, but capped
+## to DESIGN_WIDTH and centred when the window is wide (a desktop window).
+func _layout_stage(screen: Control) -> void:
+	screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var v := get_viewport_rect().size
+	if _is_wide():
+		var w: float = minf(DESIGN_WIDTH, v.x)
+		var margin: float = maxf((v.x - w) * 0.5, 0.0)
+		screen.anchor_left = 0.0
+		screen.anchor_right = 0.0
+		screen.offset_left = margin
+		screen.offset_right = margin + w
 
 
 ## One line, printed at boot and visible in the log, that says everything needed

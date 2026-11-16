@@ -61,6 +61,10 @@ func _build() -> void:
 	# ---- masthead -------------------------------------------------------
 	var mast := Control.new()
 	mast.custom_minimum_size = Vector2(0, 178)
+	# The three masthead lines are centred wide labels. Without clipping they report
+	# their full unwrapped text width (the tagline measured 737 px on a 540 px page)
+	# and stick out past the column; centred, so clipping loses nothing.
+	mast.clip_contents = true
 	col.add_child(mast)
 
 	var emblem := Control.new()
@@ -120,7 +124,7 @@ func _build() -> void:
 	ol.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	ob.add_child(ol)
 	ol.add_child(UI.label("Classic Mode", 22, UI.TEXT, true))
-	ol.add_child(UI.label("Oaths off. Pure Scopa, no Favor.", 17, UI.TEXT_DIM))
+	ol.add_child(UI.label("Oaths off. Pure Scopa, no Favor.", 17, UI.TEXT_DIM, false, true))
 	_classic_toggle = _toggle(Profile.classic_mode)
 	_classic_toggle.pressed.connect(func():
 		Profile.classic_mode = not Profile.classic_mode
@@ -157,7 +161,7 @@ func _section_header(title: String, sub: String) -> Control:
 	rule.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	h.add_child(rule)
 	if sub != "":
-		v.add_child(UI.label(sub, 16, UI.TEXT_DIM))
+		v.add_child(UI.label(sub, 16, UI.TEXT_DIM, false, true))
 	return v
 
 

@@ -29,8 +29,12 @@ window/size/viewport_width=540
 window/size/viewport_height=960
 window/size/window_width_override=540
 window/size/window_height_override=960
-window/size/stretch/mode="canvas_items"
-window/size/stretch/aspect="expand"
+; NOTE: these keys must live under display/window/stretch/. Writing them as
+; display/window/size/stretch/* creates settings Godot ignores, leaving stretch
+; DISABLED - the game then lays out at raw window pixels and clips at any size
+; other than the 540x960 base. That is exactly what broke on desktop.
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
 window/handheld/orientation=1
 
 [gui]

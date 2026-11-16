@@ -78,6 +78,34 @@ Everything in the brief, playable end to end:
 | Cosmetics only | ✅ card backs, board themes, saved in the profile; no card power anywhere |
 | **Card animation**, all optional | ✅ played cards spin 360° onto the field, captures flash a ring on every matched card, the opponent's hand sits face down above the playfield and thins as it plays. Slower play is a switch; **every** animation can be turned off in settings |
 
+### Window sizes: phone and desktop
+
+The page is a 540x960 design that scales to whatever window it gets. Two settings
+matter and they must live at `display/window/stretch/*`:
+
+    window/stretch/mode="canvas_items"
+    window/stretch/aspect="expand"
+
+Written as `display/window/size/stretch/*` they are silently ignored, stretch is
+left **disabled**, and the game lays out at raw window pixels — fine on a phone
+whose window is 540x960, badly clipped on any other size. An audit check asserts
+the key Godot actually reads is present and that the dead key is not.
+
+With stretch on, `expand` keeps the phone's height and lets a taller-or-narrower
+window breathe horizontally. When the window is genuinely wide (wider than tall)
+the page is capped at the 540 design width and centred, rather than stretched into
+a 1700 px-wide canvas. Measured, with no control escaping the page:
+
+| Window | Canvas | Page |
+|---|---|---|
+| 309x549 (small desktop window) | 540x960 | 540 wide, full bleed |
+| 540x960 (phone) | 540x960 | 540 wide, full bleed |
+| 780x654 (desktop) | 1144x960 | 540 wide, centred |
+| 1600x900 (maximised) | 1706x960 | 540 wide, centred |
+
+Long lines of text wrap rather than growing unboundedly, and the centred masthead
+lines are clipped to their column.
+
 ### Table layout
 
 However many cards are on the felt, they all fit on it. The layout is solved
