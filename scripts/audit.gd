@@ -931,7 +931,7 @@ func _test_card_corners() -> void:
 	main.add_child(cv)
 	await get_tree().process_frame
 	cv._ensure_styles()
-	var face_r: int = CardArt.corner_radius(Rect2(Vector2.ZERO, Vector2(116, 163)))
+	var face_r: int = CardArt.corner_radius(CardArt.visual_rect(Rect2(Vector2.ZERO, Vector2(116, 163))))
 	if cv._sb_ring.corner_radius_top_left == face_r and cv._sb_shadow.corner_radius_top_left == face_r:
 		ok("selection ring and shadow follow the card's own curve")
 	else:
@@ -975,6 +975,31 @@ func _test_card_atlas() -> void:
 		ok("all 43 atlas cards are visible and retain transparent curved corners")
 	else:
 		fail("card atlas contains blank cards or square/opaque corners")
+	# The supplied sheets are ordered by rank, then Forge/Grove/Horde/Crown.
+	# Check distinctive background pixels as well as transparent side gutters:
+	# this catches accidentally shipping the old vector atlas or swapping suits.
+	var colors: Array[Color] = []
+	var gutters_ok := true
+	for faction in range(4):
+		var region := CardArt.atlas_region(C.make(1, faction))
+		colors.append(image.get_pixel(int(region.position.x) + 153, int(region.position.y) + 72))
+	for rank in range(1, 11):
+		for faction in range(4):
+			var region := CardArt.atlas_region(C.make(rank, faction))
+			if image.get_pixel(int(region.position.x) + 5, int(region.position.y) + 146).a > 0.05 or image.get_pixel(int(region.position.x) + 202, int(region.position.y) + 146).a > 0.05:
+				gutters_ok = false
+	var forge: Color = colors[0]
+	var grove: Color = colors[1]
+	var horde: Color = colors[2]
+	var crown: Color = colors[3]
+	if gutters_ok and forge.r > forge.g * 2.0 and grove.g > grove.r * 5.0 and horde.r > 0.4 and horde.g < 0.1 and crown.b > crown.r * 4.0 and crown.b > 0.1:
+		ok("supplied Forge, Grove, Horde and Crown art is mapped correctly with transparent side margins")
+	else: fail("card atlas: supplied suit art or side margins are incorrect")
+	var full := Rect2(0, 0, 104, 146)
+	var visual: Rect2 = CardArt.visual_rect(full)
+	if visual.size.x < full.size.x and absf(visual.get_center().x - full.get_center().x) < 0.01 and visual.size.y == full.size.y:
+		ok("original art proportions are preserved inside the existing tap target")
+	else: fail("card art: fitted bounds are not centred inside the tap target")
 	var saved_checked: bool = CardArt._atlas_checked
 	var saved_tex: Texture2D = CardArt._atlas
 	CardArt._atlas_checked = true

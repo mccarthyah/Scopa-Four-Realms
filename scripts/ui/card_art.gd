@@ -1,7 +1,7 @@
 extends RefCounted
-## Vector source for card faces, plus an offline-generated static atlas.
-## The atlas is an imported PNG, generated before shipping: there is no runtime
-## viewport capture or GPU readback. The original vectors remain a safe fallback.
+## User-supplied card faces and existing backs in an offline-generated atlas.
+## The imported PNG is shared on every renderer: no runtime viewport capture or
+## GPU readback. The original vectors remain a safe fallback if it is missing.
 class_name CardArt
 
 const UI := preload("res://scripts/ui/ui.gd")
@@ -21,11 +21,13 @@ const SUIT_ART := [
 static var _suit_tex := {}
 
 ## 40 faces in card-id order followed by the 3 card-back styles. Each cell is
-## 104x146 artwork rendered at 2x. Kept as a single texture for batching.
+## 104x146 at 2x. Face artwork keeps the supplied narrow proportions and is
+## centred within the wider cell; the other pixels are transparent.
 const ATLAS_PATH := "res://assets/cards/card_atlas.png"
 const ATLAS_COLS := 8
 const ATLAS_CELL := Vector2i(208, 292)
 const BACK_COUNT := 3
+const FACE_WIDTH_FRACTION := 180.0 / 208.0
 static var _atlas: Texture2D = null
 static var _atlas_checked := false
 
@@ -49,6 +51,13 @@ static func atlas_region(card_id: int, back_style: int = 0) -> Rect2:
 	if index < 0 or index >= C.DECK_SIZE + BACK_COUNT:
 		return Rect2()
 	return Rect2((index % ATLAS_COLS) * ATLAS_CELL.x, (index / ATLAS_COLS) * ATLAS_CELL.y, ATLAS_CELL.x, ATLAS_CELL.y)
+
+
+## Visible face inside the original, slightly wider hit box. The shared hit box
+## keeps hand/table layout and tap targets unchanged without stretching the art.
+static func visual_rect(rect: Rect2) -> Rect2:
+	var w: float = rect.size.x * FACE_WIDTH_FRACTION
+	return Rect2(rect.position + Vector2((rect.size.x - w) * 0.5, 0), Vector2(w, rect.size.y))
 
 
 ## Returns false if the prebuilt asset is missing, allowing the caller to fall

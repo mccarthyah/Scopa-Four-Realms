@@ -164,6 +164,7 @@ func _draw() -> void:
 	var ease_out := 1.0 - pow(1.0 - fig, 3.0)
 	var draw_pos := Vector2(0, (1.0 - ease_out) * 26.0 + _lift)
 	var rect := Rect2(draw_pos, size)
+	var visible_rect := CardArt.visual_rect(rect)
 
 	# --- spin: rotate about the card's centre. The Art draws in local space and
 	# this rotates the whole drawing context; the art itself is untouched and stays
@@ -181,14 +182,15 @@ func _draw() -> void:
 
 	# --- drop shadow: one cheap quad, no blur pass
 	_ensure_styles()
-	var shadow_rect := Rect2(rect.position + Vector2(0, 3), rect.size)
+	var shadow_rect := Rect2(visible_rect.position + Vector2(0, 3), visible_rect.size)
 	if not UI.LOW_SPEC or not EffectAtlas.draw_sprite(self, shadow_rect, EffectAtlas.SHADOW):
 		draw_style_box(_sb_shadow, shadow_rect)
 
-	# The face remains face up while spinning. On software renderers use the
-	# prebuilt atlas; do not capture/read back a viewport during gameplay.
-	if not UI.LOW_SPEC or not CardArt.draw_atlas_face(self, rect, card_id, back_style):
-		CardArt.draw_face(self, rect, card_id, back_style)
+	# Use the supplied artwork on every renderer. Face cells already contain
+	# transparent side margins; the legacy back cells are fitted to that width.
+	var atlas_rect := rect if card_id >= 0 else visible_rect
+	if not CardArt.draw_atlas_face(self, atlas_rect, card_id, back_style):
+		CardArt.draw_face(self, visible_rect, card_id, back_style)
 
 	if spinning:
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
@@ -198,29 +200,29 @@ func _draw() -> void:
 	if playable or selected:
 		var pulse := 0.55 + 0.45 * sin(_ring_phase)
 		_sb_ring.border_color = Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, (0.55 + 0.45 * pulse) * alpha)
-		if not UI.LOW_SPEC or not EffectAtlas.draw_sprite(self, rect.grow(2.0), EffectAtlas.PLAYABLE_RING,
+		if not UI.LOW_SPEC or not EffectAtlas.draw_sprite(self, visible_rect.grow(2.0), EffectAtlas.PLAYABLE_RING,
 				Color(1, 1, 1, _sb_ring.border_color.a)):
-			draw_style_box(_sb_ring, rect.grow(2.0))
+			draw_style_box(_sb_ring, visible_rect.grow(2.0))
 		_sb_glow.bg_color = Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, 0.12 * alpha)
-		if not UI.LOW_SPEC or not EffectAtlas.draw_sprite(self, rect.grow(5.0), EffectAtlas.GLOW):
-			draw_style_box(_sb_glow, rect.grow(5.0))
+		if not UI.LOW_SPEC or not EffectAtlas.draw_sprite(self, visible_rect.grow(5.0), EffectAtlas.GLOW):
+			draw_style_box(_sb_glow, visible_rect.grow(5.0))
 
 	if selected:
 		_sb_sel.bg_color = Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, 0.10 * alpha)
-		if not UI.LOW_SPEC or not EffectAtlas.draw_sprite(self, rect, EffectAtlas.SELECTED):
-			draw_style_box(_sb_sel, rect)
+		if not UI.LOW_SPEC or not EffectAtlas.draw_sprite(self, visible_rect, EffectAtlas.SELECTED):
+			draw_style_box(_sb_sel, visible_rect)
 
 	if capturable:
 		var pulse2 := 0.5 + 0.5 * sin(_ring_phase * 0.8)
 		_sb_cap.border_color = Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, (0.35 + 0.45 * pulse2) * alpha)
-		if not UI.LOW_SPEC or not EffectAtlas.draw_sprite(self, rect.grow(3.0), EffectAtlas.CAPTURE_RING,
+		if not UI.LOW_SPEC or not EffectAtlas.draw_sprite(self, visible_rect.grow(3.0), EffectAtlas.CAPTURE_RING,
 				Color(1, 1, 1, _sb_cap.border_color.a)):
-			draw_style_box(_sb_cap, rect.grow(3.0))
-		draw_string(UI.font_bold(), rect.position + Vector2(size.x - 20, 20), "◆",
+			draw_style_box(_sb_cap, visible_rect.grow(3.0))
+		draw_string(UI.font_bold(), visible_rect.position + Vector2(visible_rect.size.x - 20, 20), "◆",
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, alpha))
 
 	if hinted:
-		draw_circle(rect.position + Vector2(size.x - 12, 12), 5.0,
+		draw_circle(visible_rect.position + Vector2(visible_rect.size.x - 12, 12), 5.0,
 			Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, alpha))
 
 
@@ -233,9 +235,10 @@ func _ensure_styles() -> void:
 	if _styles_ready:
 		return
 	_styles_ready = true
-	var r := _radius_for(size)
+	var visual_size := CardArt.visual_rect(Rect2(Vector2.ZERO, size)).size
+	var r := _radius_for(visual_size)
 	_sb_ring = UI.flat(Color(0, 0, 0, 0), r, UI.GOLD, 3, true)
-	_sb_glow = UI.flat(Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, 0.12), _radius_for(size + Vector2(10, 10)), Color(0, 0, 0, 0), 0, true)
+	_sb_glow = UI.flat(Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, 0.12), _radius_for(visual_size + Vector2(10, 10)), Color(0, 0, 0, 0), 0, true)
 	_sb_sel = UI.flat(Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, 0.10), r, Color(0, 0, 0, 0), 0, true)
-	_sb_cap = UI.flat(Color(0, 0, 0, 0), _radius_for(size + Vector2(6, 6)), UI.GOLD, 2, true)
+	_sb_cap = UI.flat(Color(0, 0, 0, 0), _radius_for(visual_size + Vector2(6, 6)), UI.GOLD, 2, true)
 	_sb_shadow = UI.flat(Color(0, 0, 0, 0.28), r, Color(0,0,0,0), 0, true)

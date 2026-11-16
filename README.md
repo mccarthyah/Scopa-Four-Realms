@@ -59,7 +59,7 @@ Everything in the brief, playable end to end:
 
 | Spec | In the build |
 |---|---|
-| 40-card Scopa deck, four factions, Rank-large faces, Runestone | ✅ vector artwork with a pre-rendered atlas for software renderers |
+| 40-card Scopa deck, four factions, Rank-large faces, Runestone | ✅ supplied faction artwork for all 40 faces, with a shared pre-rendered atlas |
 | Standard capture rules: rank match **or** a sum to your rank, 10s only match 10s | ✅ with all legal sets enumerated and choosable |
 | **Scopa di Quindici** variant (first version) | ✅ separate game type: only totals of 15 capture, a card never takes its own value. Chosen per match, never mixed inside one |
 | Deal 3 + 3, 4 on the table, redeal in rounds, last capturer sweeps the rest | ✅ |
@@ -275,8 +275,8 @@ scripts/
     ai.gd                heuristic opponent + hint engine (4 play styles)
   ui/
     ui.gd                palette, fonts, widget factories
-    card_view.gd         card interactions; atlas on software renderers, vector fallback
-    card_art.gd          card artwork, atlas mapping and vector source
+    card_view.gd         card interactions; shared image atlas, vector fallback
+    card_art.gd          card atlas mapping and vector fallback
     background.gd        painted sky, motes, vignette
     fx.gd                bursts, floating text, shake, flashes
   screens/
@@ -285,21 +285,28 @@ scripts/
   audit.gd               headless self-test + layout audit (dev only)
 assets/cards/            pre-rendered card faces, backs and lightweight effects atlases
 assets/suits/            static painted suit emblems
-tools/                   offline card atlas generator
+tools/                   offline atlas generators and original card sheets
 audio/                   generated WAVs: deal, capture, scopa, favor, oath, win, lose, tick…
 fonts/                   Cinzel (display) and Alegreya Sans (text), both OFL
 ```
 
-Open `screenshots/card_sheet.html` in a browser (or the workspace previewer) for a static sheet of the
-card design — it mirrors the geometry and palette that `card_view.gd` draws.
+The 40 supplied faces and three existing backs share one imported static atlas
+on **all** renderers. The source sheets are retained under `tools/card_sources/`,
+which Godot ignores so the full-resolution sheets are not packed into the game.
+Selection, spin and highlights remain live. On software renderers, card effects,
+felt sigils and Favor pips use a second static atlas. If the card atlas is missing,
+the old vector artwork is used as a fallback. There is **no runtime atlas baking
+or GPU readback**.
 
-On software renderers the 40 faces and three backs use a single pre-rendered atlas; interactive
-selection, spin and highlights are still drawn separately. On those machines, card shadows, selection
-and capture rings, felt sigils and Favor pips use a second small static atlas. Scores, timing, input
-and board layout remain live. Other renderers keep vector artwork, which also provides a fallback if
-an atlas is unavailable. Both atlases are shipped, so drawing these assets requires **no runtime
-atlas baking or GPU readback**. To regenerate after changing the artwork, run `godot --path . -s res://tools/generate_card_atlas.gd` and `godot --path . -s res://tools/generate_effect_atlas.gd`
-with a working rendering display, then re-import the PNGs. Both generators validate before saving.
+To rebuild the card atlas offline, install Python 3 with Pillow, NumPy and
+`opencv-python`, then run `python3 tools/build_image_card_atlas.py`. Pass `--check`
+to verify the shipped atlas against the source sheets without overwriting it.
+The three backs are retained separately in the source folder; regenerate those
+only if needed with `godot --path . -s res://tools/generate_card_atlas.gd` on a
+working display. The effect atlas is separately generated with
+`godot --path . -s res://tools/generate_effect_atlas.gd`. Re-import changed PNGs
+in Godot. `screenshots/card_sheet.html` is the **old vector-design mockup**, not
+the current card faces.
 
 Everything a script needs is resolved with an explicit `const X := preload(...)` and a matching
 `class_name`, and the UI fonts are loaded lazily with a fallback — so a bare checkout parses and boots
