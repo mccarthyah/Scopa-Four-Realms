@@ -5,6 +5,7 @@ extends RefCounted
 ##   id = (rank - 1) * 4 + faction      0 = 1 of Forge ... 39 = 10 of Crown
 ##
 ## A standard 40-card Scopa deck, re-skinned.
+class_name Cards
 
 const T := preload("res://scripts/tables.gd")
 

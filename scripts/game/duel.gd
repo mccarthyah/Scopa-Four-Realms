@@ -10,6 +10,7 @@ extends RefCounted
 ##
 ## On top of that: faction Oaths (spend 1 Favor, once per hand), two public
 ## quests, and hand/match scoring into Renown.
+class_name Duel
 
 const T := preload("res://scripts/tables.gd")
 const C := preload("res://scripts/game/cards.gd")

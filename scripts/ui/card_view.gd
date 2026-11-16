@@ -2,6 +2,7 @@ extends Control
 ## A single card, drawn entirely with vector primitives so the whole game ships
 ## with no art pipeline.  Rank numbers are deliberately the loudest element;
 ## faction art is the texture behind them.
+class_name CardView
 
 const UI := preload("res://scripts/ui/ui.gd")
 

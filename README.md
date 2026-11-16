@@ -167,6 +167,10 @@ card design — it mirrors the geometry and palette that `card_view.gd` draws.
 sound effects are all generated (vector draw calls / synthesised WAVs), so the repository is 2 MB and
 everything is tweakable in one place.
 
+Everything a script needs is resolved with an explicit `const X := preload(...)` and a matching
+`class_name`, and the UI fonts are loaded lazily with a fallback — so a bare checkout parses and boots
+correctly on its *first* run, before Godot has built any import or global-class cache.
+
 The engine in `duel.gd` is UI-free and JSON-serialisable: `to_dict()` / `from_dict()` round-trip a hand
 exactly (asserted in the audit), which is what the resume feature and async duels are built on.
 

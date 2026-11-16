@@ -1,6 +1,7 @@
 extends RefCounted
 ## Heuristic Scopa opponent.  It only ever sees its own hand plus the table, and
 ## its personality changes which heuristics it weighs.
+class_name DuelAI
 
 const T := preload("res://scripts/tables.gd")
 const C := preload("res://scripts/game/cards.gd")

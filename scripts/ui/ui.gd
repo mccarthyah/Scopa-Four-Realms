@@ -1,6 +1,7 @@
 extends RefCounted
 ## Palette, fonts and widget factories.  Everything is built in code so the
 ## project is a handful of readable scripts with no scene-graph sprawl.
+class_name UI
 
 const T := preload("res://scripts/tables.gd")
 
@@ -20,9 +21,20 @@ const TEXT_DIM := Color("a89b88")
 const GOOD := Color("6ec07a")
 const BAD := Color("c85b52")
 
-const FONT_TITLE := preload("res://fonts/Cinzel.ttf")
-const FONT_BODY := preload("res://fonts/AlegreyaSans.ttf")
-const FONT_BODY_BOLD := preload("res://fonts/AlegreyaSans-Bold.ttf")
+# Fonts are imported assets, so a bare checkout (before Godot's first import
+# pass) has no .fontdata yet. Load them lazily and fall back to Godot's default
+# font rather than failing to parse the whole UI.
+static var FONT_TITLE: Font = _load_font("res://fonts/Cinzel.ttf")
+static var FONT_BODY: Font = _load_font("res://fonts/AlegreyaSans.ttf")
+static var FONT_BODY_BOLD: Font = _load_font("res://fonts/AlegreyaSans-Bold.ttf")
+
+
+static func _load_font(path: String) -> Font:
+	if ResourceLoader.exists(path):
+		var f = load(path)
+		if f is Font:
+			return f
+	return ThemeDB.fallback_font
 
 const CARD_W := 104
 const CARD_H := 146
