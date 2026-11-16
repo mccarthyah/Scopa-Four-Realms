@@ -161,13 +161,13 @@ func _draw() -> void:
 	# --- rank numeral, large, top-left
 	var num_col := Color(deep.r, deep.g, deep.b, base_alpha)
 	var num_size := int(h * 0.34)
-	var num_h := UI.FONT_TITLE.get_string_size("8", HORIZONTAL_ALIGNMENT_LEFT, -1, num_size).y
-	draw_string(UI.FONT_TITLE, rect.position + Vector2(pad + 3, rank_band * 0.5 + num_h * 0.34), str(r),
+	var num_h := UI.font_title().get_string_size("8", HORIZONTAL_ALIGNMENT_LEFT, -1, num_size).y
+	draw_string(UI.font_title(), rect.position + Vector2(pad + 3, rank_band * 0.5 + num_h * 0.34), str(r),
 		HORIZONTAL_ALIGNMENT_LEFT, -1, num_size, num_col)
 
 	# --- faction glyph, top-right
-	var glyph_w := UI.FONT_BODY_BOLD.get_string_size(T.SUIT_GLYPH[f], HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x
-	draw_string(UI.FONT_BODY_BOLD, rect.position + Vector2(w - pad - glyph_w - 2, rank_band * 0.52), T.SUIT_GLYPH[f],
+	var glyph_w := UI.font_bold().get_string_size(T.SUIT_GLYPH[f], HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x
+	draw_string(UI.font_bold(), rect.position + Vector2(w - pad - glyph_w - 2, rank_band * 0.52), T.SUIT_GLYPH[f],
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color(col.r, col.g, col.b, base_alpha))
 
 	# thin rule between rank band and art
@@ -177,15 +177,15 @@ func _draw() -> void:
 	# --- name strip along the bottom
 	var name_size := int(clampf(h * 0.075, 9.0, 13.0))
 	var nm: String = info.name.to_upper()
-	var nw := UI.FONT_BODY_BOLD.get_string_size(nm, HORIZONTAL_ALIGNMENT_LEFT, -1, name_size).x
-	draw_string(UI.FONT_BODY_BOLD, rect.position + Vector2((w - nw) * 0.5, h - 6.0), nm,
+	var nw := UI.font_bold().get_string_size(nm, HORIZONTAL_ALIGNMENT_LEFT, -1, name_size).x
+	draw_string(UI.font_bold(), rect.position + Vector2((w - nw) * 0.5, h - 6.0), nm,
 		HORIZONTAL_ALIGNMENT_LEFT, -1, name_size, Color(deep.r, deep.g, deep.b, 0.85 * base_alpha))
 
 	# --- runestone flourish
 	if rune:
 		var star := "✦"
-		var sw := UI.FONT_BODY_BOLD.get_string_size(star, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
-		draw_string(UI.FONT_BODY_BOLD, rect.position + Vector2(w - pad - sw - 2, h - 6.0), star,
+		var sw := UI.font_bold().get_string_size(star, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
+		draw_string(UI.font_bold(), rect.position + Vector2(w - pad - sw - 2, h - 6.0), star,
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(UI.GOLD_DEEP.r, UI.GOLD_DEEP.g, UI.GOLD_DEEP.b, base_alpha))
 
 	# --- interactive rings
@@ -208,7 +208,7 @@ func _draw() -> void:
 		ring2.a = (0.35 + 0.45 * pulse2) * alpha
 		var r2 := UI.flat(Color(0, 0, 0, 0), 12, ring2, 2)
 		draw_style_box(r2, rect.grow(3.0))
-		draw_string(UI.FONT_BODY_BOLD, rect.position + Vector2(w - 20, 20), "◆",
+		draw_string(UI.font_bold(), rect.position + Vector2(w - 20, 20), "◆",
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, alpha))
 
 	if hinted:

@@ -20,6 +20,7 @@ var _scroll: ScrollContainer
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	UI.resolve_fonts()
 	# default to the faction you play most, so a returning player lands on it
 	var best := 0
 	for f in range(4):
@@ -144,7 +145,7 @@ func _section_header(title: String, sub: String) -> Control:
 	h.add_theme_constant_override("separation", 10)
 	v.add_child(h)
 	var l := UI.label(title, 18, UI.GOLD)
-	l.add_theme_font_override("font", UI.FONT_BODY_BOLD)
+	l.add_theme_font_override("font", UI.font_bold())
 	h.add_child(l)
 	var rule := ColorRect.new()
 	rule.color = Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, 0.22)
@@ -558,7 +559,9 @@ func _sheet(title: String) -> PanelContainer:
 	p.add_theme_stylebox_override("panel", UI.panel(UI.BG2, 22, Color("4a3f63"), 2))
 	p.z_index = 101
 	add_child(p)
-	p.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	# full-rect element -> explicit fractions -> zero offsets (two passes: the
+	# anchors are only relative to the parent once it has a size)
+	p.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	p.anchor_left = 0.04
 	p.anchor_right = 0.96
 	p.anchor_top = 0.06
@@ -567,6 +570,8 @@ func _sheet(title: String) -> PanelContainer:
 	p.offset_right = 0
 	p.offset_top = 0
 	p.offset_bottom = 0
+	p.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	p.grow_vertical = Control.GROW_DIRECTION_BOTH
 
 	var outer := VBoxContainer.new()
 	outer.add_theme_constant_override("separation", 10)
@@ -669,5 +674,16 @@ func _oath_line(f: int) -> Control:
 
 
 func _show_howto() -> void:
+	# wait for a real layout pass, then verify the sheet is actually on screen
+	await get_tree().process_frame
 	await get_tree().process_frame
 	_open_codex()
+	await get_tree().process_frame
+	if _codex != null:
+		var sheet: Control = null
+		for c in get_children():
+			if c is PanelContainer and c.z_index == 101:
+				sheet = c
+		if sheet != null and sheet.size.y < 40.0:
+			push_warning("Scopa: first-run guide failed to size; skipping it")
+			_codex_close()

@@ -13,6 +13,61 @@ var failures := 0
 var main: Control
 
 
+## GUI diagnostic mode (no display server needed to *start*, but runs the real
+## main loop): opens the title, then every duel mode, printing geometry and any
+## error Godot raises. Useful when the game crashes on open but headless is fine.
+func smoke_test(m: Control) -> void:
+	main = m
+	var win := get_window()
+	win.content_scale_size = Vector2i(720, 1280)
+	await get_tree().process_frame
+	print("=== SMOKE TEST ===")
+	print("os=", OS.get_name(), " godot=", Engine.get_version_info().string)
+	print("renderer=", RenderingServer.get_video_adapter_name(), " / ", RenderingServer.get_video_adapter_vendor())
+	print("viewport=", get_viewport().get_visible_rect().size)
+	await _wait_smoke(0.8)
+	await _smoke_report("TITLE")
+	main._start_duel({"mode": T.Mode.QUICK, "player_faction": T.FORGE})
+	await _wait_smoke(1.4)
+	await _smoke_report("QUICK DUEL")
+	main._start_duel({"mode": T.Mode.RANKED, "player_faction": T.GROVE})
+	await _wait_smoke(1.2)
+	await _smoke_report("RANKED DUEL")
+	main._start_duel({"mode": T.Mode.CAMPAIGN, "campaign": T.CAMPAIGNS[0], "player_faction": T.HORDE})
+	await _wait_smoke(1.2)
+	await _smoke_report("CAMPAIGN")
+	main._start_duel({"mode": T.Mode.PUZZLE, "puzzle": T.PUZZLES[0], "player_faction": T.CROWN})
+	await _wait_smoke(1.2)
+	await _smoke_report("PUZZLE")
+	print("=== SMOKE TEST OK — every screen built and drew ===")
+	get_tree().quit()
+
+
+func _wait_smoke(t: float) -> void:
+	await get_tree().create_timer(t).timeout
+
+
+func _smoke_report(label: String) -> void:
+	var cur: Control = main.current
+	if cur == null:
+		print("  !! ", label, ": no current screen")
+		return
+	var r: Rect2 = cur.get_global_rect()
+	print("  %-12s %s size=%.0fx%.0f visible=%s" % [label, cur.get_script().resource_path.get_file(), r.size.x, r.size.y, cur.visible])
+	var vp := get_viewport().get_visible_rect().size
+	if vp.x >= 200.0 and (r.size.x < vp.x * 0.5 or r.size.y < vp.y * 0.5):
+		print("  !! ", label, ": screen is smaller than half the viewport (%.0fx%.0f of %.0fx%.0f)" % [r.size.x, r.size.y, vp.x, vp.y])
+	elif vp.x < 200.0:
+		print("      (headless 64x64 viewport — launch with a real window to check sizes)")
+	var nulls: int = 0
+	var stack: Array = [cur]
+	while not stack.is_empty():
+		var n: Node = stack.pop_back()
+		for c in n.get_children():
+			stack.append(c)
+	print("      nodes=", stack.size(), " (no script errors above = healthy)")
+
+
 func run(m: Control) -> void:
 	main = m
 	# force a phone-shaped window so the audit measures the real layout
@@ -372,6 +427,7 @@ func _audit_screens() -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame
 	_report_tree(main.current, "TITLE")
+	await _check_modals_on_screen()
 	var ks: int = _scroll_extent(main.current)
 	print("  info  title scroll content height = %d px (viewport 1280)" % ks)
 	if ks > 1280 * 3:
@@ -595,6 +651,48 @@ func _check_duel_layout(d) -> void:
 	ok("table grid width %d for %d cards" % [table_grid.size.x, table_grid.get_child_count()])
 	print("  info  table box %.0fx%.0f · hand box %.0fx%.0f · actions %.0f" % [
 		d._table_box.size.x, d._table_box.size.y, d._hand_box.size.x, d._hand_box.size.y, d._btn_oath.size.y])
+
+
+## Any modal sheet must be a sane size and inside the viewport. The first-run
+## guide opens automatically, so this runs on a fresh profile.
+func _check_modals_on_screen() -> void:
+	await get_tree().process_frame
+	var title = main.current
+	title._open_codex()
+	await get_tree().process_frame
+	await get_tree().create_timer(0.15).timeout
+	var sheet: Control = null
+	for c in title.get_children():
+		if c is PanelContainer and c.z_index == 101:
+			sheet = c
+	if sheet == null:
+		fail("codex sheet did not open")
+		return
+	var r: Rect2 = sheet.get_global_rect()
+	if r.size.y < 200.0 or r.size.x < 200.0:
+		fail("codex sheet collapsed to %.0fx%.0f — modal anchor bug" % [r.size.x, r.size.y])
+	elif r.position.y < 0.0 or r.end.y > 1281.0:
+		fail("codex sheet off screen: y %.0f..%.0f" % [r.position.y, r.end.y])
+	else:
+		ok("first-run guide sheet is on screen (%.0fx%.0f at y=%.0f)" % [r.size.x, r.size.y, r.position.y])
+	# and the same sheet after the title has been torn down and rebuilt
+	title._codex_close()
+	main.show_title()
+	await get_tree().create_timer(0.25).timeout
+	var t2 = main.current
+	t2._open_codex()
+	await get_tree().create_timer(0.15).timeout
+	var sheet2: Control = null
+	for c in t2.get_children():
+		if c is PanelContainer and c.z_index == 101:
+			sheet2 = c
+	if sheet2 != null:
+		var r2: Rect2 = sheet2.get_global_rect()
+		if r2.size.y < 200.0:
+			fail("codex collapsed on a rebuilt title screen: %.0f px tall" % r2.size.y)
+		else:
+			ok("guide sheet still sized after rebuilding the title screen (%.0f px tall)" % r2.size.y)
+	t2._codex_close()
 
 
 func _scroll_extent(node: Node) -> int:

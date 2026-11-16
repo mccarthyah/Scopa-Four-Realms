@@ -217,8 +217,8 @@ func _avatar_pip(f: int) -> Control:
 		c.draw_arc(ctr, 22, 0, TAU, 40, info.color, 2.0, true)
 		var txt: String = T.SUIT_GLYPH[f]
 		var sz := 22
-		var w := UI.FONT_BODY_BOLD.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x
-		c.draw_string(UI.FONT_BODY_BOLD, ctr + Vector2(-w * 0.5, 8), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, sz, info.pale))
+		var w := UI.font_bold().get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x
+		c.draw_string(UI.font_bold(), ctr + Vector2(-w * 0.5, 8), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, sz, info.pale))
 	return c
 
 
@@ -296,6 +296,7 @@ func _build_quests() -> Control:
 
 
 func _build_hand() -> Control:
+	UI.resolve_fonts()
 	_hand_box = Control.new()
 	_hand_box.custom_minimum_size = Vector2(0, int(clampf(size.x * 0.235, 116.0, 154.0) * 1.404) + 44)
 	_hand_box.size_flags_vertical = Control.SIZE_SHRINK_END
@@ -410,7 +411,7 @@ func _draw_favor_pips() -> void:
 		return
 	var n: int = duel.favor[0]
 	var x := 96.0
-	fav_node.draw_string(UI.FONT_BODY_BOLD, Vector2(4, 16), "FAVOR", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, UI.TEXT_DIM)
+	fav_node.draw_string(UI.font_bold(), Vector2(4, 16), "FAVOR", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, UI.TEXT_DIM)
 	for i in range(Duel.MAX_FAVOR):
 		var c := Vector2(x + i * 20, 10)
 		if i < n:
@@ -419,7 +420,7 @@ func _draw_favor_pips() -> void:
 		else:
 			fav_node.draw_arc(c, 6.0, 0, TAU, 18, Color("4a3f5e"), 1.4, true)
 	if duel.oath_used[0]:
-		fav_node.draw_string(UI.FONT_BODY_BOLD, Vector2(96 + Duel.MAX_FAVOR * 20 + 12, 16),
+		fav_node.draw_string(UI.font_bold(), Vector2(96 + Duel.MAX_FAVOR * 20 + 12, 16),
 			"Oath spent", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, UI.TEXT_DIM)
 
 
@@ -1234,6 +1235,7 @@ func _oath_sheet(title: String, sub: String) -> PanelContainer:
 	p.add_theme_stylebox_override("panel", UI.panel(UI.BG2, 20, UI.GOLD, 2))
 	p.z_index = 101
 	add_child(p)
+	p.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	p.anchor_left = 0.05
 	p.anchor_right = 0.95
 	p.anchor_top = 0.18
@@ -1242,6 +1244,8 @@ func _oath_sheet(title: String, sub: String) -> PanelContainer:
 	p.offset_right = 0
 	p.offset_top = 0
 	p.offset_bottom = 0
+	p.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	p.grow_vertical = Control.GROW_DIRECTION_BOTH
 
 	var sc := ScrollContainer.new()
 	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED

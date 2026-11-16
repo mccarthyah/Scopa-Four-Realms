@@ -22,19 +22,58 @@ const GOOD := Color("6ec07a")
 const BAD := Color("c85b52")
 
 # Fonts are imported assets, so a bare checkout (before Godot's first import
-# pass) has no .fontdata yet. Load them lazily and fall back to Godot's default
-# font rather than failing to parse the whole UI.
-static var FONT_TITLE: Font = _load_font("res://fonts/Cinzel.ttf")
-static var FONT_BODY: Font = _load_font("res://fonts/AlegreyaSans.ttf")
-static var FONT_BODY_BOLD: Font = _load_font("res://fonts/AlegreyaSans-Bold.ttf")
+# pass) may have no .fontdata yet. Resolve them on first use and fall back to
+# Godot's own font rather than failing to parse the whole UI.
+static var _fonts_resolved := false
+static var FONT_TITLE: Font = null
+static var FONT_BODY: Font = null
+static var FONT_BODY_BOLD: Font = null
+
+
+static func resolve_fonts() -> void:
+	if _fonts_resolved:
+		return
+	_fonts_resolved = true
+	FONT_TITLE = _load_font("res://fonts/Cinzel.ttf")
+	FONT_BODY = _load_font("res://fonts/AlegreyaSans.ttf")
+	FONT_BODY_BOLD = _load_font("res://fonts/AlegreyaSans-Bold.ttf")
+
+
+## Called from every factory, so fonts are ready no matter which entry point
+## draws first.
+static func _font(path: String, title: bool = false, bold: bool = false) -> Font:
+	resolve_fonts()
+	if title:
+		return FONT_TITLE
+	if bold:
+		return FONT_BODY_BOLD
+	return FONT_BODY
+
+
+static func font_title() -> Font:
+	resolve_fonts()
+	return FONT_TITLE
+
+
+static func font_body() -> Font:
+	resolve_fonts()
+	return FONT_BODY
+
+
+static func font_bold() -> Font:
+	resolve_fonts()
+	return FONT_BODY_BOLD
 
 
 static func _load_font(path: String) -> Font:
-	if ResourceLoader.exists(path):
-		var f = load(path)
-		if f is Font:
-			return f
-	return ThemeDB.fallback_font
+	var fallback: Font = ThemeDB.fallback_font
+	if not ResourceLoader.exists(path):
+		return fallback
+	var f = load(path)
+	if f is Font:
+		return f
+	push_warning("Scopa: could not load font " + path + ", using the default font")
+	return fallback
 
 const CARD_W := 104
 const CARD_H := 146
@@ -69,7 +108,7 @@ static func panel(col: Color = PANEL, radius: int = 18, border: Color = Color("4
 static func label(txt: String, size: int = 22, col: Color = TEXT, title: bool = false) -> Label:
 	var l := Label.new()
 	l.text = txt
-	l.add_theme_font_override("font", FONT_TITLE if title else FONT_BODY)
+	l.add_theme_font_override("font", _font("", title, false))
 	l.add_theme_font_size_override("font_size", size)
 	l.add_theme_color_override("font_color", col)
 	l.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.55))
@@ -82,7 +121,7 @@ static func button(txt: String, kind: String = "primary", size: int = 24) -> But
 	var b := Button.new()
 	b.text = txt
 	b.focus_mode = Control.FOCUS_NONE
-	b.add_theme_font_override("font", FONT_BODY_BOLD)
+	b.add_theme_font_override("font", _font("", false, true))
 	b.add_theme_font_size_override("font_size", size)
 	var col := GOLD
 	var txt_col := INK
