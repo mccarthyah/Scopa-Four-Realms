@@ -29,6 +29,12 @@ var _fps_sample := 0
 var _fps_worst := 999.0
 var _degraded := false
 
+# The still layers are also baked into a texture once, so the backdrop costs one
+# textured quad per frame. The motes then only repaint on top of it.
+var _baked: ImageTexture = null
+var _baked_size := Vector2i.ZERO
+var _baking := false
+
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -61,6 +67,20 @@ func set_accents(a: Color, b: Color) -> void:
 	queue_redraw()
 
 
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_RESIZED:
+		_invalidate()
+		_baked = null
+		_baked_size = Vector2i.ZERO
+
+
+func _invalidate() -> void:
+	_tex_glow.clear()
+	_sky_key = ""
+	_baked = null
+	_baked_size = Vector2i.ZERO
+
+
 func _process(delta: float) -> void:
 	_t += delta
 	# Watch the frame rate for a few seconds; if this machine is struggling, drop
@@ -83,6 +103,11 @@ func _draw() -> void:
 	if w < 8.0 or h < 8.0:
 		return
 
+	if _baked != null && _baked_size == Vector2i(int(w), int(h)):
+		draw_texture_rect(_baked, Rect2(0, 0, w, h), false)
+		_draw_motes(w, h)
+		return
+
 	# --- 1. vertical sky gradient: one quad
 	draw_texture_rect(_sky(), Rect2(0, 0, w, h), false)
 
@@ -100,15 +125,111 @@ func _draw() -> void:
 
 	# --- 4. drifting motes
 	if not _degraded:
-		for m in _motes:
-			var pos: Vector2 = m.p
-			var y := fmod(pos.y + _t * 0.012 * (0.4 + m.h), 1.0)
-			var x := pos.x + sin(_t * 0.35 + m.h * 9.0) * 0.012
-			var a: float = m.a * (0.5 + 0.5 * sin(_t * 1.4 + m.h * 12.0))
-			draw_circle(Vector2(x * w, y * h), m.r, Color(accent.r, accent.g, accent.b, a * 0.55))
+		_draw_motes(w, h)
 
 	# --- 5. vignette: one quad
 	draw_texture_rect(_vignette(), Rect2(0, 0, w, h), false)
+
+	# Bake everything drawn above into a single texture, once, off-screen.
+	_maybe_bake(w, h)
+
+
+## The only live layer: 46 small dots drifting on top of the baked backdrop.
+func _draw_motes(w: float, h: float) -> void:
+	for m in _motes:
+		var pos: Vector2 = m.p
+		var y := fmod(pos.y + _t * 0.012 * (0.4 + m.h), 1.0)
+		var x := pos.x + sin(_t * 0.35 + m.h * 9.0) * 0.012
+		var a: float = m.a * (0.5 + 0.5 * sin(_t * 1.4 + m.h * 12.0))
+		draw_circle(Vector2(x * w, y * h), m.r, Color(accent.r, accent.g, accent.b, a * 0.55))
+
+
+## Rasterise the still layers once into a texture. The background is the largest
+## full-screen surface in the game, and re-blending it every frame is the single
+## most expensive thing the CPU rasteriser was doing.
+func _maybe_bake(w: float, h: float) -> void:
+	if _baked != null or _baking or not is_inside_tree():
+		return
+	if DisplayServer.get_name() == "headless" or RenderingServer.get_video_adapter_name() == "":
+		return
+	_baking = true
+	var sub := SubViewport.new()
+	sub.size = Vector2i(int(w), int(h))
+	sub.transparent_bg = false
+	sub.disable_3d = true
+	sub.render_target_update_mode = SubViewport.UPDATE_ONCE
+	var painter := _StillPainter.new()
+	painter.bg = self
+	painter.size = Vector2(int(w), int(h))
+	sub.add_child(painter)
+	get_tree().root.add_child(sub)
+	# Two frames, not RenderingServer.frame_post_draw (which never fires on some
+	# renderers and would wedge this permanently).
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var tex := sub.get_texture()
+	var img: Image = tex.get_image() if tex != null else null
+	sub.get_parent().remove_child(sub)
+	sub.free()
+	_baking = false
+	if img == null:
+		return
+	_baked = ImageTexture.create_from_image(img)
+	_baked_size = Vector2i(int(w), int(h))
+	queue_redraw()
+
+
+## Paints the still layers of a RealmBackground into a viewport for baking.
+class _StillPainter extends Control:
+	var bg: Node
+
+	func _draw() -> void:
+		if bg != null:
+			bg.call("draw_still_into", self, size)
+
+
+func draw_still_into(target: Control, sz: Vector2) -> void:
+	var w := sz.x
+	var h := sz.y
+	# identical geometry to _draw(), but into the target
+	_paint_sky(target, w, h)
+	for i in range(3):
+		var c := Vector2(w * (0.5 + 0.24 * sin(_t * 0.11 + i)), h * (0.22 + 0.05 * i))
+		target.draw_arc(c, h * (0.16 + 0.06 * i), 0, TAU, 48, Color(accent.r, accent.g, accent.b, 0.05), 1.5, true)
+	_paint_vignette(target, w, h)
+
+
+func _paint_sky(target: Control, w: float, h: float) -> void:
+	target.draw_texture_rect(_sky(), Rect2(0, 0, w, h), false)
+	target.draw_texture_rect(_glow_tex(Color(accent.r, accent.g, accent.b, 0.10)),
+		Rect2(Vector2(w * 0.16, h * 0.10) - Vector2(h * 0.42, h * 0.42), Vector2(h * 0.84, h * 0.84)), false)
+	target.draw_texture_rect(_glow_tex(Color(accent2.r, accent2.g, accent2.b, 0.12)),
+		Rect2(Vector2(w * 0.90, h * 0.30) - Vector2(h * 0.34, h * 0.34), Vector2(h * 0.68, h * 0.68)), false)
+	target.draw_texture_rect(_glow_tex(Color(0, 0, 0, 0.35)),
+		Rect2(Vector2(w * 0.55, h * 0.95) - Vector2(h * 0.5, h * 0.5), Vector2(h, h)), false)
+
+
+func _paint_vignette(target: Control, w: float, h: float) -> void:
+	target.draw_texture_rect(_vignette(), Rect2(0, 0, w, h), false)
+
+
+func _glow_tex(col: Color) -> GradientTexture2D:
+	var key := col.to_html(true)
+	var tex: GradientTexture2D = _tex_glow.get(key)
+	if tex != null:
+		return tex
+	var g := Gradient.new()
+	g.set_color(0, col)
+	g.set_color(1, Color(col.r, col.g, col.b, 0.0))
+	tex = GradientTexture2D.new()
+	tex.gradient = g
+	tex.width = 64
+	tex.height = 64
+	tex.fill = GradientTexture2D.FILL_RADIAL
+	tex.fill_from = Vector2(0.5, 0.5)
+	tex.fill_to = Vector2(1.0, 0.5)
+	_tex_glow[key] = tex
+	return tex
 
 
 # --- gradient textures, each built once ---------------------------------------
@@ -135,21 +256,7 @@ func _sky() -> GradientTexture2D:
 
 
 func _glow(c: Vector2, r: float, col: Color) -> void:
-	var key := col.to_html(true)
-	var tex: GradientTexture2D = _tex_glow.get(key)
-	if tex == null:
-		var g := Gradient.new()
-		g.set_color(0, col)
-		g.set_color(1, Color(col.r, col.g, col.b, 0.0))
-		tex = GradientTexture2D.new()
-		tex.gradient = g
-		tex.width = 64
-		tex.height = 64
-		tex.fill = GradientTexture2D.FILL_RADIAL
-		tex.fill_from = Vector2(0.5, 0.5)
-		tex.fill_to = Vector2(1.0, 0.5)
-		_tex_glow[key] = tex
-	draw_texture_rect(tex, Rect2(c - Vector2(r, r), Vector2(r, r) * 2.0), false)
+	draw_texture_rect(_glow_tex(col), Rect2(c - Vector2(r, r), Vector2(r, r) * 2.0), false)
 
 
 func _vignette() -> GradientTexture2D:

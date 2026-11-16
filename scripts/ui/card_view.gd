@@ -39,6 +39,16 @@ var _sb_glow: StyleBoxFlat
 var _sb_sel: StyleBoxFlat
 var _sb_cap: StyleBoxFlat
 var _sb_shadow: StyleBoxFlat
+
+# Frozen (textured) copies of the ring styles, made once per card so a pulsing
+# ring costs 2 primitives instead of ~57.
+var _tx_ring: StyleBoxTexture
+var _tx_glow: StyleBoxTexture
+var _tx_cap: StyleBoxTexture
+var _tx_sel: StyleBoxTexture
+var _tx_shadow: StyleBoxTexture
+var _frozen := false
+var _freeze_running := false
 var _styles_ready := false
 var _ring_phase := 0.0
 var _last_pulse := -1.0
@@ -134,7 +144,8 @@ func _draw() -> void:
 
 	# --- drop shadow: one cheap quad, no blur pass
 	_ensure_styles()
-	draw_style_box(_sb_shadow, Rect2(rect.position + Vector2(0, 3), rect.size))
+	draw_style_box(_tx_shadow if _tx_shadow != null else _sb_shadow,
+		Rect2(rect.position + Vector2(0, 3), rect.size))
 
 	# --- the card itself: one textured quad
 	var tex := CardAtlas.texture(card_id, back_style)
@@ -150,19 +161,31 @@ func _draw() -> void:
 
 	if playable or selected:
 		var pulse := 0.55 + 0.45 * sin(_ring_phase)
-		_sb_ring.border_color = Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, (0.55 + 0.45 * pulse) * alpha)
-		draw_style_box(_sb_ring, rect.grow(2.0))
-		_sb_glow.bg_color = Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, 0.12 * alpha)
-		draw_style_box(_sb_glow, rect.grow(5.0))
+		if _tx_ring != null:
+			draw_style_box(_tx_ring, rect.grow(2.0))
+		else:
+			_sb_ring.border_color = Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, (0.55 + 0.45 * pulse) * alpha)
+			draw_style_box(_sb_ring, rect.grow(2.0))
+		if _tx_glow != null:
+			draw_style_box(_tx_glow, rect.grow(5.0))
+		else:
+			_sb_glow.bg_color = Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, 0.12 * alpha)
+			draw_style_box(_sb_glow, rect.grow(5.0))
 
 	if selected:
-		_sb_sel.bg_color = Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, 0.10 * alpha)
-		draw_style_box(_sb_sel, rect)
+		if _tx_sel != null:
+			draw_style_box(_tx_sel, rect)
+		else:
+			_sb_sel.bg_color = Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, 0.10 * alpha)
+			draw_style_box(_sb_sel, rect)
 
 	if capturable:
 		var pulse2 := 0.5 + 0.5 * sin(_ring_phase * 0.8)
-		_sb_cap.border_color = Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, (0.35 + 0.45 * pulse2) * alpha)
-		draw_style_box(_sb_cap, rect.grow(3.0))
+		if _tx_cap != null:
+			draw_style_box(_tx_cap, rect.grow(3.0))
+		else:
+			_sb_cap.border_color = Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, (0.35 + 0.45 * pulse2) * alpha)
+			draw_style_box(_sb_cap, rect.grow(3.0))
 		draw_string(UI.font_bold(), rect.position + Vector2(size.x - 20, 20), "◆",
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, alpha))
 
@@ -187,10 +210,32 @@ func _draw_fallback(rect: Rect2, a: float) -> void:
 		HORIZONTAL_ALIGNMENT_LEFT, -1, int(size.y * 0.34), Color(0.05, 0.04, 0.08, a))
 
 
+## Rasterise the ring styles once for this card's size. Finished asynchronously so
+## it never stalls a frame; until then the flat StyleBoxes are used directly.
+func _freeze_styles() -> void:
+	if _frozen or _freeze_running or not is_inside_tree():
+		return
+	if DisplayServer.get_name() == "headless" or RenderingServer.get_video_adapter_name() == "":
+		_frozen = true  # no real renderer: keep the (now AA-free) StyleBoxes
+		return
+	_freeze_running = true
+	var w := int(clampi(int(size.x) + 12, 8, 512))
+	var h := int(clampi(int(size.y) + 12, 8, 512))
+	_tx_shadow = await UI.freeze(UI.flat(Color(0, 0, 0, 0.28), 12), w, h)
+	_tx_ring = await UI.freeze(UI.flat(Color(0, 0, 0, 0), 12, UI.GOLD, 3), w, h)
+	_tx_glow = await UI.freeze(UI.flat(Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, 0.12), 14), w, h)
+	_tx_sel = await UI.freeze(UI.flat(Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, 0.10), 11), w, h)
+	_tx_cap = await UI.freeze(UI.flat(Color(0, 0, 0, 0), 12, UI.GOLD, 2), w, h)
+	_frozen = true
+	_freeze_running = false
+	queue_redraw()
+
+
 func _ensure_styles() -> void:
 	if _styles_ready:
 		return
 	_styles_ready = true
+	_freeze_styles()
 	_sb_ring = UI.flat(Color(0, 0, 0, 0), 12, UI.GOLD, 3)
 	_sb_glow = UI.flat(Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, 0.12), 14)
 	_sb_sel = UI.flat(Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, 0.10), 11)
