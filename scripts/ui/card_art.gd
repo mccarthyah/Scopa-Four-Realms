@@ -15,15 +15,17 @@ const C := preload("res://scripts/game/cards.gd")
 
 
 ## Draw a card face (id >= 0) or a card back (id < 0) into `target`.
+## `alpha` is accepted for callers' convenience but deliberately IGNORED.
+##
+## It used to multiply target.modulate.a here and divide it back afterwards. On
+## the first frame of a deal-in alpha is 0, so the round trip was 1.0 * 0 / 0 =
+## NaN, and a NaN modulate makes the control invisible for good — which is exactly
+## why every card rendered blank. Fading is the node's job: CardView sets
+## modulate.a in _process, never inside _draw.
 static func draw_face(target: CanvasItem, rect: Rect2, card_id: int, back_style: int = 0,
 		alpha: float = 1.0) -> void:
-	# Fade = drawing every primitive with reduced alpha. Cheap here because a card
-	# is a handful of primitives now, and it avoids a modulate node per card.
-	if alpha < 0.999:
-		target.modulate.a *= alpha
 	if card_id < 0:
 		_draw_back(target, rect, back_style)
-		_restore(target, alpha)
 		return
 
 	var w := rect.size.x
@@ -91,13 +93,7 @@ static func draw_face(target: CanvasItem, rect: Rect2, card_id: int, back_style:
 		var sw := UI.font_bold().get_string_size(star, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
 		target.draw_string(UI.font_bold(), origin + Vector2(w - pad - sw - 2, h - 6.0), star,
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 14, UI.GOLD_DEEP)
-	_restore(target, alpha)
 
-
-## Undo the temporary alpha applied by draw_face().
-static func _restore(target: CanvasItem, alpha: float) -> void:
-	if alpha < 0.999 and target != null:
-		target.modulate.a /= alpha
 
 
 static func _draw_back(target: CanvasItem, rect: Rect2, back_style: int) -> void:

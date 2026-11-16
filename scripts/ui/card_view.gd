@@ -31,6 +31,7 @@ var _lift := 0.0
 var _target_lift := 0.0
 var _glow := 0.0
 var _fig := 0.0
+var _reported := false
 
 # Interactive styles, built once per card and only recoloured.
 var _sb_ring: StyleBoxFlat
@@ -107,6 +108,12 @@ func _process(delta: float) -> void:
 		if absf(_ring_phase - _last_pulse) > 0.02:
 			_last_pulse = _ring_phase
 			dirty = true
+	# The deal-in fade belongs on the node, not inside _draw. Set here, where it
+	# cannot be corrupted by a draw-time multiply/divide round trip.
+	var a := clampf(_fig, 0.0, 1.0) * (0.6 if dim else 1.0)
+	if not is_finite(a):
+		a = 1.0
+	modulate.a = a
 	if dirty:
 		queue_redraw()
 
@@ -125,23 +132,24 @@ func _draw() -> void:
 	var ease_out := 1.0 - pow(1.0 - fig, 3.0)
 	var draw_pos := Vector2(0, (1.0 - ease_out) * 26.0 + _lift)
 	var rect := Rect2(draw_pos, size)
-	var alpha := fig
-	var base_alpha := alpha * (0.6 if dim else 1.0)
+	var alpha := 1.0  # the node's modulate carries fade/dim; see _process
+
+	# One-time proof that a card really drew, with the numbers that would reveal a
+	# degenerate rect or a bad modulate — so a blank card can be diagnosed from the
+	# log instead of guessed at.
+	if not _reported:
+		_reported = true
+		print("[scopa] card draw    : id=", card_id, " view=", size, " rect=", rect,
+			" alpha=", snappedf(modulate.a, 0.01), " clip=", clip_contents)
 
 	# --- drop shadow: one cheap quad, no blur pass
 	_ensure_styles()
 	draw_style_box(_sb_shadow, Rect2(rect.position + Vector2(0, 3), rect.size))
 
 	# --- the card itself, drawn direct
-	if base_alpha < 0.999:
-		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-		CardArt.draw_face(self, rect, card_id, back_style, base_alpha)
-	else:
-		CardArt.draw_face(self, rect, card_id, back_style)
+	CardArt.draw_face(self, rect, card_id, back_style)
 
-	# --- interaction feedback, still live
-	if dim:
-		draw_rect(rect, Color(0, 0, 0, 0.35 * alpha))
+	# --- interaction feedback, still live (dim is handled by modulate)
 
 	if playable or selected:
 		var pulse := 0.55 + 0.45 * sin(_ring_phase)
