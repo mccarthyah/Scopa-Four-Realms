@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Scopa: Four Realms — card sheet</title>
+<style>
+  :root{
+    --ink:#0e0b13; --bg:#171320; --panel:#241e31; --gold:#dcb673; --gold-deep:#8c6a2b;
+    --parchment:#f5ecd8; --text:#efe6d3; --dim:#a89b88;
+    --forge:#d9743a; --forge-deep:#4a2a1c; --forge-pale:#f0b98a;
+    --grove:#5fae68; --grove-deep:#1e3d29; --grove-pale:#b9e6b0;
+    --horde:#b8453f; --horde-deep:#3d1a1a; --horde-pale:#eda79a;
+    --crown:#c9a24a; --crown-deep:#463314; --crown-pale:#f6e2a8;
+  }
+  body{margin:0;background:radial-gradient(120% 80% at 20% 0%, #241f33 0%, #120f1a 70%);
+       font-family:'Alegreya Sans','Helvetica Neue',Arial,sans-serif;color:var(--text);
+       padding:28px 22px 40px;}
+  h1{font-family:Georgia,'Times New Roman',serif;letter-spacing:.14em;font-size:22px;color:var(--parchment);
+     margin:0 0 2px;}
+  h2{font-size:13px;letter-spacing:.22em;color:var(--gold);margin:26px 0 10px;text-transform:uppercase;
+     display:flex;align-items:center;gap:10px;}
+  h2::after{content:"";flex:1;height:1px;background:rgba(220,182,115,.22);}
+  p.note{color:var(--dim);font-size:13px;margin:0 0 14px;max-width:640px;line-height:1.5}
+  .row{display:flex;gap:10px;flex-wrap:wrap}
+  .card{width:104px;height:146px;border-radius:11px;background:linear-gradient(180deg,#fffaf0,#f5ecd8 42%,#efe2c8);
+        position:relative;box-shadow:0 5px 10px rgba(0,0,0,.45);overflow:hidden;flex:0 0 auto}
+  .card .rank{position:absolute;left:10px;top:6px;font-family:Georgia,serif;font-weight:700;font-size:49px;
+              line-height:1;letter-spacing:-.02em}
+  .card .glyph{position:absolute;right:9px;top:16px;font-size:19px;line-height:1}
+  .card .rule{position:absolute;left:9px;right:9px;top:62px;height:1px;background:rgba(0,0,0,.16)}
+  .card .art{position:absolute;left:7px;right:7px;top:64px;bottom:24px;border-radius:8px;overflow:hidden;
+             display:flex;align-items:center;justify-content:center}
+  .card .art svg{width:78%;height:78%}
+  .card .name{position:absolute;left:0;right:0;bottom:5px;text-align:center;font-size:10px;font-weight:700;
+              letter-spacing:.12em}
+  .card.rune{box-shadow:0 0 0 3px var(--gold),0 6px 14px rgba(220,182,115,.3)}
+  .card.rune .star{position:absolute;right:9px;bottom:4px;font-size:11px;color:var(--gold-deep)}
+  .forge .rank,.forge .name{color:var(--forge-deep)} .forge .glyph{color:var(--forge)}
+  .forge .art{background:linear-gradient(180deg,rgba(217,116,58,.22),var(--forge-deep))}
+  .forge .art svg{stroke:var(--forge-pale);fill:var(--forge-pale)}
+  .grove .rank,.grove .name{color:var(--grove-deep)} .grove .glyph{color:var(--grove)}
+  .grove .art{background:linear-gradient(180deg,rgba(95,174,104,.22),var(--grove-deep))}
+  .grove .art svg{stroke:var(--grove-pale);fill:var(--grove-pale)}
+  .horde .rank,.horde .name{color:var(--horde-deep)} .horde .glyph{color:var(--horde)}
+  .horde .art{background:linear-gradient(180deg,rgba(184,69,63,.22),var(--horde-deep))}
+  .horde .art svg{stroke:var(--horde-pale);fill:var(--horde-pale)}
+  .crown .rank,.crown .name{color:var(--crown-deep)} .crown .glyph{color:var(--crown)}
+  .crown .art{background:linear-gradient(180deg,rgba(201,162,74,.22),var(--crown-deep))}
+  .crown .art svg{stroke:var(--crown-pale);fill:var(--crown-pale)}
+  .back{background:linear-gradient(160deg,#2a2038,#1a1426);border:2px solid var(--gold);
+        display:flex;align-items:center;justify-content:center}
+  .back .weave{position:absolute;inset:0;background:repeating-linear-gradient(58deg,rgba(255,255,255,.05) 0 2px,transparent 2px 14px)}
+  .back svg{width:56%;height:56%}
+  .palette{display:flex;gap:0;border-radius:8px;overflow:hidden;box-shadow:0 4px 10px rgba(0,0,0,.4)}
+  .sw{width:64px;height:38px;display:flex;align-items:flex-end;justify-content:center;font-size:9px;
+      letter-spacing:.04em;padding-bottom:2px;color:rgba(255,255,255,.75)}
+</style>
+</head>
+<body>
+  <h1>SCOPA: FOUR REALMS</h1>
+  <p class="note">Card sheet — the real thing is drawn by <code>scripts/ui/card_view.gd</code> with the same
+  geometry, palette and emblems. Rank is the loudest element; faction art is the texture behind it.</p>
+
+  <h2>Rank ladder · Forge</h2>
+  <div class="row" id="ladder"></div>
+
+  <h2>The four factions</h2>
+  <div class="row" id="factions"></div>
+
+  <h2>Card back &amp; palette</h2>
+  <div class="row" style="align-items:flex-start;gap:18px">
+    <div class="card back"><div class="weave"></div>
+      <svg viewBox="0 0 100 100"><polygon points="50,18 82,50 50,82 18,50" fill="#dcb673" opacity=".9"/>
+      <polygon points="50,34 66,50 50,66 34,50" fill="#1a1426"/>
+      <circle cx="50" cy="50" r="40" fill="none" stroke="#dcb673" stroke-width="1.5" opacity=".7"/></svg>
+    </div>
+    <div>
+      <div class="palette">
+        <div class="sw" style="background:#171320">BG</div>
+        <div class="sw" style="background:#241e31">PANEL</div>
+        <div class="sw" style="background:#dcb673;color:#241a08">GOLD</div>
+        <div class="sw" style="background:#f5ecd8;color:#4a2a1c">PARCH</div>
+        <div class="sw" style="background:#5fae68">GROVE</div>
+        <div class="sw" style="background:#b8453f">HORDE</div>
+        <div class="sw" style="background:#d9743a">FORGE</div>
+      </div>
+      <p class="note" style="margin-top:10px">Felt #1b2a24 · Runestone #7 of Forge carries the gold ring and ✦</p>
+    </div>
+  </div>
+
+<script>
+const SVG = {
+  forge: `<svg viewBox="0 0 100 100"><polygon points="24,52 76,52 70,62 58,62 56,72 64,76 36,76 44,72 42,62 30,62"/>
+    <polygon points="52,24 74,30 71,40 50,34"/><path d="M56 34 L44 50" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="28" cy="36" r="2.6"/><circle cx="20" cy="46" r="1.8"/><circle cx="34" cy="26" r="1.6"/></svg>`,
+  grove: `<svg viewBox="0 0 100 100"><path d="M50 76 L50 46" stroke-width="4" stroke-linecap="round"/>
+    <path d="M50 56 L34 42" stroke-width="3" stroke-linecap="round"/>
+    <path d="M50 50 L66 38" stroke-width="3" stroke-linecap="round"/>
+    <polygon points="34,42 25,30 43,30"/><polygon points="66,38 57,26 75,26"/><polygon points="50,46 41,34 59,34"/>
+    <path d="M28 32 A22 22 0 0 1 72 32" fill="none" stroke-width="3"/><circle cx="50" cy="36" r="5"/></svg>`,
+  horde: `<svg viewBox="0 0 100 100">
+    <path d="M30 76 L70 32" stroke-width="5" stroke-linecap="round"/><path d="M70 76 L30 32" stroke-width="5" stroke-linecap="round"/>
+    <polygon points="70,32 80,20 84,34 72,42"/><polygon points="30,32 20,20 16,34 28,42"/>
+    <circle cx="36" cy="38" r="3"/><circle cx="64" cy="38" r="3"/><circle cx="50" cy="50" r="6"/></svg>`,
+  crown: `<svg viewBox="0 0 100 100"><path d="M32 22 L32 76" stroke-width="4" stroke-linecap="round"/>
+    <polygon points="32,22 72,28 62,38 72,48 32,52"/>
+    <polygon points="38,76 38,62 46,69 52,60 58,69 64,62 64,76"/><circle cx="51" cy="72" r="2.4"/></svg>`
+};
+const NAMES = {forge:'FORGE', grove:'GROVE', horde:'HORDE', crown:'CROWN'};
+const GLYPH = {forge:'⛭', grove:'❧', horde:'⚔', crown:'♛'};
+
+function card(rank, faction, small){
+  const rune = (rank===7 && faction==='forge');
+  const w = small ? 66 : 104, h = small ? 93 : 146;
+  return `<div class="card ${faction} ${rune?'rune':''}" style="width:${w}px;height:${h}px">
+    <div class="rank" style="font-size:${small?30:49}px">${rank}</div>
+    <div class="glyph" style="font-size:${small?13:19}px">${GLYPH[faction]}</div>
+    <div class="rule" style="top:${small?40:62}px"></div>
+    <div class="art">${SVG[faction]}</div>
+    <div class="name" style="font-size:${small?7:10}px">${NAMES[faction]}</div>
+    ${rune?'<div class="star">✦</div>':''}
+  </div>`;
+}
+
+document.getElementById('ladder').innerHTML = [1,2,3,4,5,6,7,8,9,10].map(r=>card(r,'forge')).join('');
+document.getElementById('factions').innerHTML =
+  card(7,'forge') + card(7,'grove') + card(7,'horde') + card(7,'crown') +
+  ['forge','grove','horde','crown'].map(f=>card(1,f,true)).join('');
+</script>
+</body>
+</html>

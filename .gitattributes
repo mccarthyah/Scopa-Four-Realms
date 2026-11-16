@@ -1,2 +1,9 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Scopa: Four Realms — line endings and binary assets
+# (Godot source fonts and generated audio are committed as-is)
+*.wav binary
+*.ttf binary
+*.png binary
+*.svg text eol=lf
