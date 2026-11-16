@@ -83,12 +83,58 @@ func run(m: Control) -> void:
 	_test_save_resume()
 	_test_ai_speed()
 	_test_profile_io()
+	await _test_tap_play()
 	await _audit_screens()
 	print("=== AUDIT COMPLETE · failures=%d ===" % failures)
 	print("godot ", Engine.get_version_info().string, " · renderer ",
 		ProjectSettings.get_setting("rendering/renderer/rendering_method", "?"), " · adapter ",
 		RenderingServer.get_video_adapter_name())
 	get_tree().quit()
+
+
+## End-to-end input test: build a real duel, send a real mouse click at a hand
+## card's on-screen position, and require that the card is actually played.
+##
+## This exists because card taps were broken for the entire project history: the
+## pressed signal carried a card id AND the handler bound one, so every tap failed
+## with "Method expected 1 argument(s), but called with 2" and silently did
+## nothing. Nothing caught it because no test ever simulated a tap.
+func _test_tap_play() -> void:
+	var d = load("res://scripts/screens/duel.gd").new()
+	d.config = {"mode": 0}
+	main.add_child(d)
+	for i in range(150):
+		await get_tree().process_frame
+	var row = d._hand_row
+	if row == null or row.get_child_count() == 0:
+		fail("tap test: no hand cards were laid out")
+		d.queue_free()
+		return
+	var before: Array = []
+	for i in range(row.get_child_count()):
+		before.append(row.get_child(i).card_id)
+	var center: Vector2 = row.get_child(0).get_global_rect().get_center()
+	# select, then confirm
+	for _pass in range(2):
+		for pressed in [true, false]:
+			var ev := InputEventMouseButton.new()
+			ev.button_index = MOUSE_BUTTON_LEFT
+			ev.pressed = pressed
+			ev.position = center
+			ev.global_position = center
+			main.get_viewport().push_input(ev)
+			await get_tree().process_frame
+		for k in range(30):
+			await get_tree().process_frame
+	var after: Array = []
+	for i in range(d._hand_row.get_child_count()):
+		after.append(d._hand_row.get_child(i).card_id)
+	if after.size() < before.size() or after != before:
+		ok("tapping a hand card actually plays it (%s -> %s)" % [before, after])
+	else:
+		fail("tapping a hand card did nothing (hand still %s)" % [before])
+	d.queue_free()
+	await get_tree().process_frame
 
 
 func fail(msg: String) -> void:

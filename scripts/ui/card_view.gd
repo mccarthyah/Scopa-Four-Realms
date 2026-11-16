@@ -9,7 +9,12 @@ class_name CardView
 
 const UI := preload("res://scripts/ui/ui.gd")
 
-signal pressed(card_id: int)
+## Emitted on tap/click. Carries NO argument: callers connect with
+## `pressed.connect(_on_card.bind(id))`, so the id arrives via bind(). This used
+## to be declared as `signal pressed(card_id: int)` AND bound at the call site,
+## which made every handler receive two arguments and fail with "Method expected
+## 1 argument(s), but called with 2" — so cards were never playable.
+signal pressed()
 
 const T := preload("res://scripts/tables.gd")
 const C := preload("res://scripts/game/cards.gd")
@@ -120,10 +125,10 @@ func _process(delta: float) -> void:
 
 func _gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		pressed.emit(card_id)
+		pressed.emit()
 		accept_event()
 	elif event is InputEventScreenTouch and event.pressed:
-		pressed.emit(card_id)
+		pressed.emit()
 		accept_event()
 
 
