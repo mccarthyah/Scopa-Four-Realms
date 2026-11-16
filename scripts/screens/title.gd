@@ -15,6 +15,7 @@ var _faction_buttons: Array = []
 var _mode_list: VBoxContainer
 var _classic_toggle: Button
 var _codex: Control
+var _sheet_panel: PanelContainer
 var _scroll: ScrollContainer
 
 
@@ -631,6 +632,7 @@ func _sheet(title: String) -> PanelContainer:
 	_codex = dim
 
 	var p := PanelContainer.new()
+	_sheet_panel = p
 	p.add_theme_stylebox_override("panel", UI.panel(UI.BG2, 22, Color("4a3f63"), 2))
 	p.z_index = 101
 	add_child(p)
@@ -675,8 +677,13 @@ func _sheet(title: String) -> PanelContainer:
 
 
 func _codex_close() -> void:
-	if _codex != null and is_instance_valid(_codex):
-		_codex.queue_free()
+	# The panel and dimmer are siblings. Remove both immediately from hit testing;
+	# queue_free alone leaves them blocking input until the end of the frame.
+	for part in [_sheet_panel, _codex]:
+		if is_instance_valid(part):
+			part.hide()
+			part.queue_free()
+	_sheet_panel = null
 	_codex = null
 
 

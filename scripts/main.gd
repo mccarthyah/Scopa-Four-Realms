@@ -56,9 +56,10 @@ func _swap(screen: Control) -> void:
 	current = screen
 	add_child(screen)
 	_layout_stage(screen)
-	screen.modulate.a = 0.0
-	var t := create_tween()
-	t.tween_property(screen, "modulate:a", 1.0, 0.22)
+	if Profile.anim_enabled and not UI.LOW_SPEC:
+		screen.modulate.a = 0.0
+		var t := create_tween()
+		t.tween_property(screen, "modulate:a", 1.0, 0.22)
 
 
 ## Keep the page a phone page: full-bleed on a tall/near-square window, but capped
@@ -88,10 +89,15 @@ func _detect_low_spec() -> void:
 		or adapter == ""
 	UI.LOW_SPEC = soft
 	print("[scopa] low_spec   : ", UI.LOW_SPEC,
-		" (square corners, flat backdrop, no glyph shadows)" if UI.LOW_SPEC else " (full visual style)")
+		" (simplified UI, rounded cards, no glyph shadows)" if UI.LOW_SPEC else " (full visual style)")
 	if OS.get_cmdline_user_args().has("--full-visuals"):
 		UI.LOW_SPEC = false
 		print("[scopa] low_spec   : overridden to false by --full-visuals")
+	# Software rendering can saturate a VM even on an unchanged menu. Leave CPU
+	# time for input and the host; this does not alter game logic or speed timers.
+	if UI.LOW_SPEC:
+		Engine.max_fps = 30
+		print("[scopa] frame cap  : 30 fps (software rendering)")
 
 
 func _report_environment() -> void:
@@ -144,8 +150,10 @@ func show_title() -> void:
 	# blank window with no explanation
 	await get_tree().process_frame
 	await get_tree().process_frame
+	if not is_instance_valid(s) or current != s:
+		return
 	_stage = "title:ready"
-	if is_instance_valid(s) and s.get_child_count() == 0:
+	if s.get_child_count() == 0:
 		push_error("Scopa: the title screen failed to build — see the log above")
 		_fatal_screen("The title screen could not be built.\nCheck the log for the first error.")
 
@@ -189,4 +197,5 @@ func _start_duel(config: Dictionary) -> void:
 	_swap(s)
 	await get_tree().process_frame
 	await get_tree().process_frame
-	_stage = "duel:ready"
+	if is_instance_valid(s) and current == s:
+		_stage = "duel:ready"

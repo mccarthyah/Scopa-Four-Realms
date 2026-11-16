@@ -48,7 +48,8 @@ func _ready() -> void:
 			"r": r.randf_range(0.7, 2.6),
 			"a": r.randf_range(0.12, 0.5),
 		})
-	set_process(true)
+	# With low-spec visuals there are no live layers to animate.
+	set_process(not UI.LOW_SPEC)
 
 
 ## Stop animating entirely: keeps the painted sky, drops the moving layers and

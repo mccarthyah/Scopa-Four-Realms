@@ -73,7 +73,7 @@ Everything in the brief, playable end to end:
 | **Classic Mode** (Oaths off) | ✅ toggle on the title screen |
 | Two **public quests** per duel, bonus Renown | ✅ 8 quests, rolled per match, evaluated at hand end |
 | **Campaign** with boss twists | ✅ 4 bosses: veiled table card, late-game fury, double treasure, Banner ties |
-| **Daily Puzzle** — fixed deal, goal in N moves | ✅ 3 deals, rotates by date, each solver-verified |
+| **Daily Puzzle** — fixed deal, goal in N moves | ✅ 3 hand-authored deals, rotates by date; audit checks solvability |
 | **Async duels** | ✅ foundation: the duel serialises exactly (verified) and a mid-hand duel resumes from the title screen. Needs a transport (see *Next*) |
 | Cosmetics only | ✅ card backs, board themes, saved in the profile; no card power anywhere |
 | **Card animation**, all optional | ✅ played cards spin 360° onto the field, captures flash a ring on every matched card, the opponent's hand sits face down above the playfield and thins as it plays. Slower play is a switch; **every** animation can be turned off in settings |
@@ -238,7 +238,7 @@ Three fixed deals rotate daily (stable per date):
 2. **Gather the Runestone** — capture the 7 of Forge in 2 moves (the Runestone can never fall to a sum).
 3. **Golden Banner** — finish with Primiera over 40.
 
-Every puzzle is **solver-verified** by the automated audit, so no daily deal can be impossible. Beating
+The automated audit searches each hand-authored puzzle for a solution within its move limit. Beating
 one marks it solved for the day on the title screen.
 
 ---

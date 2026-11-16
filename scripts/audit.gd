@@ -95,6 +95,7 @@ func run(m: Control) -> void:
 	await _test_table_fit()
 	await _test_display_scaling()
 	await _test_menu_sheets()
+	await _test_menu_pointer_input()
 	await _test_tap_play()
 	await _audit_screens()
 	print("=== AUDIT COMPLETE · failures=%d ===" % failures)
@@ -126,6 +127,15 @@ func _test_animation_settings() -> void:
 	main.add_child(off)
 	for i in range(30):
 		await get_tree().process_frame
+	# the opponent hand must render as face-down cards before a play starts, not mid-animation
+	var backs_off := 0
+	for cv in off._bot_row.get_children():
+		if cv is CardView and not cv.face_up:
+			backs_off += 1
+	if backs_off == off.duel.hands[1].size() and backs_off > 0:
+		ok("opponent hand shown as %d face-down cards" % backs_off)
+	else:
+		fail("opponent hand mismatch: %d backs for %d cards" % [backs_off, off.duel.hands[1].size()])
 	var played_off := _tap_first_card(off)
 	Profile.anim_enabled = true
 	var on = load("res://scripts/screens/duel.gd").new()
@@ -138,15 +148,6 @@ func _test_animation_settings() -> void:
 		ok("a card can be played with animation on and off")
 	else:
 		fail("animation setting blocked a play (%s/%s)" % [played_off, played_on])
-	# the opponent hand must render as face-down cards in both cases
-	var backs_off := 0
-	for cv in off._bot_row.get_children():
-		if cv is CardView and not cv.face_up:
-			backs_off += 1
-	if backs_off == off.duel.hands[1].size() and backs_off > 0:
-		ok("opponent hand shown as %d face-down cards" % backs_off)
-	else:
-		fail("opponent hand mismatch: %d backs for %d cards" % [backs_off, off.duel.hands[1].size()])
 	Profile.anim_enabled = saved[0]
 	Profile.anim_spin = saved[1]
 	Profile.anim_slow = saved[2]
@@ -218,6 +219,110 @@ func _test_menu_sheets() -> void:
 		title._codex_close()
 		await get_tree().process_frame
 	ok("campaign and codex sheets open without error")
+
+
+## Exercise the actual viewport hit-testing path, including after dismissal.
+## Calling _codex_close directly used to miss a stranded panel blocking the menu.
+func _test_menu_pointer_input() -> void:
+	var title = main.current
+	title._codex_close()
+	await get_tree().process_frame
+	title._open_codex()
+	for i in range(4):
+		await get_tree().process_frame
+	var panel: Control = title._sheet_panel
+	var close_button: Button = null
+	for n in _walk_controls(panel):
+		if n is Button and n.text == "✕":
+			close_button = n
+			break
+	if close_button == null:
+		fail("menu input: guide close button not found")
+		return
+	_send_mouse_click(close_button.get_global_rect().get_center())
+	await get_tree().process_frame
+	await get_tree().process_frame
+	if title._codex != null or is_instance_valid(panel):
+		fail("menu input: clicking close left a modal panel or dimmer")
+		title._codex_close()
+		return
+	ok("guide close responds to a real viewport mouse click and removes both layers")
+	# Repeated opens must replace, rather than accumulate, interactive sheets.
+	title._open_codex()
+	var replaced: Control = title._sheet_panel
+	title._open_puzzle()
+	await get_tree().process_frame
+	if is_instance_valid(replaced):
+		fail("menu input: replacing a sheet left the old panel behind")
+	else:
+		ok("replacing a menu sheet removes the previous sheet")
+	title._codex_close()
+	await get_tree().process_frame
+	# Use the arrow buttons as well as the body of a row: both must work after
+	# opening and closing other sheets, including rows reached by scrolling.
+	for mode_name in ["Campaign", "Daily Puzzle"]:
+		var mode_row: Control = null
+		var arrow: Button = null
+		for row in title._mode_list.get_children():
+			for n in _walk_controls(row):
+				if n is Label and n.text == mode_name:
+					mode_row = row
+		if mode_row != null:
+			for n in _walk_controls(mode_row):
+				if n is Button and n.text == "›":
+					arrow = n
+					break
+		if arrow == null:
+			fail("menu input: %s arrow not found" % mode_name)
+			continue
+		title._scroll.ensure_control_visible(mode_row)
+		for i in range(5):
+			await get_tree().process_frame
+		_send_mouse_click(arrow.get_global_rect().get_center())
+		await get_tree().process_frame
+		if title._sheet_panel == null:
+			fail("menu input: %s arrow did not open its sheet" % mode_name)
+		else:
+			ok("%s arrow opens its sheet after scrolling" % mode_name)
+		title._codex_close()
+		await get_tree().process_frame
+	var quick: Control = null
+	for row in title._mode_list.get_children():
+		for n in _walk_controls(row):
+			if n is Label and n.text == "Quick Duel":
+				quick = row
+				break
+	if quick == null:
+		fail("menu input: Quick Duel row not found")
+		return
+	title._scroll.ensure_control_visible(quick)
+	for i in range(5):
+		await get_tree().process_frame
+	var point: Vector2 = quick.get_global_rect().position + Vector2(35, quick.size.y * 0.5)
+	_send_mouse_click(point)
+	for i in range(5):
+		await get_tree().process_frame
+	if main.current == title:
+		fail("menu input: Quick Duel row did not respond after dismissing a sheet")
+	else:
+		ok("Quick Duel row accepts a real mouse click after dismissing the guide")
+		main.show_title()
+		for i in range(4):
+			await get_tree().process_frame
+
+
+func _send_mouse_click(pos: Vector2) -> void:
+	var motion := InputEventMouseMotion.new()
+	motion.position = pos
+	motion.global_position = pos
+	get_viewport().push_input(motion, true)
+	for down in [true, false]:
+		var event := InputEventMouseButton.new()
+		event.button_index = MOUSE_BUTTON_LEFT
+		event.pressed = down
+		event.position = pos
+		event.global_position = pos
+		get_viewport().push_input(event, true)
 
 
 func _walk_controls(n: Node) -> Array:
