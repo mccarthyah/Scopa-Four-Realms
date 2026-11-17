@@ -80,15 +80,18 @@ Everything in the brief, playable end to end:
 
 ### Window sizes and orientation
 
-Portrait keeps a scrollable title with the supplied scenic logo, four illustrated
-faction tiles, and a two-column mode grid when space permits. The portrait duel
-uses a compact logo above the status and playfield on taller screens. In landscape,
-the title gives the mode grid most of the width, with a smaller crest and compact
-faction picker beside it. The duel places status
-and the transparent logo on the left, table and hand in the centre, and quests
-and actions on the right; less-wide windows use a compact two-column version.
-Scroll indicators are hidden while scrolling remains enabled. The same match,
-selection, and open sheet survive a window resize or device rotation.
+The home screen offers Continue, New Game, Puzzle, Codex, Settings and About.
+Its six actions and complete record panel fit in portrait and landscape.
+Continue is available when a saved duel exists. New Game contains the faction
+picker and Duel, Fifteen, Ranked and Campaign. Both touch and mouse activate
+menu entries; swiping across an entry cancels its tap. Handheld layouts account
+for display safe areas.
+
+The portrait duel uses a compact logo above the status and playfield on taller
+screens. The landscape duel places status and its logo on the left, table and
+hand in the centre, and quests and actions on the right. Less-wide windows use
+a compact two-column version. The same match, faction selection and open sheet
+survive a window resize or device rotation.
 
 In **Settings → Orientation**, choose **Auto**, **Landscape Left**, **Landscape
 Right** or **Portrait**. The preference is saved. On supported Android and iOS

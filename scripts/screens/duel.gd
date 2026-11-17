@@ -1795,83 +1795,122 @@ func _show_hand_summary() -> void:
 	await get_tree().create_timer(0.5).timeout
 	var score: Dictionary = duel.score_hand()
 	var final := duel.match_over
-	var panel := _oath_sheet("HAND %d · RENOWN" % maxi(1, duel.hands_played), "", false)
+	var panel := _oath_sheet("RESULTS", "", false)
+	panel.anchor_top = 0.06
+	panel.anchor_bottom = 0.94
 	var body: VBoxContainer = panel.get_meta("body")
-
-	# score table
-	var grid := GridContainer.new()
-	grid.columns = 3
-	grid.add_theme_constant_override("h_separation", 8)
-	grid.add_theme_constant_override("v_separation", 6)
-	body.add_child(grid)
-	_hcell(grid, "", "YOU", UI.GOLD, true)
-	_hcell(grid, "", T.FACTIONS[duel.bot_faction].people.to_upper(), T.FACTIONS[duel.bot_faction].color, true)
-	_hcell(grid, "Loot · most cards", "", UI.TEXT, false)
-	_hcell(grid, "", str(score.cards[0]) + ("  ✦" if score.loot == 0 else ""), UI.TEXT, false)
-	_hcell(grid, "", str(score.cards[1]) + ("  ✦" if score.loot == 1 else ""), UI.TEXT, false)
-	_hcell(grid, "Treasury · Forge", "", UI.TEXT, false)
-	_hcell(grid, "", str(score.forge[0]) + ("  ✦" if score.treasury == 0 else ""), UI.TEXT, false)
-	_hcell(grid, "", str(score.forge[1]) + ("  ✦" if score.treasury == 1 else ""), UI.TEXT, false)
-	_hcell(grid, "Runestone", "", UI.TEXT, false)
-	_hcell(grid, "", "✧" if score.runestone == 0 else "—", UI.GOLD if score.runestone == 0 else UI.TEXT_DIM, false)
-	_hcell(grid, "", "✧" if score.runestone == 1 else "—", UI.GOLD if score.runestone == 1 else UI.TEXT_DIM, false)
-	_hcell(grid, "Banner · total", "", UI.TEXT, false)
-	_hcell(grid, "", str(score.primiera[0]) + ("  ✦" if score.banner == 0 else ""), UI.TEXT, false)
-	_hcell(grid, "", str(score.primiera[1]) + ("  ✦" if score.banner == 1 else ""), UI.TEXT, false)
-	_hcell(grid, "Glory · sweeps", "", UI.TEXT, false)
-	_hcell(grid, "", str(score.scopa[0]), UI.TEXT, false)
-	_hcell(grid, "", str(score.scopa[1]), UI.TEXT, false)
-	for f in range(4):
-		var info: Dictionary = T.FACTIONS[f]
-		_hcell(grid, "%s %s" % [T.SUIT_GLYPH[f], info.name], "", info.color, false)
-		var c0 := 0
-		var c1 := 0
-		for c in duel.captured[0]:
-			if C.faction(c) == f:
-				c0 += 1
-		for c in duel.captured[1]:
-			if C.faction(c) == f:
-				c1 += 1
-		_hcell(grid, "", str(c0), UI.TEXT, false)
-		_hcell(grid, "", str(c1), UI.TEXT, false)
-	_hcell(grid, "HAND RENOWN", "", UI.GOLD, true)
-	_hcell(grid, "", "+%d" % score.points[0], UI.PARCHMENT, true)
-	_hcell(grid, "", "+%d" % score.points[1], UI.PARCHMENT, true)
-
-	var ladder := ""
-	if duel.mode == T.Mode.RANKED:
-		ladder = "   ·   first to %d" % T.MODE_INFO[T.Mode.RANKED].target
-	var tot := UI.label("Match Renown   %d — %d%s" % [duel.renown[0], duel.renown[1], ladder], 24, UI.GOLD, true)
-	tot.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	body.add_child(tot)
-
-	var qs := HBoxContainer.new()
-	qs.alignment = BoxContainer.ALIGNMENT_CENTER
-	qs.add_theme_constant_override("separation", 10)
-	body.add_child(qs)
-	for i in range(duel.quests.size()):
-		var q: Dictionary = duel.quests[i]
-		qs.add_child(UI.chip(("✦ " if duel.quest_done[i] else "◇ ") + q.name, Color("2b2338"),
-			UI.GOOD if duel.quest_done[i] else UI.TEXT_DIM, 13))
-
+	var scroll := body.get_parent() as ScrollContainer
+	panel.remove_child(scroll)
+	var outer := VBoxContainer.new()
+	outer.add_theme_constant_override("separation", 12)
+	panel.add_child(outer)
+	outer.add_child(scroll)
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	var puzzle_result := -1
 	if not duel.puzzle.is_empty():
 		puzzle_result = int(_puzzle_verdict(body))
+	else:
+		var winner := duel.winner()
+		var headline := "HAND COMPLETE"
+		var color := UI.GOLD
+		if final:
+			headline = "YOU WIN!" if winner == 0 else ("OPPONENT WINS" if winner == 1 else "MATCH DRAW")
+			color = UI.GOOD if winner == 0 else (UI.BAD if winner == 1 else UI.GOLD)
+		var result := UI.label(headline, 40 if _landscape else 32, color, true, true)
+		result.add_theme_font_override("font", ThemeDB.fallback_font)
+		result.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		body.add_child(result)
+		var total := UI.label("You %d  —  Opponent %d" % [duel.renown[0], duel.renown[1]], 34 if _landscape else 28, UI.TEXT, false, true)
+		total.add_theme_font_override("font", ThemeDB.fallback_font)
+		total.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		body.add_child(total)
+		var quest_bonus := 0
+		for i in range(duel.quests.size()):
+			if duel.quest_done[i]:
+				quest_bonus += int(duel.quests[i].reward)
+		if quest_bonus > 0:
+			var bonus := UI.label("Your quest bonuses add +%d to the match score." % quest_bonus, 24 if _landscape else 20, UI.GOOD, false, true)
+			bonus.add_theme_font_override("font", ThemeDB.fallback_font)
+			body.add_child(bonus)
+		var explanation := "Final score in Renown points, including quest bonuses. Higher score wins." if final else "Current match score in Renown points. More hands remain."
+		if not final:
+			explanation += " " + ("You lead." if winner == 0 else ("Opponent leads." if winner == 1 else "The match is tied."))
+		if duel.mode == T.Mode.RANKED:
+			explanation += " Hand %d of 3." % duel.hands_played
+		var meaning := UI.label(explanation, 24 if _landscape else 20, UI.TEXT_DIM, false, true)
+		meaning.add_theme_font_override("font", ThemeDB.fallback_font)
+		body.add_child(meaning)
+
+	var scoring_title := UI.label("HOW THIS HAND SCORED", 24 if _landscape else 20, UI.GOLD)
+	scoring_title.add_theme_font_override("font", ThemeDB.fallback_font)
+	body.add_child(scoring_title)
+	var grid := GridContainer.new()
+	grid.columns = 3
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grid.add_theme_constant_override("h_separation", 12)
+	grid.add_theme_constant_override("v_separation", 12)
+	body.add_child(grid)
+	_hcell(grid, "Award", "", UI.TEXT_DIM, true)
+	_hcell(grid, "", "You", UI.GOLD, true)
+	_hcell(grid, "", "Opponent", UI.TEXT, true)
+	var tie_notes := PackedStringArray()
+	for category in [
+		["Most cards", "cards", "loot", "cards"],
+		["Most Forge cards", "forge", "treasury", "Forge"],
+		["Best Banner", "primiera", "banner", "strength"],
+	]:
+		_hcell(grid, category[0], "", UI.TEXT, false)
+		var owner: int = score[category[2]]
+		if score[category[1]][0] == score[category[1]][1] and owner >= 0:
+			tie_notes.append("%s tied. %s wins this award through a faction or boss tie rule." % [category[0], "You" if owner == 0 else "Opponent"])
+		for who in range(2):
+			var points := 1 if int(score[category[2]]) == who else 0
+			_hcell(grid, "", "%d %s\n+%d %s" % [score[category[1]][who], category[3], points, "point" if points == 1 else "points"], UI.GOOD if points else UI.TEXT_DIM, false)
+	_hcell(grid, "Runestone\n7 of Forge", "", UI.TEXT, false)
+	for who in range(2):
+		var points := 1 if int(score.runestone) == who else 0
+		_hcell(grid, "", ("Captured\n+1 point" if points else "+0 points"), UI.GOOD if points else UI.TEXT_DIM, false)
+	_hcell(grid, "Sweeps", "", UI.TEXT, false)
+	for who in range(2):
+		_hcell(grid, "", "+%d points" % score.scopa[who], UI.GOOD if score.scopa[who] else UI.TEXT_DIM, false)
+	_hcell(grid, "Hand points", "", UI.GOLD, true)
+	_hcell(grid, "", "+%d" % score.points[0], UI.GOLD, true)
+	_hcell(grid, "", "+%d" % score.points[1], UI.TEXT, true)
+	if not tie_notes.is_empty():
+		var tie_explanation := UI.label(" ".join(tie_notes), 24 if _landscape else 19, UI.TEXT_DIM, false, true)
+		tie_explanation.add_theme_font_override("font", ThemeDB.fallback_font)
+		body.add_child(tie_explanation)
+	var quests_title := UI.label("QUEST BONUSES · THIS MATCH", 24 if _landscape else 20, UI.GOLD)
+	quests_title.add_theme_font_override("font", ThemeDB.fallback_font)
+	if not duel.quests.is_empty():
+		body.add_child(quests_title)
+	else:
+		quests_title.free()
+	for i in range(duel.quests.size()):
+		var quest: Dictionary = duel.quests[i]
+		var bonus := "%s · You earned +%d points" % [quest.name, quest.reward] if duel.quest_done[i] else "%s · Not completed (+0)" % quest.name
+		var quest_line := UI.label(bonus, 24 if _landscape else 20, UI.GOOD if duel.quest_done[i] else UI.TEXT_DIM, false, true)
+		quest_line.add_theme_font_override("font", ThemeDB.fallback_font)
+		body.add_child(quest_line)
 
 	if final:
 		_record_match(puzzle_result)
-		if duel.mode == T.Mode.RANKED or duel.mode == T.Mode.QUICK or duel.mode == T.Mode.CAMPAIGN:
+		if duel.puzzle.is_empty():
 			_play_end_sound(duel.winner())
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 10)
-		body.add_child(row)
-		var again := UI.button("Play again", "primary")
+		outer.add_child(row)
+		var again := UI.button("Play again", "primary", 28 if _landscape else 24)
+		again.custom_minimum_size.y = 80 if _landscape else 56
+		again.add_theme_font_override("font", ThemeDB.fallback_font)
 		again.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		again.pressed.connect(func():
 			_close_overlay()
 			play_again.emit(_fresh_config()))
 		row.add_child(again)
-		var menu := UI.button("Menu", "secondary")
+		var menu := UI.button("Menu", "secondary", 28 if _landscape else 24)
+		menu.custom_minimum_size.y = 80 if _landscape else 56
+		menu.add_theme_font_override("font", ThemeDB.fallback_font)
 		menu.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		menu.pressed.connect(func():
 			_close_overlay()
@@ -1884,9 +1923,11 @@ func _show_hand_summary() -> void:
 			quick.pressed.connect(func():
 				_close_overlay()
 				play_again.emit(c))
-			body.add_child(quick)
+			outer.add_child(quick)
 	else:
-		var nxt := UI.button("Next hand", "primary")
+		var nxt := UI.button("Next hand", "primary", 28 if _landscape else 24)
+		nxt.custom_minimum_size.y = 80 if _landscape else 56
+		nxt.add_theme_font_override("font", ThemeDB.fallback_font)
 		nxt.pressed.connect(func():
 			_close_overlay()
 			duel.next_hand()
@@ -1898,7 +1939,7 @@ func _show_hand_summary() -> void:
 			_refresh_all()
 			if duel.turn == 1:
 				_run_bot())
-		body.add_child(nxt)
+		outer.add_child(nxt)
 		if duel.mode == T.Mode.RANKED:
 			var note := UI.label("Best of three · first to %d Renown wins the match" % T.MODE_INFO[T.Mode.RANKED].target, 14, UI.TEXT_DIM)
 			note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -1907,7 +1948,9 @@ func _show_hand_summary() -> void:
 
 func _hcell(grid: GridContainer, txt: String, val: String, col: Color, header: bool) -> void:
 	var use := val if txt == "" else txt
-	var l := UI.label(use, 17 if not header else 15, col, header)
+	var l := UI.label(use, 24 if _landscape else 19, col, false, true)
+	l.add_theme_font_override("font", ThemeDB.fallback_font)
+	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	if header:
 		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	grid.add_child(l)
@@ -1920,16 +1963,16 @@ func _puzzle_verdict(body: VBoxContainer) -> bool:
 	match goal:
 		"scopa":
 			ok = duel.scopa_count[0] >= 1
-			msg = "Clear the table with a capture to score a sweep."
+			msg = "%d sweeps earned. You need at least 1." % duel.scopa_count[0]
 		"runestone":
 			ok = duel.captured[0].has(C.make(7, T.RUNESTONE_SUIT))
-			msg = "Capture the 7 of Forge — the Runestone."
+			msg = "Runestone captured." if ok else "The Runestone is outside your captured pile."
 		"primiera":
 			ok = duel.primiera_total(duel.captured[0]) > 40
-			msg = "Finish with a Banner total above 40."
+			msg = "Banner strength %d. You need more than 40." % duel.primiera_total(duel.captured[0])
 		"captures":
 			ok = duel.captured[0].size() >= 12
-			msg = "Capture at least 12 cards."
+			msg = "%d cards captured. You need at least 12." % duel.captured[0].size()
 	_solved_puzzle(ok, msg, body)
 	return ok
 
@@ -1940,10 +1983,12 @@ func _solved_puzzle(ok: bool, msg: String, body: VBoxContainer) -> void:
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 2)
 	p.add_child(v)
-	var t := UI.label("PUZZLE SOLVED" if ok else "PUZZLE FAILED", 20, UI.GOOD if ok else UI.BAD, true)
+	var t := UI.label("PUZZLE SOLVED" if ok else "PUZZLE FAILED", 36 if _landscape else 28, UI.GOOD if ok else UI.BAD, true)
+	t.add_theme_font_override("font", ThemeDB.fallback_font)
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(t)
-	var s := UI.label(msg, 15, UI.TEXT_DIM)
+	var s := UI.label(msg, 24 if _landscape else 20, UI.TEXT_DIM)
+	s.add_theme_font_override("font", ThemeDB.fallback_font)
 	s.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	s.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(s)

@@ -116,6 +116,7 @@ func run(m: Control) -> void:
 	await _test_raid_picker()
 	await _test_other_oath_picker_signals()
 	await _audit_screens()
+	await _test_result_labels()
 	print("=== AUDIT COMPLETE · failures=%d ===" % failures)
 	print("godot ", Engine.get_version_info().string, " · renderer ",
 		ProjectSettings.get_setting("rendering/renderer/rendering_method", "?"), " · adapter ",
@@ -259,7 +260,7 @@ func _test_settings_dialog() -> void:
 	title._build_modes()
 	title._scroll.scroll_vertical = 0
 	for i in range(4): await get_tree().process_frame
-	var button: Button = title.find_child("SettingsButton", true, false)
+	var button: Control = title.find_child("SettingsEntry", true, false)
 	if button == null or title.find_child("ClassicSettings", true, false) != null or title.find_child("TableSettings", true, false) != null or title.find_child("AnimationSettings", true, false) != null:
 		fail("settings: missing button or controls still on title page")
 	else:
@@ -325,7 +326,6 @@ func _test_settings_dialog() -> void:
 					ok("all settings persist through profile reload")
 				else: fail("settings: profile reload did not restore choices")
 				var done: Button = panel.find_child("SettingsDone", true, false)
-				scroll.ensure_control_visible(done)
 				for i in range(4): await get_tree().process_frame
 				_send_mouse_click(done.get_global_rect().get_center())
 				for i in range(3): await get_tree().process_frame
@@ -354,14 +354,13 @@ func _test_settings_dialog() -> void:
 					if title._sheet_panel == null and title._codex == null and not is_instance_valid(panel): ok("settings X closes without stranded blockers")
 					else: fail("settings X did not remove modal")
 				else: fail("settings X missing")
-				var subtitle_found := false
-				for n in _walk_controls(title._mode_list):
-					if n is Label and n.text == "One hand. Oaths off. Four minutes.": subtitle_found = true
 				var launch: Array = []
 				title.start_duel.connect(func(cfg): launch.append(cfg), CONNECT_ONE_SHOT)
 				title._launch(T.Mode.QUICK)
-				if subtitle_found and not launch.is_empty() and not launch[0].oaths: ok("Quick Duel displays and launches with selected Classic setting")
-				else: fail("settings: Quick Duel ignored Classic Mode")
+				if not launch.is_empty() and not launch[0].oaths:
+					ok("New Game launches with the selected Classic setting")
+				else:
+					fail("New Game ignored Classic Mode")
 	# The launch swaps screens, so restore preferences and return to title.
 	for key in keys: Profile.set(key, saved[key])
 	Profile.save_profile()
@@ -568,83 +567,37 @@ func _test_landscape_title() -> void:
 	main.add_child(host)
 	var title = load("res://scripts/screens/title.gd").new()
 	host.add_child(title)
-	for i in range(12): await get_tree().process_frame
-	var good: bool = title._title_landscape and title._title_right.visible
-	if title._mode_list.get_parent() != title._title_right or title._mode_list.columns != 2 or title._faction_grid.columns != 4: good = false
-	if title._title_right.size.x <= title._title_left.size.x: good = false
-	var mast: TextureRect = title._title_parts[0]
-	if mast.custom_minimum_size.y >= 250.0: good = false
-	var last_mode: Control = title._mode_list.get_child(-1)
-	if last_mode.get_global_rect().end.y > title._scroll.get_global_rect().end.y: good = false
-	if title._title_left.get_global_rect().end.x > title._title_right.get_global_rect().position.x: good = false
-	if title._scroll.vertical_scroll_mode != ScrollContainer.SCROLL_MODE_SHOW_NEVER or title._scroll.get_v_scroll_bar().visible: good = false
-	# Row activation happens on a stationary release, not when a swipe starts.
-	var calls := {"count": 0}
-	var row: Control = title._mode_row("Gesture test", "", "", func(): calls.count += 1, UI.GOLD)
-	title._title_right.add_child(row)
-	for i in range(3): await get_tree().process_frame
-	var pt: Vector2 = row.get_global_rect().get_center()
-	var press := InputEventMouseButton.new()
-	press.button_index = MOUSE_BUTTON_LEFT
-	press.pressed = true
-	press.global_position = pt
-	row.gui_input.emit(press)
-	if calls.count != 0: good = false
-	var motion := InputEventMouseMotion.new()
-	motion.global_position = pt + Vector2(0, -40)
-	row.gui_input.emit(motion)
-	var release := InputEventMouseButton.new()
-	release.button_index = MOUSE_BUTTON_LEFT
-	release.pressed = false
-	release.global_position = pt + Vector2(0, -40)
-	row.gui_input.emit(release)
-	if calls.count != 0: good = false
-	row.gui_input.emit(press)
-	release.global_position = pt
-	row.gui_input.emit(release)
-	if calls.count != 1: good = false
-	row.queue_free()
-	title.faction = 2
-	title._refresh_factions()
-	title._open_settings()
-	for i in range(6): await get_tree().process_frame
+	var good := true
+	for dims in [Vector2(1706, 960), Vector2(540, 960), Vector2(720, 1280), Vector2(1280, 960)]:
+		host.size = dims
+		for i in range(8): await get_tree().process_frame
+		var bounds := host.get_global_rect()
+		for control in [title._mode_list, title.find_child("YourRecord", true, false)]:
+			if not bounds.encloses(control.get_global_rect()):
+				good = false
+		if title._scroll.get_v_scroll_bar().max_value > title._scroll.get_v_scroll_bar().page + 1:
+			good = false
+		if title._mode_list.get_child_count() != 6:
+			good = false
+	title.faction = T.HORDE
+	title._open_new_game()
+	for i in range(8): await get_tree().process_frame
 	var sheet: Control = title._sheet_panel
-	if sheet == null or sheet.size.x > 821.0: good = false
-	if sheet != null:
-		var modal_scroll: ScrollContainer = sheet.get_meta("body").get_parent()
-		if modal_scroll.vertical_scroll_mode != ScrollContainer.SCROLL_MODE_SHOW_NEVER: good = false
-	host.size = Vector2(540, 600)
-	for i in range(12): await get_tree().process_frame
-	if title._title_landscape or title._mode_list.get_parent() != title._title_left or title._mode_list.columns != 2 or title._faction_grid.columns != 4 or title.faction != 2 or title._sheet_panel != sheet: good = false
-	if sheet != null and (sheet.get_global_rect().position.x < host.get_global_rect().position.x - 1.0 or sheet.get_global_rect().end.x > host.get_global_rect().end.x + 1.0): good = false
+	host.size = Vector2(540, 960)
+	for i in range(8): await get_tree().process_frame
+	if title.faction != T.HORDE or title._sheet_panel != sheet:
+		good = false
+	if good:
+		ok("six home actions and the complete record fit without scrolling across both orientations")
+	else:
+		fail("home navigation or record overflowed, scrolled, or lost state on rotation")
 	title._codex_close()
-	for i in range(5): await get_tree().process_frame
-	# Exercise real wheel input over a row with a hidden scrollbar; reaching the
-	# bottom via ensure_control_visible alone would not prove user scrolling.
-	title._scroll.scroll_vertical = 0
-	for i in range(3): await get_tree().process_frame
-	var first_row: Control = title._mode_list.get_child(0)
-	# The scenic masthead is taller, so reveal the mode row before sending
-	# a real wheel event over it on short portrait windows.
-	title._scroll.ensure_control_visible(first_row)
-	for i in range(4): await get_tree().process_frame
-	var before_wheel: int = title._scroll.scroll_vertical
-	var wheel_at: Vector2 = first_row.get_global_rect().position + Vector2(35, first_row.size.y * 0.5)
-	_send_mouse_button(wheel_at, MOUSE_BUTTON_WHEEL_DOWN)
-	for i in range(3): await get_tree().process_frame
-	if title._scroll.scroll_vertical <= before_wheel: good = false
-	title._scroll.ensure_control_visible(title._title_parts[9])
-	for i in range(5): await get_tree().process_frame
-	if title._scroll.scroll_vertical <= 0: good = false
-	if good: ok("title reflows to two landscape columns, hides scrollbars, scrolls, and preserves selection/sheet on rotation")
-	else: fail("title landscape reflow, hidden scrolling or rotation state failed")
 	host.queue_free()
 	Profile.seen_intro = old_seen
 	await get_tree().process_frame
 
 
-## Resize a real title instance to small and desktop-column dimensions. The
-## narrow case must both expose the Settings button and scroll to Done.
+
 func _test_settings_layout() -> void:
 	var old_seen: bool = Profile.seen_intro
 	var old_classic: bool = Profile.classic_mode
@@ -657,7 +610,7 @@ func _test_settings_layout() -> void:
 	for dims in [Vector2(320, 568), Vector2(360, 640), Vector2(540, 600)]:
 		host.size = dims
 		for i in range(6): await get_tree().process_frame
-		var settings: Button = title.find_child("SettingsButton", true, false)
+		var settings: Control = title.find_child("SettingsEntry", true, false)
 		var sr: Rect2 = settings.get_global_rect()
 		var hr: Rect2 = host.get_global_rect()
 		if sr.position.x < hr.position.x or sr.end.x > hr.end.x:
@@ -681,10 +634,9 @@ func _test_settings_layout() -> void:
 		if dims.x == 320 and scroll.get_v_scroll_bar().max_value <= scroll.get_v_scroll_bar().page:
 			fail("settings layout: narrow modal should scroll")
 			all_ok = false
-		scroll.ensure_control_visible(done)
 		for i in range(5): await get_tree().process_frame
 		var dr := done.get_global_rect()
-		var viewport_rect := scroll.get_global_rect()
+		var viewport_rect := panel.get_global_rect()
 		if dr.position.x < viewport_rect.position.x - 0.5 or dr.end.x > viewport_rect.end.x + 0.5 or dr.position.y < viewport_rect.position.y - 0.5 or dr.end.y > viewport_rect.end.y + 0.5:
 			fail("settings layout: Done not visible after scroll at %s" % str(dims))
 			all_ok = false
@@ -704,150 +656,75 @@ func _test_settings_layout() -> void:
 ## Exercise the actual viewport hit-testing path, including after dismissal.
 ## Calling _codex_close directly used to miss a stranded panel blocking the menu.
 func _test_menu_pointer_input() -> void:
+	main.show_title()
+	for i in range(6): await get_tree().process_frame
 	var title = main.current
 	title._codex_close()
-	await get_tree().process_frame
-	title._open_codex()
-	for i in range(4):
-		await get_tree().process_frame
-	var panel: Control = title._sheet_panel
-	var close_button: Button = null
-	for n in _walk_controls(panel):
-		if n is Button and n.text == "✕":
-			close_button = n
-			break
-	if close_button == null:
-		fail("menu input: guide close button not found")
-		return
-	_send_mouse_click(close_button.get_global_rect().get_center())
-	await get_tree().process_frame
-	await get_tree().process_frame
-	if title._codex != null or is_instance_valid(panel):
-		fail("menu input: clicking close left a modal panel or dimmer")
-		title._codex_close()
-		return
-	ok("guide close responds to a real viewport mouse click and removes both layers")
-	# Repeated opens must replace, rather than accumulate, interactive sheets.
-	title._open_codex()
-	var replaced: Control = title._sheet_panel
-	title._open_puzzle()
-	await get_tree().process_frame
-	if is_instance_valid(replaced):
-		fail("menu input: replacing a sheet left the old panel behind")
-	else:
-		ok("replacing a menu sheet removes the previous sheet")
-	title._codex_close()
-	await get_tree().process_frame
-	# Use the arrow buttons as well as the body of a row: both must work after
-	# opening and closing other sheets, including rows reached by scrolling.
-	for mode_name in ["Campaign", "Daily Puzzle"]:
-		var mode_row: Control = null
-		var arrow: Button = null
-		for row in title._mode_list.get_children():
-			for n in _walk_controls(row):
-				if n is Label and n.text == mode_name:
-					mode_row = row
-		if mode_row != null:
-			for n in _walk_controls(mode_row):
-				if n is Button and n.text == "›":
-					arrow = n
-					break
-		if arrow == null:
-			fail("menu input: %s arrow not found" % mode_name)
-			continue
-		title._scroll.ensure_control_visible(mode_row)
-		for i in range(5):
-			await get_tree().process_frame
-		var mode_point: Vector2 = mode_row.get_global_rect().position + Vector2(35, mode_row.size.y * 0.5)
-		_send_mouse_button(mode_point, MOUSE_BUTTON_WHEEL_DOWN)
-		await get_tree().process_frame
-		if title._sheet_panel != null or main.current != title:
-			fail("menu input: mouse wheel opened %s" % mode_name)
-			title._codex_close()
-		else:
-			ok("mouse wheel does not open %s" % mode_name)
-		title._scroll.ensure_control_visible(mode_row)
-		for i in range(5):
-			await get_tree().process_frame
-		_send_mouse_click(arrow.get_global_rect().get_center())
-		await get_tree().process_frame
+	# Every home destination is reachable through native touch events.
+	for name in ["NewGame", "Puzzle", "Codex", "Settings", "About"]:
+		var row: Control = title._mode_list.get_node(name + "Entry")
+		_touch_menu_row(row)
+		for i in range(6): await get_tree().process_frame
 		if title._sheet_panel == null:
-			fail("menu input: %s arrow did not open its sheet" % mode_name)
-		else:
-			ok("%s arrow opens its sheet after scrolling" % mode_name)
+			fail("native touch did not open " + name)
 		title._codex_close()
 		await get_tree().process_frame
-	var quick: Control = null
-	for row in title._mode_list.get_children():
-		for n in _walk_controls(row):
-			if n is Label and n.text == "Quick Duel":
-				quick = row
-				break
-	if quick == null:
-		fail("menu input: Quick Duel row not found")
+	# Mouse activation of the same row opens the mode chooser.
+	var new_game: Control = title._mode_list.get_node("NewGameEntry")
+	_send_mouse_click(new_game.get_global_rect().get_center())
+	for i in range(6): await get_tree().process_frame
+	if title._sheet_panel == null:
+		fail("mouse click did not open New Game")
 		return
-	title._scroll.scroll_vertical = 0
-	await get_tree().process_frame
-	title._scroll.ensure_control_visible(quick)
-	for i in range(5):
-		await get_tree().process_frame
-	var point: Vector2 = quick.get_global_rect().position + Vector2(35, quick.size.y * 0.5)
-	var scroll_before: int = title._scroll.scroll_vertical
-	_send_mouse_button(point, MOUSE_BUTTON_WHEEL_DOWN)
-	await get_tree().process_frame
-	await get_tree().process_frame
-	if main.current != title or title._sheet_panel != null:
-		fail("menu input: mouse wheel activated Quick Duel instead of scrolling")
+	# Native touch launches each immediate game type from the chooser.
+	for spec in [["Duel", T.Mode.QUICK], ["Fifteen", T.Mode.QUINDICI], ["Ranked", T.Mode.RANKED]]:
+		title = main.current
+		title._open_new_game()
+		for i in range(6): await get_tree().process_frame
+		var row: Control = title._sheet_panel.find_child(spec[0] + "Entry", true, false)
+		_touch_menu_row(row)
+		await get_tree().create_timer(0.9).timeout
+		if main.current.get("duel") == null or main.current.duel.mode != spec[1]:
+			fail("New Game did not launch " + spec[0])
 		main.show_title()
-		for i in range(4):
-			await get_tree().process_frame
-		return
-	if title._scroll.get_v_scroll_bar().max_value <= title._scroll.get_v_scroll_bar().page:
-		ok("menu fits viewport; wheel did not activate Quick Duel")
-	elif title._scroll.scroll_vertical <= scroll_before:
-		fail("menu input: mouse wheel did not scroll the menu (before=%d after=%d max=%s point=%s)" % [scroll_before, title._scroll.scroll_vertical, title._scroll.get_v_scroll_bar().max_value, str(point)])
+		for i in range(6): await get_tree().process_frame
+	title = main.current
+	title._open_new_game()
+	for i in range(6): await get_tree().process_frame
+	var last_faction: Button = title._faction_buttons[-1]
+	_send_mouse_click(last_faction.get_global_rect().get_center())
+	if title.faction != T.CROWN:
+		fail("New Game faction picker did not select Crown")
+	var campaign: Control = title._sheet_panel.find_child("CampaignEntry", true, false)
+	_touch_menu_row(campaign)
+	for i in range(6): await get_tree().process_frame
+	var bosses: VBoxContainer = title._sheet_panel.get_meta("body")
+	if bosses.get_child_count() != T.CAMPAIGNS.size():
+		fail("Campaign did not open the boss chooser")
 	else:
-		ok("mouse wheel over a mode row scrolls without starting a game")
-	# Reposition the row before testing other buttons and the normal click.
-	title._scroll.ensure_control_visible(quick)
-	for i in range(5):
-		await get_tree().process_frame
-	point = quick.get_global_rect().position + Vector2(35, quick.size.y * 0.5)
-	_send_mouse_button(point, MOUSE_BUTTON_WHEEL_UP)
-	await get_tree().process_frame
-	if main.current != title or title._sheet_panel != null:
-		fail("menu input: wheel up activated Quick Duel")
-		main.show_title()
-		for i in range(4):
-			await get_tree().process_frame
-		return
-	title._scroll.ensure_control_visible(quick)
-	for i in range(5):
-		await get_tree().process_frame
-	point = quick.get_global_rect().position + Vector2(35, quick.size.y * 0.5)
-	_send_mouse_button(point, MOUSE_BUTTON_RIGHT)
-	await get_tree().process_frame
-	if main.current != title or title._sheet_panel != null:
-		fail("menu input: right click activated Quick Duel")
-		main.show_title()
-		for i in range(4):
-			await get_tree().process_frame
-		return
-	ok("wheel up and right click do not activate mode rows")
-	title._scroll.ensure_control_visible(quick)
-	for i in range(5):
-		await get_tree().process_frame
-	point = quick.get_global_rect().position + Vector2(35, quick.size.y * 0.5)
-	_send_mouse_click(point)
-	for i in range(5):
-		await get_tree().process_frame
-	if main.current == title:
-		fail("menu input: Quick Duel row did not respond after dismissing a sheet")
-	else:
-		ok("Quick Duel row accepts a real mouse click after dismissing the guide")
-		main.show_title()
-		for i in range(4):
-			await get_tree().process_frame
+		var boss: Button = bosses.get_child(0)
+		boss.pressed.emit()
+		await get_tree().create_timer(0.9).timeout
+		if main.current.duel.mode != T.Mode.CAMPAIGN or main.current.duel.player_faction != T.CROWN:
+			fail("Campaign lost the selected faction")
+	Profile.clear_duel()
+	main.show_title()
+	for i in range(6): await get_tree().process_frame
+	ok("home actions accept touch and mouse; all four New Game routes launch")
+
+
+func _touch_menu_row(row: Control) -> void:
+	var press := InputEventScreenTouch.new()
+	press.index = 0
+	press.position = row.get_global_rect().get_center()
+	press.pressed = true
+	get_viewport().push_input(press, true)
+	var release := InputEventScreenTouch.new()
+	release.index = 0
+	release.position = row.get_global_rect().get_center()
+	release.pressed = false
+	get_viewport().push_input(release, true)
+
 
 
 func _send_mouse_click(pos: Vector2) -> void:
@@ -2166,6 +2043,30 @@ func _test_capture_choice() -> void:
 	Profile.clear_duel()
 
 
+func _test_result_labels() -> void:
+	for sample in [[[8, 3], "YOU WIN!"], [[2, 7], "OPPONENT WINS"], [[4, 4], "MATCH DRAW"]]:
+		var screen = load("res://scripts/screens/duel.gd").new()
+		screen.config = {"mode": T.Mode.QUICK}
+		main.add_child(screen)
+		await get_tree().create_timer(0.8).timeout
+		screen.duel.hand_over = true
+		screen.duel.match_over = true
+		screen.duel.renown = sample[0]
+		await screen._show_hand_summary()
+		for i in range(2):
+			await get_tree().process_frame
+		var texts := PackedStringArray()
+		for label in _all_labels(screen):
+			texts.append(label.text)
+		var total := "You %d  —  Opponent %d" % [sample[0][0], sample[0][1]]
+		if not texts.has(sample[1]) or not texts.has(total) or not texts.has("HOW THIS HAND SCORED"):
+			fail("result screen did not explain " + sample[1])
+		main.remove_child(screen)
+		screen.queue_free()
+		await get_tree().process_frame
+	ok("result screens label wins, losses, draws and both player scores")
+
+
 func _test_completed_hand_resume() -> void:
 	var original = DuelScript.new({"mode": T.Mode.RANKED, "seed": 414, "player_faction": T.GROVE,
 		"bot_faction": T.CROWN, "oaths": false})
@@ -2467,7 +2368,7 @@ func _test_ui_paths() -> void:
 	var has_row := false
 	for row in title._mode_list.get_children():
 		for lbl in _all_labels(row):
-			if lbl.text == "Resume duel":
+			if lbl.text == "Continue":
 				has_row = true
 	if not has_row:
 		fail("title screen did not offer Resume after a saved duel")

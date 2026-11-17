@@ -18,7 +18,6 @@ const C := preload("res://scripts/game/cards.gd")
 var faction := T.FORGE
 var _faction_buttons: Array = []
 var _mode_list: GridContainer
-var _faction_grid: GridContainer
 var _classic_toggle: Button
 var _codex: Control
 var _sheet_panel: PanelContainer
@@ -103,33 +102,6 @@ func _build() -> void:
 	mast.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	col.add_child(mast)
 
-	# ---- faction picker ------------------------------------------------
-	var oath_heading := _section_header("CHOOSE YOUR OATH", "Change faction and the Oath you can spend Favor on.")
-	col.add_child(oath_heading)
-	var heading_row: HBoxContainer = oath_heading.get_child(0)
-	var settings := UI.button("Settings", "ghost", 17)
-	settings.name = "SettingsButton"
-	settings.custom_minimum_size = Vector2(92, 40)
-	settings.tooltip_text = "Classic mode, table appearance and animations"
-	settings.pressed.connect(_open_settings)
-	heading_row.add_child(settings)
-	var row := GridContainer.new()
-	_faction_grid = row
-	row.columns = 4
-	row.add_theme_constant_override("h_separation", 8)
-	row.add_theme_constant_override("v_separation", 8)
-	col.add_child(row)
-	for f in range(4):
-		var b := _faction_card(f)
-		row.add_child(b)
-		_faction_buttons.append(b)
-	_refresh_factions()
-
-	# ---- modes ---------------------------------------------------------
-	var mode_gap := UI.spacer(2)
-	col.add_child(mode_gap)
-	var mode_heading := _section_header("DUEL TYPES", "")
-	col.add_child(mode_heading)
 	_mode_list = GridContainer.new()
 	_mode_list.columns = 1
 	_mode_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -138,19 +110,9 @@ func _build() -> void:
 	col.add_child(_mode_list)
 	_build_modes()
 
-	# Settings live in their own dialog; keep the record on the title page.
-	var stats_gap := UI.spacer(4)
-	col.add_child(stats_gap)
 	var stats := _stats_panel()
 	col.add_child(stats)
-	var foot_gap := UI.spacer(10)
-	col.add_child(foot_gap)
-
-	var foot := UI.label("v1.0 · cosmetically yours, mechanically fair", 15, Color(UI.TEXT_DIM.r, UI.TEXT_DIM.g, UI.TEXT_DIM.b, 0.6), false, true)
-	foot.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	col.add_child(foot)
-	_title_parts = [mast, oath_heading, row, mode_gap, mode_heading, _mode_list,
-		stats_gap, stats, foot_gap, foot]
+	_title_parts = [mast, _mode_list, stats]
 	_update_title_layout()
 
 
@@ -161,57 +123,54 @@ func _notification(what: int) -> void:
 
 
 ## Move the existing controls so rotation keeps the selected faction, scroll
-## interactions, settings and callbacks. Portrait is still one touch-scroll page.
+## interactions, settings and callbacks. Home actions fit in both orientations.
 func _update_title_layout() -> void:
 	if _title_parts.is_empty():
 		return
 	var wide := size.x > size.y * 1.12
-	_faction_grid.columns = 2 if wide and size.x < 1350.0 else 4
-	_mode_list.columns = 2 if (wide and size.x >= 1160.0) or (not wide and size.x >= 460.0) else 1
-	if wide:
-		var margin := clampi(int(size.x * 0.04), 24, 68)
-		_title_margin.add_theme_constant_override("margin_left", margin)
-		_title_margin.add_theme_constant_override("margin_right", margin)
-	if wide == _title_landscape:
-		return
+	var rotated := wide != _title_landscape
 	_title_landscape = wide
+	_mode_list.columns = 2
 	var mast: TextureRect = _title_parts[0]
 	mast.texture = LOGO_TRANSPARENT if wide else LOGO_SCENIC
-	mast.custom_minimum_size.y = 208.0 if wide else 330.0
-	_title_left.size_flags_stretch_ratio = 0.58 if wide else 1.0
+	mast.custom_minimum_size.y = clampf(size.y * 0.31, 150.0, 320.0) if wide else clampf(size.y * 0.25, 80.0, 240.0) if size.y >= 700.0 else 80.0
+	_title_left.size_flags_stretch_ratio = 0.8 if wide else 1.0
 	_title_right.size_flags_stretch_ratio = 1.0
-	_title_left.add_theme_constant_override("separation", 12 if wide else 14)
-	_title_columns.add_theme_constant_override("separation", 48 if wide else 44)
-	for button in _faction_buttons:
-		button.custom_minimum_size.y = 144.0 if wide else 132.0
-	var oath_heading: Control = _title_parts[1]
-	oath_heading.get_child(0).get_child(0).text = "FACTION" if wide else "CHOOSE YOUR OATH"
-	oath_heading.get_child(1).visible = not wide
-	var mode_heading: Control = _title_parts[4]
-	mode_heading.get_child(0).get_child(0).text = "PLAY" if wide else "DUEL TYPES"
-	mode_heading.get_child(0).get_child(0).add_theme_font_size_override("font_size", 34 if wide else 19)
-	_title_parts[8].visible = not wide
-	_title_parts[9].visible = not wide
-	_mode_list.add_theme_constant_override("h_separation", 18 if wide else 10)
-	_mode_list.add_theme_constant_override("v_separation", 18 if wide else 10)
+	_title_left.add_theme_constant_override("separation", 16)
+	_title_columns.add_theme_constant_override("separation", 32)
+	_title_margin.add_theme_constant_override("margin_left", 24 if wide else 18)
+	_title_margin.add_theme_constant_override("margin_right", 24 if wide else 18)
+	_title_margin.add_theme_constant_override("margin_top", 16)
+	_title_margin.add_theme_constant_override("margin_bottom", 16)
+	if OS.get_name() in ["Android", "iOS"]:
+		var safe := DisplayServer.get_display_safe_area()
+		var screen := DisplayServer.screen_get_size()
+		var viewport := get_viewport_rect().size
+		if screen.x > 0 and screen.y > 0 and safe.has_area():
+			var top_left := Vector2(safe.position) * viewport / Vector2(screen)
+			var bottom_right := Vector2(safe.end) * viewport / Vector2(screen)
+			_title_margin.add_theme_constant_override("margin_left", int(maxf(24, top_left.x - global_position.x)))
+			_title_margin.add_theme_constant_override("margin_right", int(maxf(24, global_position.x + size.x - bottom_right.x)))
+			_title_margin.add_theme_constant_override("margin_top", int(maxf(16, top_left.y)))
+			_title_margin.add_theme_constant_override("margin_bottom", int(maxf(16, viewport.y - bottom_right.y)))
+	_mode_list.add_theme_constant_override("h_separation", 12)
+	_mode_list.add_theme_constant_override("v_separation", 12)
 	for style_row in _mode_rows:
 		style_row.call(wide)
-	_title_left.alignment = BoxContainer.ALIGNMENT_CENTER if wide else BoxContainer.ALIGNMENT_BEGIN
-	_title_right.alignment = BoxContainer.ALIGNMENT_CENTER if wide else BoxContainer.ALIGNMENT_BEGIN
+	_title_left.alignment = BoxContainer.ALIGNMENT_CENTER
+	_title_right.alignment = BoxContainer.ALIGNMENT_CENTER
 	if wide:
-		for i in [3, 4, 5]:
-			_title_parts[i].reparent(_title_right, false)
+		if _mode_list.get_parent() != _title_right:
+			_mode_list.reparent(_title_right, false)
 		_title_right.show()
 	else:
-		_title_margin.add_theme_constant_override("margin_left", 22)
-		_title_margin.add_theme_constant_override("margin_right", 22)
+		if _mode_list.get_parent() != _title_left:
+			_mode_list.reparent(_title_left, false)
+		_title_left.move_child(_mode_list, _title_left.get_child_count() - 1)
+		_title_left.move_child(_title_parts[2], _title_left.get_child_count() - 1)
 		_title_right.hide()
-		for node in _title_parts:
-			if node.get_parent() != _title_left:
-				node.reparent(_title_left, false)
-		for i in range(_title_parts.size()):
-			_title_left.move_child(_title_parts[i], i)
-	_scroll.scroll_vertical = 0
+	if rotated:
+		_scroll.scroll_vertical = 0
 
 
 ## Keep an open sheet readable and inside the screen during rotation.
@@ -220,31 +179,50 @@ func _layout_sheet() -> void:
 		return
 	_sheet_panel.anchor_left = 0.5
 	_sheet_panel.anchor_right = 0.5
-	var width := minf(size.x * 0.92, 820.0)
+	var settings := _sheet_panel.has_meta("settings")
+	var maximum := 1280.0 if settings and _title_landscape else 820.0
+	var width := minf(size.x * 0.92, maximum)
 	_sheet_panel.offset_left = -width * 0.5
 	_sheet_panel.offset_right = width * 0.5
+	if _sheet_panel.has_meta("navigation_body"):
+		var layout: GridContainer = _sheet_panel.get_meta("navigation_layout")
+		var factions: GridContainer = _sheet_panel.get_meta("navigation_factions")
+		var modes: GridContainer = _sheet_panel.get_meta("navigation_modes")
+		layout.columns = 2 if _title_landscape else 1
+		modes.columns = 1 if _title_landscape else 2
+		for button in factions.get_children():
+			button.custom_minimum_size.y = 230.0 if _title_landscape else 160.0
+		var body: VBoxContainer = _sheet_panel.get_meta("navigation_body")
+		var outer: VBoxContainer = body.get_parent().get_parent()
+		var chrome := outer.get_combined_minimum_size().y + _sheet_panel.get_theme_stylebox("panel").get_minimum_size().y
+		var height := minf(size.y * 0.92, body.get_combined_minimum_size().y + chrome + 8.0)
+		_sheet_panel.anchor_top = 0.5
+		_sheet_panel.anchor_bottom = 0.5
+		_sheet_panel.offset_top = -height * 0.5
+		_sheet_panel.offset_bottom = height * 0.5
+	if settings and _sheet_panel.has_meta("settings_grid"):
+		var grid: GridContainer = _sheet_panel.get_meta("settings_grid")
+		grid.columns = 2 if _title_landscape and width >= 1020.0 else 1
+		var factor := 1.3 if _title_landscape else 1.0
+		var controls: Array[Node] = [_sheet_panel]
+		while not controls.is_empty():
+			var control := controls.pop_back() as Node
+			controls.append_array(control.get_children())
+			if control.has_meta("settings_font_size"):
+				control.add_theme_font_size_override("font_size", int(control.get_meta("settings_font_size") * factor))
+			if control.has_meta("settings_minimum"):
+				var minimum: Vector2 = control.get_meta("settings_minimum")
+				minimum.y = maxf(minimum.y, 44.0) * factor
+				control.custom_minimum_size = minimum
+		var outer: VBoxContainer = grid.get_parent().get_parent().get_parent()
+		var chrome := outer.get_combined_minimum_size().y + _sheet_panel.get_theme_stylebox("panel").get_minimum_size().y
+		var height := minf(size.y * 0.9, grid.get_combined_minimum_size().y + chrome + 8.0)
+		_sheet_panel.anchor_top = 0.5
+		_sheet_panel.anchor_bottom = 0.5
+		_sheet_panel.offset_top = -height * 0.5
+		_sheet_panel.offset_bottom = height * 0.5
 
 
-func _section_header(title: String, sub: String) -> Control:
-	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 0)
-	var h := HBoxContainer.new()
-	h.add_theme_constant_override("separation", 10)
-	v.add_child(h)
-	var l := UI.label(title, 19, UI.PARCHMENT, true)
-	# Preserve room for the Settings action in very narrow portrait windows.
-	v.resized.connect(func():
-		l.add_theme_font_size_override("font_size", 34 if l.text == "PLAY" else (15 if v.size.x < 330 else 19)))
-	h.add_child(l)
-	var rule := ColorRect.new()
-	rule.color = Color(0.55, 0.84, 0.35, 0.58)
-	rule.custom_minimum_size = Vector2(0, 1)
-	rule.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	rule.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	h.add_child(rule)
-	if sub != "":
-		v.add_child(UI.label(sub, 16, UI.TEXT_DIM, false, true))
-	return v
 
 
 func _faction_card(f: int) -> Button:
@@ -254,6 +232,7 @@ func _faction_card(f: int) -> Button:
 	b.custom_minimum_size = Vector2(0, 132)
 	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	b.toggle_mode = true
+	b.set_meta("faction", f)
 	for state in ["normal", "hover", "pressed", "focus"]:
 		b.add_theme_stylebox_override(state, StyleBoxEmpty.new())
 	b.pressed.connect(func():
@@ -311,17 +290,20 @@ func _faction_card(f: int) -> Button:
 	pp.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	v.add_child(pp)
 	b.resized.connect(func():
-		caption.offset_top = -60 if _title_landscape else -45
-		nm.add_theme_font_size_override("font_size", 23 if _title_landscape else (14 if b.size.x < 80 else 18))
-		pp.add_theme_font_size_override("font_size", 17 if _title_landscape else 14))
+		caption.offset_top = -78 if _title_landscape else -45
+		nm.add_theme_font_override("font", ThemeDB.fallback_font if _title_landscape else UI.font_title())
+		pp.add_theme_font_override("font", ThemeDB.fallback_font if _title_landscape else UI.font_body())
+		nm.add_theme_font_size_override("font_size", 30 if _title_landscape else (14 if b.size.x < 80 else 18))
+		pp.add_theme_font_size_override("font_size", 23 if _title_landscape else 14))
 
 	return b
 
 
 func _refresh_factions() -> void:
+	_faction_buttons = _faction_buttons.filter(func(button): return is_instance_valid(button))
 	for i in range(_faction_buttons.size()):
 		var b: Button = _faction_buttons[i]
-		var on: bool = i == faction
+		var on: bool = int(b.get_meta("faction")) == faction
 		b.set_pressed_no_signal(on)
 		var frame: Panel = b.get_node("FactionFrame")
 		frame.add_theme_stylebox_override("panel", UI.fantasy_style("frame_active" if on else "frame", 0, 0))
@@ -354,24 +336,99 @@ func _refresh_toggle() -> void:
 
 func _build_modes() -> void:
 	_mode_rows.clear()
-	for c in _mode_list.get_children():
-		c.get_parent().remove_child(c)
-		c.queue_free()
-	if Profile.has_saved_duel():
-		_mode_list.add_child(_mode_row("Resume duel", "Pick up where you left off.", "RESUME", _resume_duel, Color("9d7fe0")))
-	var quick_sub := "One hand. Oaths off. Four minutes." if Profile.classic_mode else "One hand. Oaths on. Four minutes."
-	_mode_list.add_child(_mode_row("Quick Duel", quick_sub, "QUICK", func(): _launch(T.Mode.QUICK), UI.GOLD))
-	_mode_list.add_child(_mode_row("Fifteen Duel", "Fifteen or nothing. Rank matches never capture.", "XV", _launch_quindici, Color("6fa8d4")))
-	_mode_list.add_child(_mode_row("Ranked Duel", "Best of three. First to 11 Renown.", "RANKED", _open_ranked, Color("9d7fe0")))
-	_mode_list.add_child(_mode_row("Campaign", "Four bosses, four twists.", "CAMPAIGN", _open_campaign, Color("c86f4a")))
-	var pz: Dictionary = T.PUZZLES[Profile.daily_puzzle_index()]
-	var pz_sub: String = pz.name + (" · solved today" if Profile.puzzle_done_today() else "")
-	_mode_list.add_child(_mode_row("Daily Puzzle", pz_sub, "PUZZLE", _open_puzzle, Color("5fae68")))
-	_mode_list.add_child(_mode_row("Codex", "Rules, scoring, Oaths, quests.", "LEARN", _open_codex, UI.TEXT_DIM))
+	for child in _mode_list.get_children():
+		child.get_parent().remove_child(child)
+		child.queue_free()
+	var saved := Profile.has_saved_duel()
+	var entries := [
+		["Continue", "Resume your duel" if saved else "No saved duel", "RESUME", _resume_duel, Color("9d7fe0")],
+		["New Game", "Choose a mode", "QUICK", _open_new_game, UI.GOLD],
+		["Puzzle", "Today's challenge", "PUZZLE", _open_puzzle, Color("5fae68")],
+		["Codex", "How to play", "LEARN", _open_codex, UI.TEXT_DIM],
+		["Settings", "Preferences", "SETTINGS", _open_settings, UI.TEXT_DIM],
+		["About", "Four Realms", "ABOUT", _open_about, UI.TEXT_DIM],
+	]
+	for entry in entries:
+		var row := _mode_row(entry[0], entry[1], entry[2], entry[3], entry[4])
+		row.name = entry[0].replace(" ", "") + "Entry"
+		_mode_list.add_child(row)
+		if entry[0] == "Settings":
+			var action: Button = row.get_meta("action")
+			action.name = "SettingsButton"
+		if entry[0] == "Continue" and not saved:
+			row.modulate.a = 0.45
+			var arrow: Button = row.get_meta("action")
+			arrow.disabled = true
+	if not _title_parts.is_empty():
+		_update_title_layout()
 
 
-func _mode_row(title: String, sub: String, badge: String, cb: Callable, accent: Color) -> Control:
+func _open_new_game() -> void:
+	var sheet := _sheet("NEW GAME")
+	sheet.set_meta("settings", true)
+	var body: VBoxContainer = sheet.get_meta("body")
+	body.add_child(UI.label("Choose your faction", 28 if _title_landscape else 24, UI.GOLD))
+	var layout := GridContainer.new()
+	layout.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	layout.add_theme_constant_override("h_separation", 16)
+	layout.add_theme_constant_override("v_separation", 12)
+	body.add_child(layout)
+	var factions := GridContainer.new()
+	factions.columns = 2
+	factions.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	factions.add_theme_constant_override("h_separation", 8)
+	factions.add_theme_constant_override("v_separation", 8)
+	layout.add_child(factions)
+	for f in range(4):
+		var button := _faction_card(f)
+		button.custom_minimum_size.y = 160.0
+		var art: TextureRect = button.get_node("FactionArtwork")
+		art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		factions.add_child(button)
+		_faction_buttons.append(button)
+	_refresh_factions()
+	var modes := GridContainer.new()
+	modes.columns = 2
+	modes.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	modes.add_theme_constant_override("h_separation", 12)
+	modes.add_theme_constant_override("v_separation", 12)
+	layout.add_child(modes)
+	var entries := [
+		["Duel", "One hand", "QUICK", func(): _launch(T.Mode.QUICK), UI.GOLD],
+		["Fifteen", "Capture totals of 15", "XV", _launch_quindici, Color("6fa8d4")],
+		["Ranked", "Best of three", "RANKED", _open_ranked, Color("9d7fe0")],
+		["Campaign", "Four bosses", "CAMPAIGN", _open_campaign, Color("c86f4a")],
+	]
+	for entry in entries:
+		var row := _mode_row(entry[0], entry[1], entry[2], entry[3], entry[4], false)
+		row.name = entry[0] + "Entry"
+		modes.add_child(row)
+		row.custom_minimum_size.y = 130.0
+	var back := UI.button("Back", "secondary", 24)
+	back.pressed.connect(_codex_close)
+	body.get_parent().get_parent().add_child(back)
+	sheet.set_meta("navigation_body", body)
+	sheet.set_meta("navigation_layout", layout)
+	sheet.set_meta("navigation_factions", factions)
+	sheet.set_meta("navigation_modes", modes)
+	layout.minimum_size_changed.connect(_layout_sheet)
+	_layout_sheet()
+	_layout_sheet.call_deferred()
+
+
+func _open_about() -> void:
+	var sheet := _sheet("ABOUT FOUR REALMS")
+	var body: VBoxContainer = sheet.get_meta("body")
+	body.add_child(_para("Four Realms is a fantasy card game inspired by Scopa. Choose Forge, Grove, Horde or Crown and play with faction Oaths, public quests and quick duels."))
+	body.add_child(_para("Version 1.0"))
+	var close := UI.button("Back", "secondary", 24)
+	close.pressed.connect(_codex_close)
+	body.add_child(close)
+
+
+func _mode_row(title: String, sub: String, badge: String, cb: Callable, accent: Color, register: bool = true) -> Control:
 	var p := PanelContainer.new()
+	p.tooltip_text = title
 	p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var portrait_style := UI.panel(UI.PANEL, 14, Color("927845"), 1)
 	p.add_theme_stylebox_override("panel", portrait_style)
@@ -392,7 +449,7 @@ func _mode_row(title: String, sub: String, badge: String, cb: Callable, accent: 
 	emblem.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	emblem.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	emblem.add_theme_stylebox_override("panel", UI.fantasy_style("button_hover", 0, 0))
-	var glyphs := {"RESUME": "▶", "QUICK": "✦", "XV": "XV", "RANKED": "★", "CAMPAIGN": "⚑", "PUZZLE": "✧", "LEARN": "i"}
+	var glyphs := {"SETTINGS": "⚙", "ABOUT": "i", "RESUME": "▶", "QUICK": "✦", "XV": "XV", "RANKED": "★", "CAMPAIGN": "⚑", "PUZZLE": "✧", "LEARN": "i"}
 	var emblem_label := UI.label(str(glyphs.get(badge, "✦")), 20, Color("a7ec80"), true)
 	emblem_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	emblem_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -405,15 +462,22 @@ func _mode_row(title: String, sub: String, badge: String, cb: Callable, accent: 
 	v.add_theme_constant_override("separation", 1)
 	h.add_child(v)
 	var t := UI.label(title, 24, UI.TEXT, true, true)
+	t.autowrap_mode = TextServer.AUTOWRAP_OFF
+	t.clip_text = true
+	t.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	t.add_theme_font_size_override("font_size", 20)
 	v.add_child(t)
 	var subtitle := UI.label(sub, 15, UI.TEXT_DIM, false, true)
+	subtitle.max_lines_visible = 2
+	subtitle.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	v.add_child(subtitle)
 	# Two-column portrait tiles use compact typography, while a wide row keeps
 	# the larger display size. Full strings remain available and wrap naturally.
 	var apply_type := func():
-		t.add_theme_font_size_override("font_size", (27 if p.size.x < 390 else 31) if _title_landscape else (17 if p.size.x < 350 else 22))
-		subtitle.add_theme_font_size_override("font_size", (21 if p.size.x < 390 else 23) if _title_landscape else (13 if p.size.x < 350 else 16))
+		t.add_theme_font_override("font", ThemeDB.fallback_font)
+		subtitle.add_theme_font_override("font", ThemeDB.fallback_font)
+		t.add_theme_font_size_override("font_size", 34 if _title_landscape else (27 if size.x >= 460 else 18))
+		subtitle.add_theme_font_size_override("font_size", 25 if _title_landscape else (20 if size.x >= 460 else 14))
 	p.resized.connect(apply_type)
 
 	var go := UI.button("", "ghost", 18)
@@ -423,24 +487,29 @@ func _mode_row(title: String, sub: String, badge: String, cb: Callable, accent: 
 	go.add_theme_font_size_override("font_size", 30)
 	go.add_theme_color_override("font_color", accent)
 	go.pressed.connect(cb)
+	p.set_meta("action", go)
 	h.add_child(go)
 
 	var primary := badge in ["QUICK", "RESUME"]
 	var landscape_style := UI.fantasy_style("panel", 16, 14)
 	var apply_style := func(wide: bool):
 		p.add_theme_stylebox_override("panel", landscape_style if wide else portrait_style)
-		p.custom_minimum_size.y = 168.0 if wide else 0.0
+		p.custom_minimum_size.y = 150.0 if wide else (112.0 if size.x >= 460 else 80.0)
 		backdrop.modulate = Color(0.40, 0.46, 0.52) if wide else Color(0.48, 0.53, 0.58)
-		h.add_theme_constant_override("separation", 10 if wide else 6)
-		emblem.custom_minimum_size = Vector2(44, 52) if wide else Vector2(34, 38)
+		h.add_theme_constant_override("separation", 6)
+		emblem.visible = wide or size.x >= 460
+		emblem.custom_minimum_size = Vector2(44, 44) if wide else Vector2(34, 38)
+		go.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		emblem.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		emblem_label.add_theme_font_size_override("font_size", 25 if wide else 20)
 		v.alignment = BoxContainer.ALIGNMENT_CENTER if wide else BoxContainer.ALIGNMENT_BEGIN
 		v.add_theme_constant_override("separation", 6 if wide else 1)
-		go.custom_minimum_size = Vector2(44, 56) if wide else Vector2(34, 44)
+		go.visible = wide
+		go.custom_minimum_size = Vector2(44, 44) if wide else Vector2(34, 44)
 		t.add_theme_color_override("font_color", UI.GOLD if wide and primary else UI.TEXT)
 		subtitle.add_theme_color_override("font_color", Color("bec8d6") if wide else UI.TEXT_DIM)
 		apply_type.call()
-	if badge != "":
+	if badge != "" and register:
 		_mode_rows.append(apply_style)
 	apply_style.call(_title_landscape)
 
@@ -448,7 +517,7 @@ func _mode_row(title: String, sub: String, badge: String, cb: Callable, accent: 
 	# duel. Activate on release only if the pointer stayed inside the row.
 	var pointer := {"down": false, "start": Vector2.ZERO, "scroll": 0}
 	p.gui_input.connect(func(e):
-		if e is InputEventMouseButton and e.button_index == MOUSE_BUTTON_LEFT:
+		if e is InputEventMouseButton and e.device != InputEvent.DEVICE_ID_EMULATION and e.button_index == MOUSE_BUTTON_LEFT:
 			if e.pressed:
 				pointer.down = true
 				pointer.start = e.global_position
@@ -460,6 +529,24 @@ func _mode_row(title: String, sub: String, badge: String, cb: Callable, accent: 
 				pointer.down = false
 				if tap: cb.call()
 		elif e is InputEventMouseMotion and pointer.down and e.global_position.distance_to(pointer.start) >= 12.0:
+			pointer.down = false
+		elif e is InputEventScreenTouch and e.device != InputEvent.DEVICE_ID_EMULATION:
+			if e.pressed:
+				pointer.down = true
+				pointer.start = e.position
+				pointer.scroll = _scroll.scroll_vertical
+			else:
+				var tap: bool = (
+					pointer.down
+					and e.position.distance_to(pointer.start) < 12.0
+					and abs(_scroll.scroll_vertical - int(pointer.scroll)) < 4
+					and Rect2(Vector2.ZERO, p.size).has_point(e.position)
+				)
+				pointer.down = false
+				if tap:
+					cb.call()
+			p.accept_event()
+		elif e is InputEventScreenDrag and e.device != InputEvent.DEVICE_ID_EMULATION and pointer.down and e.position.distance_to(pointer.start) >= 12.0:
 			pointer.down = false)
 	p.mouse_filter = Control.MOUSE_FILTER_PASS
 	return p
@@ -468,28 +555,71 @@ func _mode_row(title: String, sub: String, badge: String, cb: Callable, accent: 
 ## One scrollable dialog for rules, cosmetics and animation preferences.
 func _open_settings() -> void:
 	var sheet := _sheet("SETTINGS")
+	sheet.set_meta("settings", true)
 	var body: VBoxContainer = sheet.get_meta("body")
-	body.add_child(_classic_panel())
-	body.add_child(_orientation_panel())
-	body.add_child(_cosmetics_panel())
-	body.add_child(_animation_panel())
-	var done := UI.button("Done", "primary", 20)
+	body.add_theme_constant_override("separation", 0)
+	var grid := GridContainer.new()
+	grid.name = "SettingsGrid"
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grid.add_theme_constant_override("h_separation", 16)
+	grid.add_theme_constant_override("v_separation", 12)
+	body.add_child(grid)
+	var left := VBoxContainer.new()
+	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	left.add_theme_constant_override("separation", 12)
+	grid.add_child(left)
+	var gameplay := PanelContainer.new()
+	gameplay.add_theme_stylebox_override("panel", UI.fantasy_style("panel", 14, 12))
+	left.add_child(gameplay)
+	var gameplay_rows := VBoxContainer.new()
+	gameplay_rows.add_theme_constant_override("separation", 8)
+	gameplay.add_child(gameplay_rows)
+	for section in [_classic_panel(), _orientation_panel()]:
+		section.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+		gameplay_rows.add_child(section)
+	left.add_child(_cosmetics_panel())
+	var animation := _animation_panel()
+	animation.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	animation.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	grid.add_child(animation)
+	var outer: VBoxContainer = body.get_parent().get_parent()
+	var done := UI.button("Done", "primary", 22)
 	done.name = "SettingsDone"
+	done.size_flags_horizontal = Control.SIZE_SHRINK_END
+	done.custom_minimum_size = Vector2(140, 48)
 	done.pressed.connect(_codex_close)
-	body.add_child(done)
+	outer.add_child(done)
+	var controls: Array[Node] = [sheet]
+	while not controls.is_empty():
+		var control := controls.pop_back() as Node
+		controls.append_array(control.get_children())
+		if control is Label or control is Button:
+			control.add_theme_font_override("font", ThemeDB.fallback_font)
+			control.set_meta("settings_font_size", maxi(control.get_theme_font_size("font_size"), 20))
+		if control is Button:
+			control.set_meta("settings_minimum", control.custom_minimum_size)
+	sheet.set_meta("settings_grid", grid)
+	grid.minimum_size_changed.connect(_layout_sheet)
+	_layout_sheet()
+	_layout_sheet.call_deferred()
 
 
 func _orientation_panel() -> Control:
 	var panel := PanelContainer.new()
 	panel.name = "OrientationSettings"
-	panel.add_theme_stylebox_override("panel", UI.panel(UI.PANEL, 16, Color("806a40")))
+	panel.add_theme_stylebox_override("panel", UI.fantasy_style("panel", 10, 8))
 	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 8)
+	col.add_theme_constant_override("separation", 4)
 	panel.add_child(col)
-	col.add_child(UI.label("ORIENTATION", 18, UI.GOLD))
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	col.add_child(row)
+	row.add_child(UI.label("Orientation", 22, UI.TEXT))
 	var choice := OptionButton.new()
 	choice.name = "OrientationChoice"
-	choice.custom_minimum_size = Vector2(0, 44)
+	choice.custom_minimum_size = Vector2(100, 44)
+	choice.fit_to_longest_item = false
+	choice.clip_text = true
 	choice.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	choice.add_theme_font_override("font", UI.font_bold())
 	choice.add_theme_font_size_override("font_size", 16)
@@ -505,7 +635,7 @@ func _orientation_panel() -> Control:
 	choice.item_selected.connect(func(index: int):
 		Profile.set_orientation(values[index])
 		Sfx.play("select", -14.0))
-	col.add_child(choice)
+	row.add_child(choice)
 	var note := "Auto follows the device. Forced directions use the phone orientation."
 	if Engine.is_embedded_in_editor():
 		choice.disabled = true
@@ -515,22 +645,24 @@ func _orientation_panel() -> Control:
 		note = "The browser controls orientation; the layout follows the window."
 	elif not DisplayServer.has_feature(DisplayServer.FEATURE_ORIENTATION):
 		note = "Auto follows the window. On desktop, forced modes resize the window."
-	col.add_child(UI.label(note, 14, UI.TEXT_DIM, false, true))
+	choice.tooltip_text = note
+	if choice.disabled:
+		col.add_child(UI.label(note, 14, UI.TEXT_DIM, false, true))
 	return panel
 
 
 func _classic_panel() -> Control:
 	var panel := PanelContainer.new()
 	panel.name = "ClassicSettings"
-	panel.add_theme_stylebox_override("panel", UI.panel())
+	panel.add_theme_stylebox_override("panel", UI.fantasy_style("panel", 10, 8))
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 12)
 	panel.add_child(row)
 	var labels := VBoxContainer.new()
 	labels.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(labels)
-	labels.add_child(UI.label("Classic Mode", 22, UI.TEXT, true))
-	labels.add_child(UI.label("Oaths off. Pure card play, no Favor.", 17, UI.TEXT_DIM, false, true))
+	labels.add_child(UI.label("Classic · Oaths off", 22, UI.TEXT, false, true))
+	labels.tooltip_text = "Oaths off. Pure card play, no Favor."
 	_classic_toggle = _toggle(Profile.classic_mode)
 	_classic_toggle.set_meta("setting_key", "classic_mode")
 	_classic_toggle.tooltip_text = "Enable or disable Classic Mode"
@@ -538,7 +670,6 @@ func _classic_panel() -> Control:
 		Profile.classic_mode = not Profile.classic_mode
 		Profile.save_profile()
 		_refresh_toggle()
-		_build_modes()
 		Sfx.play("select", -14.0))
 	row.add_child(_classic_toggle)
 	return panel
@@ -549,9 +680,9 @@ func _classic_panel() -> Control:
 func _animation_panel() -> Control:
 	var p := PanelContainer.new()
 	p.name = "AnimationSettings"
-	p.add_theme_stylebox_override("panel", UI.panel(UI.PANEL, 16, Color("806a40")))
+	p.add_theme_stylebox_override("panel", UI.fantasy_style("panel", 10, 8))
 	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 8)
+	v.add_theme_constant_override("separation", 4)
 	p.add_child(v)
 	var h := HBoxContainer.new()
 	v.add_child(h)
@@ -559,7 +690,7 @@ func _animation_panel() -> Control:
 	var sp := Control.new()
 	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	h.add_child(sp)
-	h.add_child(UI.label("cosmetic · optional", 14, UI.TEXT_DIM))
+
 
 	var rows := [
 		["anim_enabled", "All animation", "Master switch. Off = instant, zero flourish."],
@@ -578,7 +709,7 @@ func _animation_panel() -> Control:
 		tv.add_theme_constant_override("separation", 0)
 		r.add_child(tv)
 		tv.add_child(UI.label(row[1], 19, UI.TEXT, true))
-		tv.add_child(UI.label(row[2], 15, UI.TEXT_DIM, false, true))
+		r.tooltip_text = row[2]
 		var t := _toggle(bool(Profile.get(key)))
 		t.set_meta("setting_key", key)
 		var k := key
@@ -602,45 +733,35 @@ func _animation_panel() -> Control:
 
 
 func _stats_panel() -> Control:
-	var p := PanelContainer.new()
-	p.add_theme_stylebox_override("panel", UI.panel(UI.PANEL, 16, Color("806a40")))
-	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 8)
-	p.add_child(v)
-	var h := HBoxContainer.new()
-	h.add_theme_constant_override("separation", 10)
-	v.add_child(h)
-	h.add_child(UI.label("YOUR RECORD", 18, UI.GOLD))
-	var sp := Control.new()
-	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	h.add_child(sp)
-	h.add_child(UI.label("%d W · %d L · %d D" % [Profile.wins, Profile.losses, Profile.draws], 17, UI.TEXT_DIM))
+	var panel := PanelContainer.new()
+	panel.name = "YourRecord"
+	panel.add_theme_stylebox_override("panel", UI.fantasy_style("panel", 12, 10))
+	var rows := VBoxContainer.new()
+	rows.add_theme_constant_override("separation", 4)
+	panel.add_child(rows)
+	var title := UI.label("YOUR RECORD", 22, UI.GOLD)
+	title.add_theme_font_override("font", ThemeDB.fallback_font)
+	rows.add_child(title)
+	var record := HBoxContainer.new()
+	record.add_theme_constant_override("separation", 12)
+	rows.add_child(record)
+	for result in [[Profile.wins, "Wins", UI.GOOD], [Profile.losses, "Losses", UI.BAD], [Profile.draws, "Draws", UI.TEXT]]:
+		var column := VBoxContainer.new()
+		column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		column.add_theme_constant_override("separation", 0)
+		record.add_child(column)
+		var count := UI.label(str(result[0]), 34, result[2])
+		count.add_theme_font_override("font", ThemeDB.fallback_font)
+		column.add_child(count)
+		var caption := UI.label(result[1], 22, UI.TEXT)
+		caption.add_theme_font_override("font", ThemeDB.fallback_font)
+		column.add_child(caption)
+	var detail := UI.label("%d games played · Best score %d\n%d sweeps · %d quests completed" % [Profile.matches, Profile.best_renown, Profile.scopas, Profile.quests_done], 20, UI.TEXT_DIM, false, true)
+	detail.add_theme_font_override("font", ThemeDB.fallback_font)
+	rows.add_child(detail)
+	return panel
 
-	var grid := GridContainer.new()
-	grid.columns = 4
-	grid.add_theme_constant_override("h_separation", 8)
-	v.add_child(grid)
-	grid.add_child(_stat("Duels", str(Profile.matches)))
-	grid.add_child(_stat("Sweeps", str(Profile.scopas)))
-	grid.add_child(_stat("Best", str(Profile.best_renown)))
-	grid.add_child(_stat("Quests", str(Profile.quests_done)))
-	return p
 
-
-func _stat(k: String, v: String) -> Control:
-	var p := PanelContainer.new()
-	p.add_theme_stylebox_override("panel", UI.flat(UI.BG2, 10))
-	p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var vv := VBoxContainer.new()
-	vv.add_theme_constant_override("separation", 0)
-	p.add_child(vv)
-	var a := UI.label(v, 24, UI.PARCHMENT, true)
-	a.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	vv.add_child(a)
-	var b := UI.label(k.to_upper(), 12, UI.TEXT_DIM)
-	b.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	vv.add_child(b)
-	return p
 
 
 # ---------------------------------------------------------------------------
@@ -684,9 +805,9 @@ func _resume_duel() -> void:
 func _cosmetics_panel() -> Control:
 	var p := PanelContainer.new()
 	p.name = "TableSettings"
-	p.add_theme_stylebox_override("panel", UI.panel(UI.PANEL, 16, Color("806a40")))
+	p.add_theme_stylebox_override("panel", UI.fantasy_style("panel", 10, 8))
 	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 8)
+	v.add_theme_constant_override("separation", 4)
 	p.add_child(v)
 	var h := HBoxContainer.new()
 	v.add_child(h)
@@ -694,13 +815,15 @@ func _cosmetics_panel() -> Control:
 	var sp := Control.new()
 	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	h.add_child(sp)
-	h.add_child(UI.label("appearance only", 14, UI.TEXT_DIM))
+
 
 	# card backs
 	var back_row := HBoxContainer.new()
 	back_row.add_theme_constant_override("separation", 10)
 	v.add_child(back_row)
-	back_row.add_child(UI.label("Card back", 16, UI.TEXT_DIM))
+	var back_label := UI.label("Back", 20, UI.TEXT)
+	back_label.custom_minimum_size.x = 70
+	back_row.add_child(back_label)
 	var back_group := ButtonGroup.new()
 	for i in range(3):
 		var b := Button.new()
@@ -735,15 +858,17 @@ func _cosmetics_panel() -> Control:
 
 	# board themes
 	var board_row := HBoxContainer.new()
-	board_row.add_theme_constant_override("separation", 10)
+	board_row.add_theme_constant_override("separation", 6)
 	v.add_child(board_row)
-	board_row.add_child(UI.label("Board", 16, UI.TEXT_DIM))
+	var board_label := UI.label("Board", 20, UI.TEXT)
+	board_label.custom_minimum_size.x = 70
+	board_row.add_child(board_label)
 	var themes := [Color("1b2a24"), Color("1a2230"), Color("2a1c22"), Color("241f2e")]
 	var board_group := ButtonGroup.new()
 	for i in range(themes.size()):
 		var b2 := Button.new()
 		b2.focus_mode = Control.FOCUS_NONE
-		b2.custom_minimum_size = Vector2(38, 32)
+		b2.custom_minimum_size = Vector2(36, 44)
 		b2.toggle_mode = true
 		b2.button_group = board_group
 		b2.button_pressed = i == Profile.board_theme
@@ -917,7 +1042,7 @@ func _sheet(title: String) -> PanelContainer:
 
 	var head := HBoxContainer.new()
 	outer.add_child(head)
-	var l := UI.label(title, 17, UI.GOLD)
+	var l := UI.label(title, 28 if _title_landscape else 22, UI.GOLD)
 	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(l)
 	var x := UI.button("✕", "ghost", 20)
