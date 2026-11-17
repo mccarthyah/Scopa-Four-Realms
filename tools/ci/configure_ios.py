@@ -25,6 +25,9 @@ def main():
         raise ValueError('IOS_VERSION must have two or three numeric components, e.g. 1.0')
     if not re.fullmatch(r'[1-9][0-9]{0,17}', build):
         raise ValueError('IOS_BUILD_NUMBER must be a positive integer (up to 18 digits)')
+    icon = Path('assets/icon/four-realms-iphone-icon.png')
+    if not icon.is_file():
+        raise ValueError(f'iOS app icon is missing: {icon}')
     path = Path('export_presets.cfg')
     text = path.read_text()
     start = text.index('[preset.2.options]')
@@ -36,7 +39,7 @@ def main():
         'application/short_version': f'"{version}"',
         'application/version': f'"{build}"',
         'application/export_project_only': 'true',
-        'icons/icon_1024x1024': '"res://assets/ios_app_icon.png"',
+        'icons/icon_1024x1024': f'"res://{icon.as_posix()}"',
     }
     for key, value in replacements.items():
         pattern = r'^' + re.escape(key) + r'=.*$'

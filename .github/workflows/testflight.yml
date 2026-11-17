@@ -67,6 +67,7 @@ jobs:
             export APPLE_TEAM_ID="${APPLE_TEAM_ID:-ABCDE12345}"
             export IOS_BUNDLE_ID="${IOS_BUNDLE_ID:-com.example.scopatest}"
           fi
+          python3 tools/ci/test_configure_ios.py
           python3 tools/ci/configure_ios.py
           echo "IOS_BUILD_NUMBER=$build_number" >> "$GITHUB_ENV"
           echo "APPLE_TEAM_ID=$APPLE_TEAM_ID" >> "$GITHUB_ENV"
