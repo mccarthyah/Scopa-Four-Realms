@@ -948,7 +948,7 @@ func _test_logo_layout() -> void:
 			var text_width: float = font.get_string_size(label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 			if absf(lr.get_center().x - mr.get_center().x) > 0.5 or lr.size.x + 0.5 < text_width:
 				passed = false
-		var half_text: float = UI.font_title().get_string_size("FOUR REALMS", HORIZONTAL_ALIGNMENT_LEFT, -1, 26).x * 0.5
+		var half_text: float = UI.font_title().get_string_size("REALMS", HORIZONTAL_ALIGNMENT_LEFT, -1, 32).x * 0.5
 		var span: Vector2 = title._logo_flourish_span(mast.size.x)
 		if span.y > span.x and (span.x - 7.2 <= half_text or span.y > mast.size.x * 0.5):
 			passed = false

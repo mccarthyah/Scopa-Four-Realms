@@ -1,14 +1,14 @@
-# Scopa: Four Realms
+# Four Realms
 
-A mobile-first fantasy reimagining of **Scopa**, built for **Godot 4.7.2** (GDScript).
+A mobile-first fantasy card game, inspired by the traditional Italian game **Scopa**, built for **Godot 4.7.2** (GDScript).
 Verified green on **4.7.2 and 4.4.1** — requires 4.4 or newer.
-Your turn is three taps; a duel is four minutes; the depth is still Scopa's — matching ranks, setting up
-sums, denying captures, and sweeping the table for a scopa.
+Your turn is three taps; a duel is four minutes; the depth comes from matching ranks, setting up
+sums, denying captures, and clearing the table for a sweep.
 
 ```
 40-card deck      ranks 1–10 × four factions
                  Forge (Coins) · Grove (Cups) · Horde (Swords) · Crown (Batons)
-the Runestone    the 7 of Forge — the settebello
+the Runestone    the 7 of Forge
 ```
 
 ---
@@ -59,17 +59,17 @@ Everything in the brief, playable end to end:
 
 | Spec | In the build |
 |---|---|
-| 40-card Scopa deck, four factions, Rank-large faces, Runestone | ✅ supplied faction artwork for all 40 faces, with a shared pre-rendered atlas |
+| 40-card deck, four factions, Rank-large faces, Runestone | ✅ supplied faction artwork for all 40 faces, with a shared pre-rendered atlas |
 | Standard capture rules: rank match **or** a sum to your rank, 10s only match 10s | ✅ with all legal sets enumerated and choosable |
-| **Scopa di Quindici** variant (first version) | ✅ separate game type: only totals of 15 capture, a card never takes its own value. Chosen per match, never mixed inside one |
-| Deal 3 + 3, 4 on the table, redeal in rounds, last capturer sweeps the rest | ✅ |
-| Scopa scores 1 (not on the final play of a deal, per Scopa rules) | ✅ plus a full-screen celebration |
-| 20–30 s turn timer, legal captures highlighted, dramatic scopa clear | ✅ 26 s timer, pulsing gold rings, particle burst, screen shake, held beat |
+| **Fifteen Duel** variant (first version) | ✅ separate game type: only totals of 15 capture, a card never takes its own value. Chosen per match, never mixed inside one |
+| Deal 3 + 3, 4 on the table, redeal in rounds, last capturer collects the rest | ✅ |
+| A sweep scores 1 (not on the final play of a hand) | ✅ plus a full-screen celebration |
+| 20–30 s turn timer, legal captures highlighted, dramatic sweep clear | ✅ 26 s timer, pulsing gold rings, particle burst, screen shake, held beat |
 | **Quick Duel** — one hand, ~4 min | ✅ |
 | **Ranked Duel** — best of three, first to 11 Renown | ✅ with a per-hand score sheet |
-| Traditional scoring renamed: Loot · Treasury · Runestone · Banner · Glory | ✅ auto-scored live, with a live Primiera/Banner meter |
+| Traditional scoring renamed: Loot · Treasury · Runestone · Banner · Glory | ✅ auto-scored live, with a live Banner meter |
 | Running **Renown** total | ✅ split bar in the HUD |
-| **Faction Oaths**, 1 Favor for a scopa or any 7, once per hand | ✅ all four, with dedicated picker UI |
+| **Faction Oaths**, 1 Favor for a sweep or any 7, once per hand | ✅ all four, with dedicated picker UI |
 | **Classic Mode** (Oaths off) | ✅ toggle in the title-screen Settings dialog |
 | Two **public quests** per duel, bonus Renown | ✅ 8 quests, rolled per match, evaluated at hand end |
 | **Campaign** with boss twists | ✅ 4 bosses: veiled table card, late-game fury, double treasure, Banner ties |
@@ -164,7 +164,7 @@ rasteriser rather than a render-to-texture pass. An audit check asserts
 geometrically that the card's centre is a fixed point at every angle and that the
 corners stay equidistant (a rigid rotation, no squash).
 
-### Scopa di Quindici
+### Fifteen Duel
 
 A ruleset variant, selected as its **own game type** on the title screen — it is
 never mixed into a Classic or Ranked match. The deck, deal, Oaths, quests and
@@ -194,7 +194,7 @@ variant's rule never reads as a broken tap.
 |---|---|---|
 | Dwarves · Forge | **Deep Delve** | Draw 1 card, then bury 1 card from your hand on the bottom of the deck |
 | Elves · Grove | **Foresight** | Look at the top 3 cards and reorder them |
-| Orcs · Horde | **Raid** | Put a table card on the deck bottom and replace it with the top card; no capture or scopa. Unavailable if the deck is empty |
+| Orcs · Horde | **Raid** | Put a table card on the deck bottom and replace it with the top card; no capture or sweep. Unavailable if the deck is empty |
 | Humans · Crown | **Diplomacy** | Swap 1 hand card with 1 table card; no capture triggered |
 
 Faction identity beyond the Oath is deliberately light: **Forge** counts double against the Forge boss's
@@ -208,10 +208,10 @@ ties. Those are tie-breakers and flavour, never card power.
 | **Loot** | most captured cards |
 | **Treasury** | most Forge cards |
 | **Runestone** | whoever holds the 7 of Forge |
-| **Banner** | best Primiera (7 = 21, 6 = 18, Ace = 16, faces = 10, best card per faction) |
-| **Glory** | 1 per scopa |
+| **Banner** | best Banner total (7 = 21, 6 = 18, Ace = 16, faces = 10, best card per faction) |
+| **Glory** | 1 per sweep |
 
-Every hand ends with a score sheet that shows the piles, the faction tallies, the Primiera totals, which
+Every hand ends with a score sheet that shows the piles, the faction tallies, the Banner totals, which
 player took each point, plus the two quests. Ranked tracks the running Renown toward 11.
 
 ### Quests
@@ -225,9 +225,9 @@ bonus Renown.
 | Boss | Twist |
 |---|---|
 | **The Veiled Warden** (Grove) | one table card is veiled — you can't see or take it until the table thins |
-| **Grasha Ironjaw** (Horde) | from the sixth play of a hand, her scopas score 2 Glory |
+| **Grasha Ironjaw** (Horde) | from the sixth play of a hand, her sweeps score 2 Glory |
 | **Thane Brund** (Forge) | his Forge cards count double toward the Treasury |
-| **Regent Aurelia** (Crown) | she wins the Banner on a Primiera tie |
+| **Regent Aurelia** (Crown) | she wins the Banner on a Banner tie |
 
 Beating a boss marks it cleared on the campaign sheet (saved in your profile).
 
@@ -235,9 +235,9 @@ Beating a boss marks it cleared on the campaign sheet (saved in your profile).
 
 Three fixed deals rotate daily (stable per date):
 
-1. **Sweep the Hall** — empty the table for a scopa in 3 moves.
+1. **Sweep the Hall** — empty the table for a sweep in 3 moves.
 2. **Gather the Runestone** — capture the 7 of Forge in 2 moves (the Runestone can never fall to a sum).
-3. **Golden Banner** — finish with Primiera over 40.
+3. **Golden Banner** — finish with a Banner total over 40.
 
 The automated audit searches each hand-authored puzzle for a solution within its move limit. Beating
 one marks it solved for the day on the title screen.
@@ -246,11 +246,10 @@ one marks it solved for the day on the title screen.
 
 ## Design notes
 
-* **The rule that keeps it Scopa.** No cards, effects, or purchases touch the 40-card deck — both players
+* **A shared deck.** No cards, effects, or purchases touch the 40-card deck — both players
   always draw from the same probabilities. Oaths spend a resource you earn by playing well, and they are
   utility: a card swap, a peek, a banish. None of them add a point directly.
-* **Favor is the incentive to play real Scopa.** You earn it for scopas and for capturing 7s, which are
-  exactly the two things good Scopa players already chase — the ability layer teaches the base game.
+* **Favor rewards smart play.** You earn it for sweeps and for capturing 7s; the ability layer teaches the base game.
 * **Sum captures are the skill ceiling,** so they are surfaced, never hidden: a selected card shows
   *every* legal set, and choosing among them (which cards you deny the opponent) is the decision.
 * **One-thumb portrait layout:** opponent and Renown at the top, table in the middle, your hand at the
@@ -345,7 +344,7 @@ The audit checks, among other things:
 * all four Oath sheets, the pile view, the pause menu, the score sheet and the Classic toggle,
 * AI move choice stays under 8 ms (it measures ~30 µs).
 
-Latest run: 300 AI games (318 scopas), layout clean, **failures=0** — including a real save/resume round-trip through the profile files
+Latest run: 300 AI games (318 sweeps), layout clean, **failures=0** — including a real save/resume round-trip through the profile files
 (including the JSON int/float coercion that a naive snapshot loses) and all four Oath sheets.
 
 The audit is excluded from exported builds (`exclude_filter` in `export_presets.cfg`).
@@ -358,7 +357,7 @@ The audit is excluded from exported builds (`exclude_filter` in `export_presets.
   turn-based service (or a GodotSteam / WebRTC backend) and swap the local AI call in `duel.gd`'s
   `_run_bot` for a submitted move.
 * **Cosmetics store:** card backs and board themes are already data-driven (`Profile.card_back`,
-  `BOARD_THEMES`); add a shop screen and more variants, plus scopa animation and emote sets.
+  `BOARD_THEMES`); add a shop screen and more variants, plus sweep animation and emote sets.
 * **Ranked ladder, daily quest rotation, battle-pass cosmetics:** all profile-level data, no rule changes.
 * **Localisation:** every string is inline English; extract to a `tr()` CSV when the rules are frozen.
 
@@ -373,4 +372,4 @@ Scopa is a traditional Italian game; this is an unaffiliated fan reimagining.
 
 See [docs/TESTFLIGHT.md](docs/TESTFLIGHT.md) for the manually triggered iOS
 build workflow, required Apple signing secrets, and optional TestFlight upload.
-The first real Apple-signed run and physical iOS testing are still required.
+Apple-signed TestFlight uploads have succeeded; physical iOS testing is still required.

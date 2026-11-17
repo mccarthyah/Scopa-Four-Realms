@@ -99,7 +99,7 @@ func _build() -> void:
 	emblem.draw.connect(_draw_masthead.bind(emblem))
 	mast.add_child(emblem)
 
-	var title := UI.label("SCOPA", 62, UI.PARCHMENT, true)
+	var title := UI.label("FOUR", 62, UI.PARCHMENT, true)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	if not UI.LOW_SPEC:
 		title.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.7))
@@ -108,7 +108,7 @@ func _build() -> void:
 	mast.add_child(title)
 	_place_logo_line(title, 34)
 
-	var sub := UI.label("FOUR REALMS", 26, UI.GOLD, true)
+	var sub := UI.label("REALMS", 32, UI.GOLD, true)
 	sub.name = "LogoSubtitle"
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	mast.add_child(sub)
@@ -240,7 +240,7 @@ func _place_logo_line(label: Label, top: float) -> void:
 ## Return the inner and outer distances from centre for decorative lines. Their
 ## start follows the measured text width, so no font fallback can cross a glyph.
 func _logo_flourish_span(width: float) -> Vector2:
-	var half_text := UI.font_title().get_string_size("FOUR REALMS", HORIZONTAL_ALIGNMENT_LEFT, -1, 26).x * 0.5
+	var half_text := UI.font_title().get_string_size("REALMS", HORIZONTAL_ALIGNMENT_LEFT, -1, 32).x * 0.5
 	var inner := half_text + 16.0
 	var outer := minf(inner + 42.0, width * 0.5 - 8.0)
 	return Vector2(inner, outer)
@@ -251,7 +251,7 @@ func _draw_masthead(node: Control) -> void:
 	var span := _logo_flourish_span(w)
 	if span.y <= span.x:
 		return
-	var y := 118.0
+	var y := 120.0
 	for sgn in [-1.0, 1.0]:
 		var s: float = sgn
 		var center := w * 0.5
@@ -346,7 +346,7 @@ func _build_modes() -> void:
 		_mode_list.add_child(_mode_row("Resume duel", "Pick up where you left off.", "RESUME", _resume_duel, Color("9d7fe0")))
 	var quick_sub := "One hand. Oaths off. Four minutes." if Profile.classic_mode else "One hand. Oaths on. Four minutes."
 	_mode_list.add_child(_mode_row("Quick Duel", quick_sub, "QUICK", func(): _launch(T.Mode.QUICK), UI.GOLD))
-	_mode_list.add_child(_mode_row("Scopa di Quindici", "Fifteen or nothing. Rank matches never capture.", "XV", _launch_quindici, Color("6fa8d4")))
+	_mode_list.add_child(_mode_row("Fifteen Duel", "Fifteen or nothing. Rank matches never capture.", "XV", _launch_quindici, Color("6fa8d4")))
 	_mode_list.add_child(_mode_row("Ranked Duel", "Best of three. First to 11 Renown.", "RANKED", _open_ranked, Color("9d7fe0")))
 	_mode_list.add_child(_mode_row("Campaign", "Four bosses, four twists.", "CAMPAIGN", _open_campaign, Color("c86f4a")))
 	var pz: Dictionary = T.PUZZLES[Profile.daily_puzzle_index()]
@@ -463,7 +463,7 @@ func _classic_panel() -> Control:
 	labels.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(labels)
 	labels.add_child(UI.label("Classic Mode", 22, UI.TEXT, true))
-	labels.add_child(UI.label("Oaths off. Pure Scopa, no Favor.", 17, UI.TEXT_DIM, false, true))
+	labels.add_child(UI.label("Oaths off. Pure card play, no Favor.", 17, UI.TEXT_DIM, false, true))
 	_classic_toggle = _toggle(Profile.classic_mode)
 	_classic_toggle.set_meta("setting_key", "classic_mode")
 	_classic_toggle.tooltip_text = "Enable or disable Classic Mode"
@@ -554,7 +554,7 @@ func _stats_panel() -> Control:
 	grid.add_theme_constant_override("h_separation", 8)
 	v.add_child(grid)
 	grid.add_child(_stat("Duels", str(Profile.matches)))
-	grid.add_child(_stat("Scopas", str(Profile.scopas)))
+	grid.add_child(_stat("Sweeps", str(Profile.scopas)))
 	grid.add_child(_stat("Best", str(Profile.best_renown)))
 	grid.add_child(_stat("Quests", str(Profile.quests_done)))
 	return p
@@ -885,26 +885,27 @@ func _codex_close() -> void:
 func _open_codex() -> void:
 	var p := _sheet("CODEX")
 	var v: VBoxContainer = p.get_meta("body")
-	v.add_child(UI.label("How Scopa works", 26, UI.PARCHMENT, true))
+	v.add_child(UI.label("How Four Realms works", 26, UI.PARCHMENT, true))
+	v.add_child(_para("Four Realms is inspired by Scopa, a traditional Italian card game."))
 	v.add_child(_para("A 40-card deck, ranks 1–10 in four factions, replaces the suits: Forge (Coins), Grove (Cups), Horde (Swords) and Crown (Batons). Each player is dealt 3 cards; 4 lie face up on the table."))
 	v.add_child(_para("On your turn play one card. If its rank matches a table card you capture it. If a set of table cards adds up to your rank, you may capture that set instead — one card for a rank, or several whose sum equals it. Rank 10 can only take an exact 10."))
-	v.add_child(_para("Clear every card off the table with a capture and you score a Scopa. The last player to capture sweeps the remaining table cards at the end of the hand."))
+	v.add_child(_para("Clear every card off the table with a capture to score a sweep. The final capture of a hand does not score a sweep. The last player to capture collects any remaining table cards at the end of the hand."))
 	v.add_child(UI.label("Scoring, live", 26, UI.PARCHMENT, true))
 	for line in [
 		["Loot", "most captured cards"],
 		["Treasury", "most Forge cards"],
 		["Runestone", "whoever holds the 7 of Forge"],
-		["Banner", "best Primiera — 7=21, 6=18, Ace=16, faces=10 per faction"],
-		["Glory", "one point per scopa"],
+		["Banner", "best Banner total — 7=21, 6=18, Ace=16, faces=10 per faction"],
+		["Glory", "one point per sweep"],
 	]:
 		v.add_child(_score_line(line[0], line[1]))
 	v.add_child(UI.label("Oaths & Favor", 26, UI.PARCHMENT, true))
-	v.add_child(_para("You gain 1 Favor whenever you make a scopa or capture any 7. Once per hand, you may spend 1 Favor to use your faction's Oath. Classic Mode turns Oaths off entirely."))
+	v.add_child(_para("You gain 1 Favor whenever you make a sweep or capture any 7. Once per hand, you may spend 1 Favor to use your faction's Oath. Classic Mode turns Oaths off entirely."))
 	for f in range(4):
 		var info: Dictionary = T.FACTIONS[f]
 		v.add_child(_oath_line(f))
 	v.add_child(UI.label("Quests", 26, UI.PARCHMENT, true))
-	v.add_child(_para("Every duel shows two public quests. Both players can chase them; you get the bonus Renown when you complete one. They exist to teach the deeper Scopa habits: hoard the 7s, deny the Runestone, keep the table clean."))
+	v.add_child(_para("Every duel shows two public quests. Both players can chase them; you get the bonus Renown when you complete one. They exist to teach strong card-play habits: hoard the 7s, deny the Runestone, keep the table clean."))
 	var close := UI.button("Understood", "primary")
 	close.pressed.connect(_codex_close)
 	v.add_child(close)
@@ -962,5 +963,5 @@ func _show_howto() -> void:
 			if c is PanelContainer and c.z_index == 101:
 				sheet = c
 		if sheet != null and sheet.size.y < 40.0:
-			push_warning("Scopa: first-run guide failed to size; skipping it")
+			push_warning("Four Realms: first-run guide failed to size; skipping it")
 			_codex_close()

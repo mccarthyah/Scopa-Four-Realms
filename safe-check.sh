@@ -16,7 +16,7 @@ set -u
 GODOT="${GODOT:-godot}"
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# ---- locate the user-data folder (Godot sanitises the project name) ---------
+# ---- locate the retained legacy user-data folder ---------
 case "$(uname -s)" in
   Darwin) BASE="$HOME/Library/Application Support/Godot/app_userdata";;
   Linux)  BASE="$HOME/.local/share/godot/app_userdata";;

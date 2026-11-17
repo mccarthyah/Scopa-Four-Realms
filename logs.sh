@@ -10,7 +10,7 @@ case "$(uname -s)" in
   *)      BASE="${APPDATA:-%APPDATA%}\\Godot\\app_userdata";;
 esac
 
-# Godot sanitises the project name for the folder: 'Scopa: Four Realms' becomes
+# The legacy folder is deliberately retained for save compatibility:
 # 'Scopa- Four Realms'. Match on a prefix so this keeps working either way.
 DIR=""
 for d in "$BASE"/Scopa*; do

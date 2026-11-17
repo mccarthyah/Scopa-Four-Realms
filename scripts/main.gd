@@ -187,7 +187,7 @@ func show_title() -> void:
 		return
 	_stage = "title:ready"
 	if s.get_child_count() == 0:
-		push_error("Scopa: the title screen failed to build — see the log above")
+		push_error("Four Realms: the title screen failed to build — see the log above")
 		_fatal_screen("The title screen could not be built.\nCheck the log for the first error.")
 
 
@@ -203,7 +203,7 @@ func _fatal_screen(msg: String) -> void:
 	v.alignment = BoxContainer.ALIGNMENT_CENTER
 	p.add_child(v)
 	var t := Label.new()
-	t.text = "Scopa: Four Realms"
+	t.text = "Four Realms"
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	t.add_theme_font_size_override("font_size", 32)
 	v.add_child(t)
@@ -213,7 +213,7 @@ func _fatal_screen(msg: String) -> void:
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	v.add_child(l)
 	var hint := Label.new()
-	hint.text = "Full details are in the log: user://logs/godot.log\n(the folder is named \"Scopa- Four Realms\")"
+	hint.text = "Full details are in the log: user://logs/godot.log"
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	hint.add_theme_color_override("font_color", Color(0.66, 0.61, 0.53))

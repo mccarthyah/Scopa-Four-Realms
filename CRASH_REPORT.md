@@ -96,7 +96,7 @@ paste it straight into the chat, or attach the file.
 
 This project writes a log to disk every run (enabled in `project.godot`).
 
-> **Note the folder name:** Godot sanitises the project title, so search for
+> **Note the folder name:** the legacy data directory is deliberately retained for save compatibility, so search for
 > `Scopa*`, not `Scopa: Four Realms` — on Windows/Linux it is literally
 > `Scopa- Four Realms` (colon → dash).
 

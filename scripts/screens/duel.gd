@@ -248,7 +248,7 @@ func _build_top() -> Control:
 
 	_top_favor = UI.chip("FAVOR 0", Color("3a2f22"), UI.GOLD, 15)
 	r1.add_child(_top_favor)
-	_top_scoopa = UI.chip("SCOPA 0", Color("2b2338"), UI.TEXT_DIM, 15)
+	_top_scoopa = UI.chip("SWEEPS 0", Color("2b2338"), UI.TEXT_DIM, 15)
 	r1.add_child(_top_scoopa)
 
 	# row 2: renown bar
@@ -653,11 +653,11 @@ func _refresh_all() -> void:
 		_top_name.text = "%s · %s" % [bot.people, bot.name]
 		_top_meta.text = bot.oath + " · " + T.MODE_INFO[duel.mode].name
 		if duel.rule == C.RULE_QUINDICI:
-			_top_meta.text = bot.oath + " · Scopa di Quindici"
+			_top_meta.text = bot.oath + " · Fifteen Duel"
 
 	UI.set_chip(_top_favor, "FAVOR %d" % duel.favor[1], Color("3a2f22") if duel.favor[1] > 0 else Color("2b2338"),
 		UI.GOLD if duel.favor[1] > 0 else UI.TEXT_DIM)
-	UI.set_chip(_top_scoopa, "SCOPA %d" % duel.scopa_count[1], Color("2b2338"),
+	UI.set_chip(_top_scoopa, "SWEEPS %d" % duel.scopa_count[1], Color("2b2338"),
 		UI.GOLD if duel.scopa_count[1] > 0 else UI.TEXT_DIM)
 
 	_renown0.text = str(duel.renown[0])
@@ -834,7 +834,7 @@ func _refresh_table() -> void:
 		elif gs.size() == 1:
 			_table_sub.text = "Tap the glowing card to capture"
 		elif duel.blocked_by_quindici(_selection):
-			_table_sub.text = "Quindici: matching a value never captures — only cards totalling 15"
+			_table_sub.text = "Fifteen Duel: matching a value never captures — only cards totalling 15"
 		else:
 			_table_sub.text = "No capture — this card will lie on the table"
 
@@ -1240,7 +1240,7 @@ func _oath_raid() -> void:
 	if not duel.can_use_raid(0):
 		_toast("Raid unavailable", "You need a card in the deck and a visible table card.")
 		return
-	var panel := _oath_sheet("RAID", "Choose a table card to put on the deck bottom. The top card replaces it. No capture or scopa.")
+	var panel := _oath_sheet("RAID", "Choose a table card to put on the deck bottom. The top card replaces it. No capture or sweep.")
 	var body: VBoxContainer = panel.get_meta("body")
 	# Tables can have more cards than fit across a window. Wrap the choices and
 	# let the sheet scroll vertically instead of hiding cards off the right edge.
@@ -1368,7 +1368,7 @@ func _scopa_celebration(who: int, glory: int) -> void:
 	var center := _table_center()
 	FX.burst(self, center, UI.GOLD, 40, 340)
 	FX.burst(self, center, T.FACTIONS[who].color if who == 0 else T.FACTIONS[duel.bot_faction].color, 26, 260)
-	var big := UI.label("SCOPA!", 54, UI.GOLD, true)
+	var big := UI.label("SWEEP!", 54, UI.GOLD, true)
 	big.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	if not UI.LOW_SPEC:
 		big.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.8))
@@ -1592,17 +1592,17 @@ func _show_rules() -> void:
 	var body: VBoxContainer = panel.get_meta("body")
 	var capture_line := "Play a card whose rank matches a table card, or whose rank equals the sum of several table cards. A 10 can only take a 10."
 	if duel.rule == C.RULE_QUINDICI:
-		capture_line = "Scopa di Quindici: your card plus the cards you take must total exactly 15, and a card can never take another card of the same value. A 10 can only be taken by a 5."
+		capture_line = "Fifteen Duel: your card plus the cards you take must total exactly 15, and a card can never take another card of the same value. A 10 can only be taken by a 5."
 	for line in [
 		["Capture", capture_line],
-		["Scopa", "Clear the table with a capture to score a scopa. The final capture of a hand is not a scopa."],
-		["The sweep", "When the deck runs out, whoever captured last takes the remaining table cards."],
+		["Sweep", "Clear the table with a capture to score a sweep. The final capture of a hand is not a sweep."],
+		["Final take", "When the deck runs out, whoever captured last takes the remaining table cards."],
 		["Loot", "1 Renown for the most captured cards."],
 		["Treasury", "1 Renown for the most Forge cards."],
 		["Runestone", "1 Renown for whoever holds the 7 of Forge."],
-		["Banner", "1 Renown for the best Primiera: your best card in each faction (7=21, 6=18, Ace=16, faces=10)."],
-		["Glory", "1 Renown per scopa."],
-		["Favor", "You earn 1 Favor for a scopa or for capturing any 7. Spend 1 to use your faction Oath, once per hand."],
+		["Banner", "1 Renown for the best Banner total: your best card in each faction (7=21, 6=18, Ace=16, faces=10)."],
+		["Glory", "1 Renown per sweep."],
+		["Favor", "You earn 1 Favor for a sweep or for capturing any 7. Spend 1 to use your faction Oath, once per hand."],
 	]:
 		var h := HBoxContainer.new()
 		h.add_theme_constant_override("separation", 8)
@@ -1627,7 +1627,7 @@ func _show_pile() -> void:
 		head.add_theme_constant_override("separation", 8)
 		body.add_child(head)
 		head.add_child(UI.label(title, 18, UI.GOLD, true))
-		head.add_child(UI.label("%d cards · Forge %d · Primiera %d" % [
+		head.add_child(UI.label("%d cards · Forge %d · Banner %d" % [
 			duel.captured[who].size(),
 			_CountFaction(duel.captured[who], T.FORGE),
 			duel.primiera_total(duel.captured[who])], 14, UI.TEXT_DIM))
@@ -1763,10 +1763,10 @@ func _show_hand_summary() -> void:
 	_hcell(grid, "Runestone", "", UI.TEXT, false)
 	_hcell(grid, "", "✧" if score.runestone == 0 else "—", UI.GOLD if score.runestone == 0 else UI.TEXT_DIM, false)
 	_hcell(grid, "", "✧" if score.runestone == 1 else "—", UI.GOLD if score.runestone == 1 else UI.TEXT_DIM, false)
-	_hcell(grid, "Banner · Primiera", "", UI.TEXT, false)
+	_hcell(grid, "Banner · total", "", UI.TEXT, false)
 	_hcell(grid, "", str(score.primiera[0]) + ("  ✦" if score.banner == 0 else ""), UI.TEXT, false)
 	_hcell(grid, "", str(score.primiera[1]) + ("  ✦" if score.banner == 1 else ""), UI.TEXT, false)
-	_hcell(grid, "Glory · scopa", "", UI.TEXT, false)
+	_hcell(grid, "Glory · sweeps", "", UI.TEXT, false)
 	_hcell(grid, "", str(score.scopa[0]), UI.TEXT, false)
 	_hcell(grid, "", str(score.scopa[1]), UI.TEXT, false)
 	for f in range(4):
@@ -1868,13 +1868,13 @@ func _puzzle_verdict(body: VBoxContainer, score: Dictionary) -> void:
 	match goal:
 		"scopa":
 			ok = _scopa_total[0] >= 1
-			msg = "Clear the table with a capture to score a scopa."
+			msg = "Clear the table with a capture to score a sweep."
 		"runestone":
 			ok = duel.captured[0].has(C.make(7, T.RUNESTONE_SUIT))
 			msg = "Capture the 7 of Forge — the Runestone."
 		"primiera":
 			ok = duel.primiera_total(duel.captured[0]) > 40
-			msg = "Finish with a Primiera total above 40."
+			msg = "Finish with a Banner total above 40."
 		"captures":
 			ok = duel.captured[0].size() >= 12
 			msg = "Capture at least 12 cards."
@@ -1934,7 +1934,7 @@ func _play_end_sound(w: int) -> void:
 # ---------------------------------------------------------------------------
 func _open_menu() -> void:
 	Sfx.play("tap")
-	var panel := _oath_sheet("PAUSED", "Scopa: Four Realms")
+	var panel := _oath_sheet("PAUSED", "Four Realms")
 	var body: VBoxContainer = panel.get_meta("body")
 	var info: Dictionary = T.FACTIONS[duel.player_faction]
 	body.add_child(UI.label("%s · %s" % [info.people, info.oath], 18, info.color, true))
