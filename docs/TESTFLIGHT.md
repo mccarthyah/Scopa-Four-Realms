@@ -6,10 +6,13 @@ upload a signed IPA to App Store Connect. The run is manual and does not submit
 for App Review or assign testers. Apple processes an uploaded build before it
 appears in TestFlight; external testing may require Beta App Review.
 
-**Status:** A macOS 26 / Xcode 26.6 run successfully archived, cloud-signed,
-and uploaded version 1.0 build 1 to App Store Connect. Apple processing and
-physical iOS device testing are separate; successful upload does not establish
-that the build is available to testers.
+**Status:** Previous Xcode 26.6 builds were uploaded successfully. The workflow
+now selects GitHub's `xcode-27` Apple Silicon runner and checks for Xcode 27 and
+an iOS 27 SDK or later to meet Apple's April 2027 SDK requirement. **This
+updated toolchain has not yet been built, signed, uploaded, or tested on a
+device.** Before distributing it, run an unsigned build check, then test a signed
+build on an iPhone (including cold launch, orientation, touch, and resume).
+Apple processing and physical testing are separate from upload success.
 
 ## Recommended: cloud signing, no personal Mac
 
@@ -97,10 +100,19 @@ a distribution profile containing the matching certificate.
 
 Limit repository access and use environment protection rules as appropriate.
 The workflow deletes its temporary signing files and keychain at the end of the
-hosted run. It targets iOS 15 or later and downloads the official Godot 4.7.2 macOS editor and matching
-export templates with pinned SHA-256 checksums, and uses the Xcode installed on
-Xcode 26.6 on the GitHub `macos-26` runner. To upgrade Godot, update its version and both
-checksums together. Runner images and Apple's signing requirements can change;
-inspect failure logs rather than assuming the build was uploaded. The workflow
-modifies `export_presets.cfg` only on the runner, and uses an opaque iOS icon
-based on the project's existing card icon.
+hosted run. It targets iOS 15 or later and downloads the official Godot 4.7.2
+macOS editor and matching export templates with pinned SHA-256 checksums. It
+uses GitHub's `xcode-27` Apple Silicon runner and verifies the selected Xcode and
+iPhoneOS SDK are both version 27 or later. The runner's installed Xcode may
+change within the major release; the check prevents a silent fallback to SDK 26.
+This changes the build SDK, not the iOS 15 minimum deployment target.
+
+Godot 4.7.2's iOS template includes a scene manifest and scene delegate, but
+Xcode 27 compatibility, signing and device launch still require real testing.
+To upgrade Godot, update its version and both checksums together. Runner images
+and Apple's signing requirements can change; inspect failure logs rather than
+assuming the build was uploaded. The workflow modifies `export_presets.cfg` only
+on the runner, and uses the supplied opaque iPhone icon.
+
+References: [Apple's scene-based lifecycle guidance](https://developer.apple.com/videos/play/wwdc2026/278/)
+and [GitHub's Xcode 27 runner announcement](https://github.blog/changelog/2026-10-15-xcode-27-runner-image-generally-available/).
