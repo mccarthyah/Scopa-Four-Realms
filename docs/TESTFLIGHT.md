@@ -1,91 +1,104 @@
 # GitHub Actions: iOS / TestFlight
 
-The **iOS TestFlight** workflow is started manually from GitHub Actions. On a
-GitHub-hosted Mac it exports a Godot Xcode project, signs an App Store IPA, and
-optionally uploads it to App Store Connect. It uses the current checked-out
-commit, including the supplied card artwork. It does not submit the app for App
-Review or automatically add testers. Apple processes an uploaded build before
-it becomes available in TestFlight; external testing may require Beta App Review.
+The **iOS TestFlight** workflow runs on a GitHub-hosted Mac; you do not need to
+own a Mac. It exports a Godot Xcode project, archives it, and can export and
+upload a signed IPA to App Store Connect. The run is manual and does not submit
+for App Review or assign testers. Apple processes an uploaded build before it
+appears in TestFlight; external testing may require Beta App Review.
 
-**Status:** the workflow needs real Apple account configuration and its first
-macOS run. It has not yet been verified against Xcode, Apple signing, TestFlight,
-or a physical iOS device. A GitHub token alone cannot provide Apple signing.
+**Status:** Godot's Xcode-project export and workflow syntax have been checked.
+The cloud signing, Xcode archive, Apple upload, and a physical iOS device have
+not yet been verified. Apple account setup and a real run are still required.
 
-## 1. Apple prerequisites
+## Recommended: cloud signing, no personal Mac
 
-- An active Apple Developer Program membership with permissions for certificates,
-  identifiers, profiles and App Store Connect.
-- Register an explicit App ID / bundle identifier and create a corresponding
-  app record in App Store Connect. The bundle ID must match exactly.
-- An **Apple Distribution** certificate **with its private key**, exported
-  together as a password-protected `.p12` file. An iOS **App Store Connect**
-  distribution provisioning profile for the same team, explicit App ID, and
-  certificate. Do not use a development or ad-hoc profile.
-- For uploads, an App Store Connect **team API key** with sufficient upload
-  permissions, its key ID, issuer ID, and downloaded `.p8` private key.
-  Keep all keys private. Do not send them in chat or commit them to Git.
+1. Have an active Apple Developer Program membership and an app record in App
+   Store Connect with a registered, explicit bundle ID.
+2. In [App Store Connect → Users and Access → Integrations → App Store Connect API](https://appstoreconnect.apple.com/access/integrations/api),
+   enable API access if needed and create a **team API key** with permissions
+   suitable for cloud-managed distribution signing and uploads. Apple states
+   that Admin or Account Holder can cloud-sign by default; use an appropriately
+   authorized key and check your team's access settings. Note the **Key ID** and
+   **Issuer ID**, and download its `.p8` private key (Apple permits only one
+   download). Do not share the private key or Apple password in chat.
+3. In the GitHub repository's **Settings → Environments → testflight**, add
+   these **environment variables**:
 
-## 2. GitHub environment settings
+   | Name | Value |
+   | --- | --- |
+   | `APPLE_TEAM_ID` | 10-character Apple Developer team ID. |
+   | `IOS_BUNDLE_ID` | Exact bundle ID in your App Store Connect app record. |
+   | `IOS_VERSION` | Marketing version, e.g. `1.0`; already set to `1.0`. |
 
-In the repository's **Settings → Environments**, create an environment named
-`testflight`. Add these environment **variables** (or use repository variables):
+4. In the same environment, add these **environment secrets**:
 
-| Variable | Value |
+   | Name | Value |
+   | --- | --- |
+   | `ASC_KEY_ID` | App Store Connect API key ID. |
+   | `ASC_ISSUER_ID` | App Store Connect API issuer ID. |
+   | `ASC_PRIVATE_KEY_BASE64` | Base64-encoded contents of the `.p8` file. |
+
+   To prepare the Base64 value **on Windows**, open PowerShell and run:
+
+   ```powershell
+   [Convert]::ToBase64String([IO.File]::ReadAllBytes("C:\path\to\AuthKey_KEYID.p8")) | Set-Clipboard
+   ```
+
+   Paste it directly into the `ASC_PRIVATE_KEY_BASE64` GitHub secret, then clear
+   your clipboard. Do not post it in chat or commit the `.p8` file. On macOS,
+   `base64 -i /path/to/AuthKey_KEYID.p8 | pbcopy` does the equivalent.
+
+Cloud signing uses an unsigned Xcode archive and asks Xcode, authenticated with
+the API key, to export with automatic signing. Apple may create or update
+profiles and cloud signing assets. It depends on Apple account permissions and
+cloud-signing availability; if this unsigned-archive approach fails for your
+account or Xcode version, use the manual signing alternative below. It has not
+been validated against this Apple account.
+
+## Run the workflow
+
+1. Open **Actions → iOS TestFlight → Run workflow** and choose the branch.
+2. Choose **cloud** signing. Optionally enter a positive integer build number
+   greater than previous builds for that marketing version. The default is
+   `run_number × 100 + run_attempt`, unique within this workflow but potentially
+   lower than or colliding with builds made elsewhere.
+3. Leave **Upload** off for an export-only test, or turn it on to upload to
+   App Store Connect / TestFlight. **Keep IPA** is off by default: enabling it
+   publishes a seven-day Actions artifact accessible to repository readers. This
+   repository is public, so the artifact may be broadly accessible.
+4. After an upload, wait for processing in App Store Connect → TestFlight,
+   complete any required compliance questions, and assign testers there.
+
+**unsigned** signing mode is a credentials-free Mac/Xcode archive check, not an
+installable IPA and not a TestFlight build. It requires both Upload and Keep IPA
+to be off, and uses a dummy team and bundle ID if the real variables are unset.
+
+## Alternative: manual certificate signing
+
+Select **manual** signing if you already have an Apple Distribution certificate
+with its private key and a matching App Store provisioning profile. In addition
+to the variables above, add these environment secrets:
+
+| Name | Value |
 | --- | --- |
-| `APPLE_TEAM_ID` | Your 10-character Apple Developer team ID. |
-| `IOS_BUNDLE_ID` | The exact registered bundle ID; the placeholder in `export_presets.cfg` need not be yours. |
-| `IOS_VERSION` | Marketing version, e.g. `1.0` (optional; defaults to `1.0`). |
+| `IOS_DISTRIBUTION_P12_BASE64` | Base64 of the password-protected `.p12` certificate and private key. |
+| `IOS_DISTRIBUTION_P12_PASSWORD` | Password used to export that `.p12`. |
+| `IOS_APP_STORE_PROFILE_BASE64` | Base64 of the App Store `.mobileprovision` profile. |
 
-Add these environment **secrets** (or repository secrets):
+The three `ASC_*` secrets are also needed when uploading in manual mode. It is
+possible to create a certificate and profile on Windows using OpenSSL and the
+Apple Developer portal; no Mac is required for that preparation. Never commit
+or share the certificate, private key, or password. Use an explicit App ID and
+a distribution profile containing the matching certificate.
 
-| Secret | Value |
-| --- | --- |
-| `IOS_DISTRIBUTION_P12_BASE64` | Base64 of the `.p12` certificate **and private key**. |
-| `IOS_DISTRIBUTION_P12_PASSWORD` | Password used when exporting the `.p12`. |
-| `IOS_APP_STORE_PROFILE_BASE64` | Base64 of the `.mobileprovision` App Store distribution profile. |
-| `ASC_KEY_ID` | App Store Connect team API key ID; required only when uploading. |
-| `ASC_ISSUER_ID` | App Store Connect API issuer ID; required only when uploading. |
-| `ASC_PRIVATE_KEY_BASE64` | Base64 of the `.p8` API private key; required only when uploading. |
+## Security and maintenance
 
-On macOS, generate each Base64 value locally without printing it in chat:
-
-```sh
-base64 -i /path/to/distribution.p12 | pbcopy
-# Paste into IOS_DISTRIBUTION_P12_BASE64 in GitHub, then:
-base64 -i /path/to/appstore.mobileprovision | pbcopy
-# Paste into IOS_APP_STORE_PROFILE_BASE64, then:
-base64 -i /path/to/AuthKey_KEYID.p8 | pbcopy
-# Paste into ASC_PRIVATE_KEY_BASE64; clear your clipboard afterward.
-```
-
-Use repository access controls and, if desired, environment protection rules to
-limit who can run this workflow. A signed IPA is saved as an Actions artifact only if **Keep IPA** is selected;
-it is retained for seven days and can be downloaded by people with access to
-that repository's artifacts. This repository is public, so an artifact may be
-broadly accessible. Leave **Keep IPA** off if that is not acceptable. The temporary
-certificate, profile and API key are removed from the hosted runner at the end.
-
-## 3. Run it
-
-1. Open **Actions → iOS TestFlight → Run workflow** and choose the desired branch.
-2. Optionally enter a positive integer build number that is unique and higher
-   than previous builds for that marketing version. If omitted, the workflow
-   uses `run_number × 100 + run_attempt`; this is unique within this workflow,
-   but **may collide with or be lower than builds made elsewhere**. Use an
-   explicit number if you already have builds in App Store Connect.
-3. Leave **Upload** off to build and retain a signed IPA without uploading.
-   Turn it on to upload to App Store Connect / TestFlight. This is an explicit,
-   manual choice; the workflow does not run on every push.
-4. Optionally turn **Keep IPA** on to retain an artifact (see the public-access
-   warning above); it is off by default. Check the Actions log and any artifact.
-   After upload, wait for processing in App
-   Store Connect → TestFlight, complete any required compliance questions, and
-   assign internal or external testers there.
-
-The job downloads the official Godot 4.7.2 macOS editor and matching export
-templates with pinned SHA-256 checksums, and uses the Xcode installed on the
-GitHub `macos-15` runner. To upgrade Godot, update the version and both pinned
-checksums together. GitHub-hosted runner images and Apple's signing requirements
-can change; inspect failed Xcode/Apple messages rather than assuming a successful
-upload. The workflow modifies `export_presets.cfg` only in the ephemeral runner.
-Its 1024×1024 opaque iOS icon is based on the project's existing card icon.
+Limit repository access and use environment protection rules as appropriate.
+The workflow deletes its temporary signing files and keychain at the end of the
+hosted run. It downloads the official Godot 4.7.2 macOS editor and matching
+export templates with pinned SHA-256 checksums, and uses the Xcode installed on
+the GitHub `macos-15` runner. To upgrade Godot, update its version and both
+checksums together. Runner images and Apple's signing requirements can change;
+inspect failure logs rather than assuming the build was uploaded. The workflow
+modifies `export_presets.cfg` only on the runner, and uses an opaque iOS icon
+based on the project's existing card icon.
