@@ -44,7 +44,9 @@ var last_capturer := -1
 var hand_no := 0
 var turn_count := 0
 var renown: Array = [0, 0]
-var history: Array = []
+var match_id := Crypto.new().generate_random_bytes(16).hex_encode()
+var player_sweeps := 0
+var player_glory := 0
 var quests: Array = []
 var quest_done: Array = [false, false]
 var events: Array = []
@@ -54,6 +56,9 @@ var veiled := -1                  # campaign: a table card the player cannot see
 var rng := RandomNumberGenerator.new()
 var hands_played := 0
 var stat := {}
+var _capture_table: Array = []
+var _capture_rule := ""
+var _capture_groups := {}
 
 
 func _init(config: Dictionary = {}) -> void:
@@ -67,7 +72,6 @@ func _init(config: Dictionary = {}) -> void:
 	rng.seed = config.get("seed", randi())
 	quests = config.get("quests", [])
 	renown = [0, 0]
-	history = []
 	match_over = false
 	starter = 0
 	if quests.is_empty() and mode != T.Mode.PUZZLE:
@@ -165,7 +169,14 @@ func groups_for(card: int) -> Array:
 
 
 func groups_for_player(who: int, card: int) -> Array:
-	return C.capture_groups_rule(visible_table(who), card, rule)
+	var visible := visible_table(who)
+	if _capture_table != visible or _capture_rule != rule:
+		_capture_table = visible.duplicate()
+		_capture_rule = rule
+		_capture_groups.clear()
+	if not _capture_groups.has(card):
+		_capture_groups[card] = C.capture_groups_rule(visible, card, rule)
+	return _capture_groups[card]
 
 
 ## True when Quindici is what stops this card: under classic rules it would have
@@ -202,8 +213,7 @@ func play(who: int, card: int, group_idx: int = 0) -> Dictionary:
 	if not hands[who].has(card):
 		return empty_result
 
-	var vis := visible_table(who)
-	var groups := C.capture_groups_rule(vis, card, rule)
+	var groups := groups_for_player(who, card)
 	hands[who].erase(card)
 	turn_count += 1
 	var result := {"card": card, "captured": [], "scopa": false, "who": who, "placed": false}
@@ -233,8 +243,7 @@ func play(who: int, card: int, group_idx: int = 0) -> Dictionary:
 
 		# A scopa only counts if it is not the very last play of the deal
 		var last_play: bool = deck.is_empty() and hands[0].is_empty() and hands[1].is_empty()
-		var vis_after := visible_table(who)
-		if vis_after.is_empty() and not last_play:
+		if table.is_empty() and not last_play:
 			result["scopa"] = true
 			_scopa(who)
 
@@ -265,6 +274,8 @@ func _scopa(who: int) -> void:
 	scopa_count[who] += glory
 	if who == 0:
 		stat["scopas"] += 1
+		player_sweeps += 1
+		player_glory += glory
 	gain_favor(who, 1)
 	_push({"t": "scopa", "who": who, "glory": glory})
 
@@ -350,7 +361,10 @@ func use_foresight(who: int, order: Array) -> bool:
 	if not can_use_oath(who):
 		return false
 	var top := peek_top(3)
-	if order.size() != top.size():
+	var sorted_order := order.duplicate()
+	sorted_order.sort()
+	top.sort()
+	if top.is_empty() or sorted_order != top:
 		return false
 	for c in top:
 		deck.pop_back()
@@ -385,7 +399,7 @@ func use_raid(who: int, table_card: int) -> bool:
 func use_diplomacy(who: int, hand_card: int, table_card: int) -> bool:
 	if not can_use_oath(who):
 		return false
-	if not hands[who].has(hand_card) or not table.has(table_card):
+	if not hands[who].has(hand_card) or not visible_table(who).has(table_card):
 		return false
 	hands[who].erase(hand_card)
 	table.erase(table_card)
@@ -419,7 +433,6 @@ func _end_hand() -> void:
 	var score := score_hand()
 	renown[0] += score.points[0]
 	renown[1] += score.points[1]
-	history.append(score)
 	hands_played += 1
 	_eval_quests(score)
 	_push({"t": "hand_end", "score": score})
@@ -587,7 +600,7 @@ func _roll_quests() -> Array:
 # ---------------------------------------------------------------------------
 func to_dict() -> Dictionary:
 	return {
-		"mode": mode, "oaths": oaths_enabled, "rule": rule,
+		"version": 1, "mode": mode, "oaths": oaths_enabled, "rule": rule, "match_id": match_id,
 		"player_faction": player_faction, "bot_faction": bot_faction,
 		"campaign_id": campaign.get("id", ""), "puzzle_name": puzzle.get("name", ""),
 		"deck": deck, "table": table, "hands": hands, "captured": captured,
@@ -596,13 +609,113 @@ func to_dict() -> Dictionary:
 		"hand_no": hand_no, "turn_count": turn_count, "renown": renown,
 		"quest_keys": _quest_keys(), "quest_done": quest_done,
 		"hand_over": hand_over, "match_over": match_over, "veiled": veiled,
-		"hands_played": hands_played, "stat": stat, "rng_seed": rng.seed,
+		"hands_played": hands_played, "stat": stat,
+		"player_sweeps": player_sweeps, "player_glory": player_glory,
+		"rng_seed": str(rng.seed), "rng_state": str(rng.state),
 	}
+
+
+## Validate the persisted boundary before constructing a duel or reading nested fields.
+static func valid_save(save: Variant) -> bool:
+	if not (save is Dictionary) or not (save.get("state") is Dictionary):
+		return false
+	var d: Dictionary = save.state
+	if not _int_in(d.get("version", 0), 0, 1):
+		return false
+	if not _int_in(d.get("mode"), 0, T.Mode.QUINDICI):
+		return false
+	for key in ["player_faction", "bot_faction"]:
+		if not _int_in(d.get(key), 0, 3):
+			return false
+	for key in ["turn", "starter"]:
+		if not _int_in(d.get(key), 0, 1):
+			return false
+	if not _int_in(d.get("last_capturer"), -1, 1) or not _int_in(d.get("veiled"), -1, C.DECK_SIZE - 1):
+		return false
+	for key in ["hand_no", "turn_count", "hands_played", "player_sweeps", "player_glory"]:
+		if not _int_in(d.get(key, 0), 0, 1000):
+			return false
+	for key in ["hand_over", "match_over", "oaths"]:
+		if not (d.get(key) is bool):
+			return false
+	if d.match_over and not d.hand_over:
+		return false
+	if d.get("rule", C.RULE_CLASSIC) not in [C.RULE_CLASSIC, C.RULE_QUINDICI]:
+		return false
+	for key in ["scopa_count", "favor", "renown", "oath_used", "quest_done"]:
+		var values: Variant = d.get(key)
+		if not (values is Array) or values.size() != 2:
+			return false
+		for value in values:
+			if key in ["oath_used", "quest_done"]:
+				if not (value is bool):
+					return false
+			elif not _int_in(value, 0, 1000):
+				return false
+	var piles: Array = [d.get("deck"), d.get("table")]
+	for key in ["hands", "captured"]:
+		var pair: Variant = d.get(key)
+		if not (pair is Array) or pair.size() != 2:
+			return false
+		piles.append_array(pair)
+	var seen := {}
+	for pile in piles:
+		if not (pile is Array):
+			return false
+		for card in pile:
+			if not _int_in(card, 0, C.DECK_SIZE - 1) or seen.has(int(card)):
+				return false
+			seen[int(card)] = true
+	if seen.size() != C.DECK_SIZE or (not d.hand_over and d.hands[int(d.turn)].is_empty()):
+		return false
+	var stat_data: Variant = d.get("stat")
+	var quest_keys: Variant = d.get("quest_keys")
+	if not (stat_data is Dictionary) or not (quest_keys is Array) or quest_keys.size() > 2:
+		return false
+	for key in ["7s", "horde", "forge", "scopas", "fools"]:
+		if not _int_in(stat_data.get(key), 0, C.DECK_SIZE):
+			return false
+	if not (stat_data.get("runestone") is bool):
+		return false
+	if (int(d.mode) == T.Mode.CAMPAIGN) == saved_campaign(d).is_empty():
+		return false
+	if (int(d.mode) == T.Mode.PUZZLE) == saved_puzzle(d).is_empty():
+		return false
+	for key in ["rng_seed", "rng_state"]:
+		var value: Variant = d.get(key, "0")
+		if not (value is String and value.is_valid_int()) and not (value is int or value is float):
+			return false
+	if not (d.get("match_id", "") is String):
+		return false
+	return true
+
+
+static func saved_campaign(state: Dictionary) -> Dictionary:
+	for campaign_entry in T.CAMPAIGNS:
+		if campaign_entry.id == state.get("campaign_id", ""):
+			return campaign_entry
+	return {}
+
+
+static func saved_puzzle(state: Dictionary) -> Dictionary:
+	for puzzle_entry in T.PUZZLES:
+		if puzzle_entry.name == state.get("puzzle_name", ""):
+			return puzzle_entry
+	return {}
+
+
+static func _int_in(value: Variant, minimum: int, maximum: int) -> bool:
+	return (value is int or value is float) and value >= minimum and value <= maximum and value == int(value)
 
 
 func from_dict(d: Dictionary) -> void:
 	# JSON hands numbers back as floats; every card id, count and index here is
 	# an int, so coerce on the way in.
+	mode = int(d.get("mode", mode))
+	oaths_enabled = bool(d.get("oaths", oaths_enabled))
+	player_faction = int(d.get("player_faction", player_faction))
+	bot_faction = int(d.get("bot_faction", bot_faction))
+	match_id = str(d.get("match_id", JSON.stringify(d).sha256_text()))
 	deck = _ints(d.get("deck", []))
 	table = _ints(d.get("table", []))
 	hands = _ints2(d.get("hands", [[], []]))
@@ -628,7 +741,11 @@ func from_dict(d: Dictionary) -> void:
 			stat[k] = bool(stat[k])
 		else:
 			stat[k] = int(stat[k])
-	rng.seed = d.get("rng_seed", rng.seed)
+	player_sweeps = int(d.get("player_sweeps", stat.get("scopas", 0)))
+	player_glory = int(d.get("player_glory", scopa_count[0]))
+	rng.seed = int(d.get("rng_seed", rng.seed))
+	if d.has("rng_state"):
+		rng.state = int(d.rng_state)
 	# rebuild quest dictionaries from their keys
 	quests = []
 	for k in d.get("quest_keys", []):

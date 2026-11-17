@@ -44,7 +44,7 @@ four presets; you supply the export templates and SDK paths in *Project → Expo
 |---|---|
 | Select a card | tap it (cards you can capture with glow gold) |
 | Confirm / capture | tap the same card again, or tap a glowing table card |
-| Choose among several capture sets | tap the table card that belongs to the set you want |
+| Choose among several capture sets | tap a table card, then choose a set if that card belongs to several |
 | Spend Favor on your Oath | tap the Oath button above your hand |
 | Hint · Pile · Menu | the buttons beside your hand |
 
@@ -83,7 +83,8 @@ Everything in the brief, playable end to end:
 Portrait keeps a scrollable title with the supplied scenic logo, four illustrated
 faction tiles, and a two-column mode grid when space permits. The portrait duel
 uses a compact logo above the status and playfield on taller screens. In landscape,
-the title reflows into faction/record and mode columns. The duel places status
+the title gives the mode grid most of the width, with a smaller crest and compact
+faction picker beside it. The duel places status
 and the transparent logo on the left, table and hand in the centre, and quests
 and actions on the right; less-wide windows use a compact two-column version.
 Scroll indicators are hidden while scrolling remains enabled. The same match,
@@ -224,8 +225,7 @@ player took each point, plus the two quests. Ranked tracks the running Renown to
 ### Quests
 
 Claim the Runestone · Two Sweeps · Grove Tribute · Raise the Banner · Horde Raid · Fool's Errand ·
-Lucky Sevens · Empty Halls — two are drawn per duel, both players can chase them, completing one pays
-bonus Renown.
+Lucky Sevens · Empty Halls — two are drawn per duel. Completing one earns the player bonus Renown. The AI scores from the hand rules.
 
 ### Campaign
 

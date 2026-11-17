@@ -5,6 +5,7 @@ extends Node
 signal orientation_changed(value: String)
 
 const T := preload("res://scripts/tables.gd")
+const DuelRules := preload("res://scripts/game/duel.gd")
 const SAVE_PATH := "user://four_realms_profile.json"
 const DUEL_PATH := "user://four_realms_duel.json"
 
@@ -34,7 +35,7 @@ var board_theme := 0
 var last_puzzle_date := ""
 var last_puzzle_won := false
 var saved_duel := {}
-var _duel_cache := {}
+var last_recorded_match := ""
 var faction_wins := {0: 0, 1: 0, 2: 0, 3: 0}
 var faction_plays := {0: 0, 1: 0, 2: 0, 3: 0}
 
@@ -79,6 +80,7 @@ func load_profile() -> void:
 	anim_match = bool(d.get("anim_match", true))
 	last_puzzle_date = d.get("last_puzzle_date", "")
 	last_puzzle_won = d.get("last_puzzle_won", false)
+	last_recorded_match = str(d.get("last_recorded_match", ""))
 	# JSON turns dictionary keys into strings, so map them back to ints
 	for k in d.get("faction_wins", {}):
 		faction_wins[int(k)] = int(d.faction_wins[k])
@@ -86,7 +88,7 @@ func load_profile() -> void:
 		faction_plays[int(k)] = int(d.faction_plays[k])
 
 
-func save_profile() -> void:
+func save_profile() -> bool:
 	var d := {
 		"matches": matches, "wins": wins, "losses": losses, "draws": draws,
 		"best_renown": best_renown, "total_glory": total_glory, "scopas": scopas,
@@ -98,12 +100,21 @@ func save_profile() -> void:
 		"anim_slow": anim_slow, "anim_match": anim_match,
 		"last_puzzle_date": last_puzzle_date, "last_puzzle_won": last_puzzle_won,
 		"faction_wins": faction_wins, "faction_plays": faction_plays,
+		"last_recorded_match": last_recorded_match,
 	}
-	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
-	if f == null:
-		return
-	f.store_string(JSON.stringify(d, "  "))
-	f.close()
+	return _write_json(SAVE_PATH, d)
+
+
+func _write_json(path: String, data: Dictionary) -> bool:
+	var temporary := path + ".tmp"
+	var file := FileAccess.open(temporary, FileAccess.WRITE)
+	if file == null:
+		return false
+	file.store_string(JSON.stringify(data))
+	file.flush()
+	var written := file.get_error() == OK
+	file.close()
+	return written and DirAccess.rename_absolute(temporary, path) == OK
 
 
 ## Mobile uses the OS orientation sensor. Desktop cannot rotate an individual
@@ -203,7 +214,16 @@ func _correct_window_shape() -> void:
 	window.size = Vector2i(target * factor)
 
 
-func record_match(won: bool, draw: bool, renown_for: int, glory: int, scopa_total: int, faction: int, quests: int) -> void:
+func record_match(won: bool, draw: bool, renown_for: int, glory: int, scopa_total: int, faction: int, quests: int, match_id: String = "", campaign_id: String = "", puzzle_result: int = -1) -> bool:
+	if match_id != "" and match_id == last_recorded_match:
+		return save_profile()
+	last_recorded_match = match_id
+	if won and campaign_id != "" and not campaign_cleared.has(campaign_id):
+		campaign_cleared.append(campaign_id)
+	if puzzle_result == 1 and not puzzle_done_today():
+		puzzles_solved += 1
+		last_puzzle_date = today_key()
+		last_puzzle_won = true
 	matches += 1
 	if draw:
 		draws += 1
@@ -217,7 +237,7 @@ func record_match(won: bool, draw: bool, renown_for: int, glory: int, scopa_tota
 	total_glory += glory
 	scopas += scopa_total
 	quests_done += quests
-	save_profile()
+	return save_profile()
 
 
 func today_key() -> String:
@@ -245,18 +265,13 @@ func mark_puzzle_solved(won: bool) -> void:
 
 ## --- interrupted-duel support (also the basis for async duels) -------------
 func store_duel(state: Dictionary) -> void:
-	saved_duel = state
-	_duel_cache = state
-	var f := FileAccess.open(DUEL_PATH, FileAccess.WRITE)
-	if f == null:
-		return
-	f.store_string(JSON.stringify(state))
-	f.close()
+	saved_duel = state.duplicate(true)
+	if not _write_json(DUEL_PATH, saved_duel):
+		push_warning("Could not save the duel to disk.")
 
 
 func clear_duel() -> void:
 	saved_duel = {}
-	_duel_cache = {}
 	if FileAccess.file_exists(DUEL_PATH):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(DUEL_PATH))
 
@@ -264,7 +279,7 @@ func clear_duel() -> void:
 func has_saved_duel() -> bool:
 	if saved_duel.is_empty():
 		_load_duel_file()
-	return not saved_duel.is_empty() and saved_duel.get("state", {}).size() > 0
+	return DuelRules.valid_save(saved_duel)
 
 
 func _load_duel_file() -> void:
@@ -276,5 +291,5 @@ func _load_duel_file() -> void:
 	var txt := f.get_as_text()
 	f.close()
 	var d = JSON.parse_string(txt)
-	if typeof(d) == TYPE_DICTIONARY:
+	if DuelRules.valid_save(d):
 		saved_duel = d

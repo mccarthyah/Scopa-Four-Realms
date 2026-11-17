@@ -76,12 +76,20 @@ func setup(id: int, up: bool = true, w: int = UI.CARD_W, h: int = UI.CARD_H) -> 
 	card_id = id
 	face_up = up
 	_sized = true
-	custom_minimum_size = Vector2(w, h)
-	size = Vector2(w, h)
+	set_card_size(Vector2(w, h))
 	_t = 0.0
 	_fig = 0.0
 	queue_redraw()
 	return self
+
+
+func set_card_size(card_size: Vector2) -> void:
+	if custom_minimum_size == card_size and size == card_size:
+		return
+	custom_minimum_size = card_size
+	size = card_size
+	_styles_ready = false
+	queue_redraw()
 
 
 func enter_anim(delay: float = 0.0) -> void:

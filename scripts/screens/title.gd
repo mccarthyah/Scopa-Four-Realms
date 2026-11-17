@@ -23,11 +23,13 @@ var _classic_toggle: Button
 var _codex: Control
 var _sheet_panel: PanelContainer
 var _scroll: ScrollContainer
+var _title_margin: MarginContainer
 var _title_columns: HBoxContainer
 var _title_left: VBoxContainer
 var _title_right: VBoxContainer
 var _title_parts: Array = []
 var _title_landscape := false
+var _mode_rows: Array[Callable] = []
 
 
 func _ready() -> void:
@@ -53,6 +55,7 @@ func _build() -> void:
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 
 	var root := MarginContainer.new()
+	_title_margin = root
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root.add_theme_constant_override("margin_left", 22)
 	root.add_theme_constant_override("margin_right", 22)
@@ -163,14 +166,36 @@ func _update_title_layout() -> void:
 	if _title_parts.is_empty():
 		return
 	var wide := size.x > size.y * 1.12
-	_faction_grid.columns = 2 if wide else 4
-	_mode_list.columns = 2 if (wide and size.x >= 1500.0) or (not wide and size.x >= 460.0) else 1
+	_faction_grid.columns = 2 if wide and size.x < 1350.0 else 4
+	_mode_list.columns = 2 if (wide and size.x >= 1160.0) or (not wide and size.x >= 460.0) else 1
+	if wide:
+		var margin := clampi(int(size.x * 0.04), 24, 68)
+		_title_margin.add_theme_constant_override("margin_left", margin)
+		_title_margin.add_theme_constant_override("margin_right", margin)
 	if wide == _title_landscape:
 		return
 	_title_landscape = wide
 	var mast: TextureRect = _title_parts[0]
 	mast.texture = LOGO_TRANSPARENT if wide else LOGO_SCENIC
-	mast.custom_minimum_size.y = 270.0 if wide else 330.0
+	mast.custom_minimum_size.y = 208.0 if wide else 330.0
+	_title_left.size_flags_stretch_ratio = 0.58 if wide else 1.0
+	_title_right.size_flags_stretch_ratio = 1.0
+	_title_left.add_theme_constant_override("separation", 12 if wide else 14)
+	_title_columns.add_theme_constant_override("separation", 48 if wide else 44)
+	for button in _faction_buttons:
+		button.custom_minimum_size.y = 144.0 if wide else 132.0
+	var oath_heading: Control = _title_parts[1]
+	oath_heading.get_child(0).get_child(0).text = "FACTION" if wide else "CHOOSE YOUR OATH"
+	oath_heading.get_child(1).visible = not wide
+	var mode_heading: Control = _title_parts[4]
+	mode_heading.get_child(0).get_child(0).text = "PLAY" if wide else "DUEL TYPES"
+	mode_heading.get_child(0).get_child(0).add_theme_font_size_override("font_size", 34 if wide else 19)
+	_title_parts[8].visible = not wide
+	_title_parts[9].visible = not wide
+	_mode_list.add_theme_constant_override("h_separation", 18 if wide else 10)
+	_mode_list.add_theme_constant_override("v_separation", 18 if wide else 10)
+	for style_row in _mode_rows:
+		style_row.call(wide)
 	_title_left.alignment = BoxContainer.ALIGNMENT_CENTER if wide else BoxContainer.ALIGNMENT_BEGIN
 	_title_right.alignment = BoxContainer.ALIGNMENT_CENTER if wide else BoxContainer.ALIGNMENT_BEGIN
 	if wide:
@@ -178,6 +203,8 @@ func _update_title_layout() -> void:
 			_title_parts[i].reparent(_title_right, false)
 		_title_right.show()
 	else:
+		_title_margin.add_theme_constant_override("margin_left", 22)
+		_title_margin.add_theme_constant_override("margin_right", 22)
 		_title_right.hide()
 		for node in _title_parts:
 			if node.get_parent() != _title_left:
@@ -206,7 +233,8 @@ func _section_header(title: String, sub: String) -> Control:
 	v.add_child(h)
 	var l := UI.label(title, 19, UI.PARCHMENT, true)
 	# Preserve room for the Settings action in very narrow portrait windows.
-	v.resized.connect(func(): l.add_theme_font_size_override("font_size", 15 if v.size.x < 330 else 19))
+	v.resized.connect(func():
+		l.add_theme_font_size_override("font_size", 34 if l.text == "PLAY" else (15 if v.size.x < 330 else 19)))
 	h.add_child(l)
 	var rule := ColorRect.new()
 	rule.color = Color(0.55, 0.84, 0.35, 0.58)
@@ -275,7 +303,6 @@ func _faction_card(f: int) -> Button:
 	nm.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	nm.add_theme_font_size_override("font_size", 18)
 	# Keep four faction names readable without colliding in narrow columns.
-	b.resized.connect(func(): nm.add_theme_font_size_override("font_size", 14 if b.size.x < 80 else 18))
 	v.add_child(nm)
 
 	var pp := UI.label(info.people, 14, UI.TEXT_DIM)
@@ -283,6 +310,10 @@ func _faction_card(f: int) -> Button:
 	pp.add_theme_color_override("font_color", Color("eee9d5"))
 	pp.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	v.add_child(pp)
+	b.resized.connect(func():
+		caption.offset_top = -60 if _title_landscape else -45
+		nm.add_theme_font_size_override("font_size", 23 if _title_landscape else (14 if b.size.x < 80 else 18))
+		pp.add_theme_font_size_override("font_size", 17 if _title_landscape else 14))
 
 	return b
 
@@ -322,6 +353,7 @@ func _refresh_toggle() -> void:
 
 
 func _build_modes() -> void:
+	_mode_rows.clear()
 	for c in _mode_list.get_children():
 		c.get_parent().remove_child(c)
 		c.queue_free()
@@ -341,7 +373,8 @@ func _build_modes() -> void:
 func _mode_row(title: String, sub: String, badge: String, cb: Callable, accent: Color) -> Control:
 	var p := PanelContainer.new()
 	p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	p.add_theme_stylebox_override("panel", UI.panel(UI.PANEL, 14, Color("927845"), 1))
+	var portrait_style := UI.panel(UI.PANEL, 14, Color("927845"), 1)
+	p.add_theme_stylebox_override("panel", portrait_style)
 	var backdrop := TextureRect.new()
 	backdrop.texture = MODE_ART
 	backdrop.modulate = Color(0.48, 0.53, 0.58, 1.0)
@@ -378,9 +411,10 @@ func _mode_row(title: String, sub: String, badge: String, cb: Callable, accent: 
 	v.add_child(subtitle)
 	# Two-column portrait tiles use compact typography, while a wide row keeps
 	# the larger display size. Full strings remain available and wrap naturally.
-	p.resized.connect(func():
-		t.add_theme_font_size_override("font_size", 17 if p.size.x < 350 else 22)
-		subtitle.add_theme_font_size_override("font_size", 13 if p.size.x < 350 else 16))
+	var apply_type := func():
+		t.add_theme_font_size_override("font_size", 31 if _title_landscape else (17 if p.size.x < 350 else 22))
+		subtitle.add_theme_font_size_override("font_size", 23 if _title_landscape else (13 if p.size.x < 350 else 16))
+	p.resized.connect(apply_type)
 
 	var go := UI.button("", "ghost", 18)
 	go.custom_minimum_size = Vector2(34, 44)
@@ -390,6 +424,36 @@ func _mode_row(title: String, sub: String, badge: String, cb: Callable, accent: 
 	go.add_theme_color_override("font_color", accent)
 	go.pressed.connect(cb)
 	h.add_child(go)
+
+	var primary := badge in ["QUICK", "RESUME"]
+	var fill := Color("29231f") if primary else Color("101d2b")
+	var border := accent if primary else Color("48556a")
+	var landscape_style := UI.flat(fill, 12, border, 2 if primary else 1, true)
+	landscape_style.content_margin_left = 24.0
+	landscape_style.content_margin_right = 20.0
+	landscape_style.content_margin_top = 12.0
+	landscape_style.content_margin_bottom = 12.0
+	var transparent_arrow := StyleBoxEmpty.new()
+	var arrow_styles := {}
+	for state in ["normal", "hover", "pressed"]:
+		arrow_styles[state] = go.get_theme_stylebox(state)
+	var apply_style := func(wide: bool):
+		p.add_theme_stylebox_override("panel", landscape_style if wide else portrait_style)
+		p.custom_minimum_size.y = 168.0 if wide else 0.0
+		backdrop.visible = not wide
+		h.add_theme_constant_override("separation", 14 if wide else 6)
+		emblem.visible = not wide
+		v.alignment = BoxContainer.ALIGNMENT_CENTER if wide else BoxContainer.ALIGNMENT_BEGIN
+		v.add_theme_constant_override("separation", 6 if wide else 1)
+		go.custom_minimum_size.x = 48.0 if wide else 34.0
+		for state in arrow_styles:
+			go.add_theme_stylebox_override(state, transparent_arrow if wide else arrow_styles[state])
+		t.add_theme_color_override("font_color", UI.GOLD if wide and primary else UI.TEXT)
+		subtitle.add_theme_color_override("font_color", Color("bec8d6") if wide else UI.TEXT_DIM)
+		apply_type.call()
+	if badge != "":
+		_mode_rows.append(apply_style)
+	apply_style.call(_title_landscape)
 
 	# A swipe beginning over a row must scroll rather than immediately launch a
 	# duel. Activate on release only if the pointer stayed inside the row.
@@ -611,17 +675,18 @@ func _launch_quindici() -> void:
 
 
 func _resume_duel() -> void:
-	var sv: Dictionary = Profile.saved_duel
-	if sv.is_empty():
+	if not Profile.has_saved_duel():
 		return
+	var state: Dictionary = Profile.saved_duel.state
 	var cfg: Dictionary = {
-		"mode": int(sv.get("mode", T.Mode.QUICK)),
-		"player_faction": int(sv.get("player_faction", T.FORGE)),
-		"oaths": not Profile.classic_mode,
-		"campaign": sv.get("campaign", {}),
-		"puzzle": sv.get("puzzle", {}),
-		"rule": sv.get("state", {}).get("rule", "classic"),
-		"resume": sv.get("state", {}),
+		"mode": int(state.mode),
+		"player_faction": int(state.get("player_faction", T.FORGE)),
+		"bot_faction": int(state.get("bot_faction", -1)),
+		"oaths": bool(state.get("oaths", not Profile.classic_mode)),
+		"campaign": Duel.saved_campaign(state),
+		"puzzle": Duel.saved_puzzle(state),
+		"rule": state.get("rule", "classic"),
+		"resume": state,
 	}
 	Sfx.play("tap")
 	start_duel.emit(cfg)
@@ -919,7 +984,7 @@ func _open_codex() -> void:
 		var info: Dictionary = T.FACTIONS[f]
 		v.add_child(_oath_line(f))
 	v.add_child(UI.label("Quests", 26, UI.PARCHMENT, true))
-	v.add_child(_para("Every duel shows two public quests. Both players can chase them; you get the bonus Renown when you complete one. They exist to teach strong card-play habits: hoard the 7s, deny the Runestone, keep the table clean."))
+	v.add_child(_para("Every duel shows two public quests. Complete a quest to earn its bonus Renown. They exist to teach strong card-play habits: hoard the 7s, deny the Runestone, keep the table clean."))
 	var close := UI.button("Understood", "primary")
 	close.pressed.connect(_codex_close)
 	v.add_child(close)

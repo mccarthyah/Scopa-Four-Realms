@@ -29,7 +29,7 @@ static func choose_move(duel, who: int) -> Dictionary:
 	var best := {}
 	var best_score := -INF
 	for card in hand:
-		var groups: Array = C.capture_groups_rule(duel.table, card, duel.rule)
+		var groups: Array = duel.groups_for_player(who, card)
 		if groups.is_empty():
 			var s := _place_score(duel, who, card, style)
 			if s > best_score:
@@ -51,7 +51,7 @@ static func _capture_score(duel, who: int, card: int, group: Array, style: Strin
 	# the played card itself also joins your pile
 	s += _card_value(card) * 0.35
 	# scopa?
-	var last_play: bool = duel.deck.is_empty() and duel.hands[0].is_empty() and duel.hands[1].is_empty()
+	var last_play: bool = duel.deck.is_empty() and duel.hands[who].size() == 1 and duel.hands[1 - who].is_empty()
 	if duel.table.size() == group.size() and not last_play:
 		s += 6.0
 		if style == "aggressive":
@@ -79,7 +79,7 @@ static func _place_score(duel, who: int, card: int, style: String) -> float:
 	if C.rank(card) == 7 or C.is_runestone(card):
 		s -= 4.0
 	# dumping a duplicate rank the table already shows is safer
-	for c in duel.table:
+	for c in duel.visible_table(who):
 		if C.rank(c) == C.rank(card):
 			s += 1.0
 			break

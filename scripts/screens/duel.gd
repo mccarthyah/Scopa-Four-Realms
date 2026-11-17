@@ -71,13 +71,10 @@ var _layout_refresh_pending := false
 # --- runtime -----------------------------------------------------------------
 var _turn_time := TURN_SECONDS
 var _selection := -1
-var _pending_groups: Array = []
 var _busy := false
 var _ai_token := 0
 var _hinted_once := false
 var _timeouts := 0
-var _scopa_total := [0, 0]
-var _quests_completed := 0
 var _match_recorded := false
 var _last_tick := -10.0
 var _scopa_held := false
@@ -246,9 +243,8 @@ func _build_duel() -> void:
 func _resumed_boot() -> void:
 	_busy = false
 	_refresh_all()
-	_toast("Welcome back", "Your duel was saved mid-hand.")
-	if duel.turn == 1 and not duel.hand_over:
-		_run_bot()
+	_toast("Welcome back", "Your duel was restored.")
+	_after_turn()
 
 
 func _build_top() -> Control:
@@ -749,31 +745,37 @@ func _hand_card_width(available: float) -> float:
 
 
 func _refresh_hand() -> void:
-	for c in _hand_row.get_children():
-		c.get_parent().remove_child(c)
-		c.queue_free()
-	if duel.puzzle.size() > 0:
-		pass
 	var hand: Array = duel.hands[0].duplicate()
 	hand.sort_custom(C.sort_by_faction)
 	var my_turn := duel.is_my_turn(0) and not _busy
 	var hw: float = _hand_card_width(_hand_box.size.x)
-	for c in hand:
-		var cv := CardView.new()
-		cv.setup(c, true, int(hw), int(hw * 1.404))
+	var cards := _retain_cards(_hand_row, hand)
+	for i in range(hand.size()):
+		var card: int = hand[i]
+		var cv: CardView = cards.get(card)
+		if cv == null:
+			cv = CardView.new()
+			cv.setup(card, true, int(hw), int(hw * CardView.ASPECT))
+			cv.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			cv.pressed.connect(_on_hand_card.bind(card))
+			_hand_row.add_child(cv)
+			cv.enter_anim()
+		cv.set_card_size(Vector2(int(hw), int(hw * CardView.ASPECT)))
 		cv.back_style = Profile.card_back
-		cv.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		var groups: Array = duel.groups_for_player(0, c)
-		cv.set_playable(my_turn and not groups.is_empty())
+		cv.set_playable(my_turn and not duel.groups_for_player(0, card).is_empty())
 		cv.dim = not my_turn
-		cv.set_selected(c == _selection)
-		cv.pressed.connect(_on_hand_card.bind(c))
-		_hand_row.add_child(cv)
-		cv.enter_anim(0.0)
+		cv.set_selected(card == _selection)
+		_hand_row.move_child(cv, i)
 
-	if hand.is_empty():
-		var l := UI.label("", 18, UI.TEXT_DIM)
-		_hand_row.add_child(l)
+
+func _retain_cards(parent: Control, ids: Array) -> Dictionary:
+	var retained := {}
+	for child in parent.get_children():
+		if child is CardView and ids.has(child.card_id):
+			retained[child.card_id] = child
+		else:
+			_remove_now(child)
+	return retained
 
 
 ## Work out where `n` table cards go inside `avail`, shrinking them as needed and
@@ -830,19 +832,14 @@ func _table_layout(n: int, avail: Vector2) -> Dictionary:
 
 
 func _refresh_table() -> void:
-	for c in _table_grid.get_children():
-		c.get_parent().remove_child(c)
-		c.queue_free()
-	var vis: Array = duel.visible_table(0)
+	var vis: Array = duel.visible_table(0).duplicate()
 	vis.sort_custom(C.sort_by_rank)
-	var highlight: Array = []
-	if _selection >= 0:
-		for g in duel.groups_for_player(0, _selection):
-			for c in g:
-				highlight.append(c)
-	elif _pending_groups.size() > 0:
-		for c in _pending_groups[0]:
-			highlight.append(c)
+	var cards := _retain_cards(_table_grid, vis)
+	var highlight := {}
+	var groups: Array = duel.groups_for_player(0, _selection) if _selection >= 0 else []
+	for group in groups:
+		for card in group:
+			highlight[card] = true
 
 	var n := vis.size()
 	# Fit the cards to the felt rather than letting them overflow it: shrink to fit
@@ -853,13 +850,18 @@ func _refresh_table() -> void:
 	var at: Array = layout.at
 	for i in range(n):
 		var c: int = vis[i]
-		var cv := CardView.new()
-		cv.setup(c, true, int(cw), int(ch))
+		var cv: CardView = cards.get(c)
+		if cv == null:
+			cv = CardView.new()
+			cv.setup(c, true, int(cw), int(ch))
+			cv.pressed.connect(_on_table_card.bind(c))
+			_table_grid.add_child(cv)
+			cv.enter_anim(0.05 * i)
+		cv.set_card_size(Vector2(int(cw), int(ch)))
 		cv.capturable = highlight.has(c)
-		cv.pressed.connect(_on_table_card.bind(c))
-		_table_grid.add_child(cv)
+		cv.queue_redraw()
 		cv.position = at[i]
-		cv.enter_anim(0.05 * i)
+		_table_grid.move_child(cv, i)
 
 	if n == 0:
 		_table_sub.text = "the table is clear"
@@ -869,10 +871,9 @@ func _refresh_table() -> void:
 		_table_sub.text = ""
 
 	if _selection >= 0:
-		var gs: Array = duel.groups_for_player(0, _selection)
-		if gs.size() > 1:
-			_table_sub.text = "Tap a glowing card to choose which cards to take"
-		elif gs.size() == 1:
+		if groups.size() > 1:
+			_table_sub.text = "Tap a glowing card to choose a capture"
+		elif groups.size() == 1:
 			_table_sub.text = "Tap the glowing card to capture"
 		elif duel.blocked_by_quindici(_selection):
 			_table_sub.text = "Fifteen Duel: matching a value never captures — only cards totalling 15"
@@ -910,7 +911,7 @@ func _refresh_quests() -> void:
 
 func _refresh_actions() -> void:
 	var mine := duel.is_my_turn(0) and not _busy
-	var can_oath: bool = duel.can_use_oath(0)
+	var can_oath: bool = mine and duel.can_use_oath(0)
 	var info: Dictionary = T.FACTIONS[duel.player_faction]
 	if not duel.oaths_enabled:
 		_btn_oath.text = "Oaths off · Classic"
@@ -928,7 +929,7 @@ func _refresh_actions() -> void:
 		_btn_oath.text = "%s  ·  %d Favor" % [info.oath, duel.favor[0]]
 		_btn_oath.disabled = not can_oath
 	_btn_hint.disabled = not mine or _hinted_once
-	_btn_pile.disabled = false
+	_btn_pile.disabled = duel.hand_over
 
 
 # ---------------------------------------------------------------------------
@@ -941,48 +942,55 @@ func _on_hand_card(c: int) -> void:
 		# second tap on the same card confirms the play
 		_confirm_play(c)
 		return
-	var groups: Array = duel.groups_for_player(0, c)
 	_selection = c
 	Sfx.play("select", -14.0)
-	if groups.size() > 1:
-		_pending_groups = groups
-		_selection = c
-		_refresh_table()
-		_refresh_hand()
-		_toast("Choose a capture", "Tap a glowing table card, or tap your card again for the first option.")
-	else:
-		_pending_groups = groups
-		_refresh_table()
-		_refresh_hand()
+	_refresh_table()
+	_refresh_hand()
 
 
 func _on_table_card(c: int) -> void:
-	if _selection < 0 or _busy:
+	if _selection < 0 or _busy or not duel.is_my_turn(0):
 		return
 	var groups: Array = duel.groups_for_player(0, _selection)
-	# whichever legal group contains this card
-	var pick := -1
+	var matches: Array[int] = []
 	for i in range(groups.size()):
 		if groups[i].has(c):
-			pick = i
-			break
-	if pick < 0:
+			matches.append(i)
+	if matches.is_empty():
 		Sfx.play("deny", -16.0)
-		return
-	_play_card(_selection, pick)
+	elif matches.size() == 1:
+		_play_card(_selection, matches[0])
+	else:
+		_show_capture_options(c, groups, matches)
+
+
+func _show_capture_options(table_card: int, groups: Array, matches: Array[int]) -> void:
+	var card := _selection
+	var panel := _oath_sheet("CHOOSE A CAPTURE", "Each option includes %s." % C.short(table_card))
+	var body: VBoxContainer = panel.get_meta("body")
+	for index in matches:
+		var names := PackedStringArray()
+		for captured_card in groups[index]:
+			names.append(C.short(captured_card))
+		var option := UI.button(" + ".join(names), "secondary", 15)
+		option.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		option.pressed.connect(func():
+			_close_overlay()
+			if duel.is_my_turn(0) and _selection == card:
+				_play_card(card, index))
+		body.add_child(option)
 
 
 func _confirm_play(c: int) -> void:
-	var groups: Array = duel.groups_for_player(0, c)
-	_play_card(c, 0 if groups.size() > 0 else 0)
+	_play_card(c, 0)
 
 
 func _play_card(card: int, group_idx: int) -> void:
-	if _busy:
+	if _busy or not duel.is_my_turn(0) or not duel.hands[0].has(card):
 		return
 	_busy = true
+	_close_overlay()
 	_selection = -1
-	_pending_groups = []
 	_turn_time = TURN_SECONDS
 
 	var groups: Array = duel.groups_for_player(0, card)
@@ -1012,10 +1020,8 @@ func _play_card(card: int, group_idx: int) -> void:
 			_mark_match(matched)
 			await get_tree().create_timer(_beat(0.34, 0.08)).timeout
 
-	duel.play(0, card, group_idx)
-	_handle_events()
+	_commit_play(0, card, group_idx)
 	_refresh_all()
-	_save_state()
 
 	# fly the cards into the pile
 	if not captured.is_empty():
@@ -1042,12 +1048,14 @@ func _card_slot_center(c: int) -> Vector2:
 	return _table_center()
 
 
+func _commit_play(who: int, card: int, group_index: int) -> void:
+	duel.play(who, card, group_index)
+	_save_state()
+	_handle_events()
+
+
 func _save_state() -> void:
 	Profile.store_duel({
-		"mode": duel.mode,
-		"player_faction": duel.player_faction,
-		"campaign": config.get("campaign", {}),
-		"puzzle": config.get("puzzle", {}),
 		"state": duel.to_dict(),
 	})
 
@@ -1094,7 +1102,7 @@ func _run_bot() -> void:
 		return
 	var card: int = move.card
 	var gi: int = move.group
-	var groups: Array = C.capture_groups_rule(duel.table, card, duel.rule)
+	var groups: Array = duel.groups_for_player(1, card)
 	var captured: Array = []
 	if not groups.is_empty():
 		captured = groups[clampi(gi, 0, groups.size() - 1)] + [card]
@@ -1133,9 +1141,7 @@ func _run_bot() -> void:
 			_busy = false
 			return
 
-	duel.play(1, card, gi)
-	_handle_events()
-	_save_state()
+	_commit_play(1, card, gi)
 	if not captured.is_empty():
 		Sfx.play("capture", -12.0, 0.92)
 		FX.burst(self, _table_center(), T.FACTIONS[duel.bot_faction].color, 12, 160)
@@ -1158,7 +1164,7 @@ func _apply_bot_oath_delve(bury: int) -> void:
 # OATH UI (human)
 # ---------------------------------------------------------------------------
 func _on_oath_pressed() -> void:
-	if not duel.can_use_oath(0):
+	if _busy or not duel.can_use_oath(0):
 		Sfx.play("deny", -14.0)
 		return
 	Sfx.play("tap")
@@ -1211,10 +1217,9 @@ func _oath_deep_delve() -> void:
 		fn.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		v.add_child(fn)
 		b.pressed.connect(func():
-			duel.use_deep_delve(0, c)
-			_close_overlay()
-			_handle_events()
-			_refresh_all()
+			if not duel.use_deep_delve(0, c):
+				return
+			_finish_player_oath()
 			_toast("Deep Delve", "Drew %s, buried %s." % [C.label(drawn), C.label(c)]))
 		row.add_child(b)
 
@@ -1269,10 +1274,9 @@ func _oath_foresight() -> void:
 
 	var go := UI.button("Set the order", "primary")
 	go.pressed.connect(func():
-		duel.use_foresight(0, order)
-		_close_overlay()
-		_handle_events()
-		_refresh_all()
+		if not duel.use_foresight(0, order):
+			return
+		_finish_player_oath()
 		_toast("Foresight", "The deck is stacked: next draw is %s." % C.label(order[0])))
 	body.add_child(go)
 
@@ -1306,10 +1310,7 @@ func _use_raid_card(card: int) -> void:
 		_refresh_all()
 		_toast("Raid unavailable", "The table or deck changed; no Favor was spent.")
 		return
-	_close_overlay()
-	_handle_events()
-	_refresh_all()
-	_save_state()
+	_finish_player_oath()
 	_toast("Raid", "%s went to the deck bottom; %s replaced it." % [C.label(card), C.label(drawn)])
 
 
@@ -1322,9 +1323,11 @@ func _oath_diplomacy() -> void:
 	hr.alignment = BoxContainer.ALIGNMENT_CENTER
 	hr.add_theme_constant_override("separation", 8)
 	body.add_child(hr)
-	var table_row := HBoxContainer.new()
-	table_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	table_row.add_theme_constant_override("separation", 8)
+	var table_row := GridContainer.new()
+	table_row.columns = 4
+	table_row.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	table_row.add_theme_constant_override("h_separation", 8)
+	table_row.add_theme_constant_override("v_separation", 8)
 	var tl := UI.label("TABLE", 13, UI.TEXT_DIM)
 	body.add_child(tl)
 	body.add_child(table_row)
@@ -1354,10 +1357,9 @@ func _oath_diplomacy() -> void:
 			Sfx.play("select", -14.0))
 		table_row.add_child(cv2)
 	confirm.pressed.connect(func():
-		duel.use_diplomacy(0, state["hand"], chosen_table[0])
-		_close_overlay()
-		_handle_events()
-		_refresh_all()
+		if not duel.use_diplomacy(0, state["hand"], chosen_table[0]):
+			return
+		_finish_player_oath()
 		_toast("Diplomacy", "Swapped %s for %s." % [C.label(state["hand"]), C.label(chosen_table[0])]))
 	body.add_child(confirm)
 
@@ -1365,12 +1367,20 @@ func _oath_diplomacy() -> void:
 # ---------------------------------------------------------------------------
 # EVENTS → JUICE
 # ---------------------------------------------------------------------------
+func _finish_player_oath() -> void:
+	_close_overlay()
+	if not duel.hands[0].has(_selection):
+		_selection = -1
+	_handle_events()
+	_save_state()
+	_refresh_all()
+
+
 func _handle_events() -> void:
 	for ev in duel.drain_events():
 		match ev.get("t", ""):
 			"scopa":
 				var who: int = ev.who
-				_scopa_total[who] += 1
 				_scopa_held = true
 				_scopa_celebration(who, ev.get("glory", 1))
 			"favor":
@@ -1383,7 +1393,6 @@ func _handle_events() -> void:
 				else:
 					Sfx.play("oath", -12.0)
 			"quest":
-				_quests_completed += 1
 				var q := _quest_by_key(ev.quest)
 				Sfx.play("favor", -8.0)
 				_toast("Quest complete · %s" % q.name, "+%d Renown" % ev.reward, UI.GOOD)
@@ -1697,16 +1706,17 @@ func _CountFaction(arr: Array, f: int) -> int:
 # ---------------------------------------------------------------------------
 # OVERLAY / SHEETS
 # ---------------------------------------------------------------------------
-func _oath_sheet(title: String, sub: String) -> PanelContainer:
+func _oath_sheet(title: String, sub: String, dismissible: bool = true) -> PanelContainer:
 	_close_overlay()
 	var dim := ColorRect.new()
 	dim.color = Color(0, 0, 0, 0.72)
 	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	dim.mouse_filter = Control.MOUSE_FILTER_STOP
 	dim.z_index = 100
-	dim.gui_input.connect(func(e):
-		if e is InputEventMouseButton and e.button_index == MOUSE_BUTTON_LEFT and e.pressed:
-			_close_overlay())
+	if dismissible:
+		dim.gui_input.connect(func(e):
+			if e is InputEventMouseButton and e.button_index == MOUSE_BUTTON_LEFT and e.pressed:
+				_close_overlay())
 	add_child(dim)
 	_overlay = dim
 
@@ -1741,9 +1751,10 @@ func _oath_sheet(title: String, sub: String) -> PanelContainer:
 		var s := UI.label(sub, 17, UI.TEXT)
 		s.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		body.add_child(s)
-	var close := UI.button("Close", "ghost", 16)
-	close.pressed.connect(_close_overlay)
-	body.add_child(close)
+	if dismissible:
+		var close := UI.button("Close", "ghost", 16)
+		close.pressed.connect(_close_overlay)
+		body.add_child(close)
 	p.set_meta("body", body)
 	return p
 
@@ -1782,9 +1793,9 @@ func _remove_now(n: Node) -> void:
 func _show_hand_summary() -> void:
 	_busy = true
 	await get_tree().create_timer(0.5).timeout
-	var score: Dictionary = duel.history[duel.history.size() - 1]
+	var score: Dictionary = duel.score_hand()
 	var final := duel.match_over
-	var panel := _oath_sheet("HAND %d · RENOWN" % maxi(1, duel.hands_played), "")
+	var panel := _oath_sheet("HAND %d · RENOWN" % maxi(1, duel.hands_played), "", false)
 	var body: VBoxContainer = panel.get_meta("body")
 
 	# score table
@@ -1843,11 +1854,12 @@ func _show_hand_summary() -> void:
 		qs.add_child(UI.chip(("✦ " if duel.quest_done[i] else "◇ ") + q.name, Color("2b2338"),
 			UI.GOOD if duel.quest_done[i] else UI.TEXT_DIM, 13))
 
-	if duel.puzzle.size() > 0:
-		_puzzle_verdict(body, score)
+	var puzzle_result := -1
+	if not duel.puzzle.is_empty():
+		puzzle_result = int(_puzzle_verdict(body))
 
 	if final:
-		_record_match()
+		_record_match(puzzle_result)
 		if duel.mode == T.Mode.RANKED or duel.mode == T.Mode.QUICK or duel.mode == T.Mode.CAMPAIGN:
 			_play_end_sound(duel.winner())
 		var row := HBoxContainer.new()
@@ -1857,7 +1869,7 @@ func _show_hand_summary() -> void:
 		again.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		again.pressed.connect(func():
 			_close_overlay()
-			play_again.emit(config))
+			play_again.emit(_fresh_config()))
 		row.add_child(again)
 		var menu := UI.button("Menu", "secondary")
 		menu.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1866,7 +1878,7 @@ func _show_hand_summary() -> void:
 			exit_to_menu.emit())
 		row.add_child(menu)
 		if duel.mode == T.Mode.RANKED:
-			var c: Dictionary = config.duplicate()
+			var c: Dictionary = _fresh_config()
 			c["mode"] = T.Mode.QUICK
 			var quick := UI.button("Quick Duel instead", "ghost", 16)
 			quick.pressed.connect(func():
@@ -1880,7 +1892,7 @@ func _show_hand_summary() -> void:
 			duel.next_hand()
 			duel.drain_events()
 			_busy = false
-			_scopa_total = [0, 0]
+			_save_state()
 			_hinted_once = false
 			_turn_time = TURN_SECONDS
 			_refresh_all()
@@ -1901,14 +1913,13 @@ func _hcell(grid: GridContainer, txt: String, val: String, col: Color, header: b
 	grid.add_child(l)
 
 
-func _puzzle_verdict(body: VBoxContainer, score: Dictionary) -> void:
+func _puzzle_verdict(body: VBoxContainer) -> bool:
 	var goal: String = duel.puzzle.get("goal", "scopa")
 	var ok := false
 	var msg := ""
-	var players := 0
 	match goal:
 		"scopa":
-			ok = _scopa_total[0] >= 1
+			ok = duel.scopa_count[0] >= 1
 			msg = "Clear the table with a capture to score a sweep."
 		"runestone":
 			ok = duel.captured[0].has(C.make(7, T.RUNESTONE_SUIT))
@@ -1920,6 +1931,7 @@ func _puzzle_verdict(body: VBoxContainer, score: Dictionary) -> void:
 			ok = duel.captured[0].size() >= 12
 			msg = "Capture at least 12 cards."
 	_solved_puzzle(ok, msg, body)
+	return ok
 
 
 func _solved_puzzle(ok: bool, msg: String, body: VBoxContainer) -> void:
@@ -1937,25 +1949,21 @@ func _solved_puzzle(ok: bool, msg: String, body: VBoxContainer) -> void:
 	v.add_child(s)
 	body.add_child(p)
 	if ok:
-		Profile.puzzles_solved += 1
-		Profile.mark_puzzle_solved(true)
 		Sfx.play("win", -8.0)
 	else:
-		Profile.mark_puzzle_solved(false)
 		Sfx.play("lose", -10.0)
 
 
-func _record_match() -> void:
+func _record_match(puzzle_result: int = -1) -> void:
 	if _match_recorded:
 		return
-	_match_recorded = true
-	Profile.clear_duel()
 	var w := duel.winner()
-	var campaign_id: String = duel.campaign.get("id", "")
-	if duel.mode == T.Mode.CAMPAIGN and w == 0 and campaign_id != "" and not Profile.campaign_cleared.has(campaign_id):
-		Profile.campaign_cleared.append(campaign_id)
-	Profile.record_match(w == 0, w == -1, duel.renown[0], _scopa_total[0], _scopa_total[0],
-		duel.player_faction, _quests_completed)
+	var won := puzzle_result == 1 if puzzle_result >= 0 else w == 0
+	_match_recorded = Profile.record_match(won, w == -1, duel.renown[0], duel.player_glory,
+		duel.player_sweeps, duel.player_faction, duel.quest_done.count(true), duel.match_id,
+		duel.campaign.get("id", ""), puzzle_result)
+	if _match_recorded:
+		Profile.clear_duel()
 
 
 func _play_end_sound(w: int) -> void:
@@ -1973,7 +1981,15 @@ func _play_end_sound(w: int) -> void:
 # ---------------------------------------------------------------------------
 # MENU
 # ---------------------------------------------------------------------------
+func _fresh_config() -> Dictionary:
+	var next_config := config.duplicate(true)
+	next_config.erase("resume")
+	return next_config
+
+
 func _open_menu() -> void:
+	if duel.hand_over:
+		return
 	Sfx.play("tap")
 	var panel := _oath_sheet("PAUSED", "Four Realms")
 	var body: VBoxContainer = panel.get_meta("body")
@@ -1998,7 +2014,7 @@ func _open_menu() -> void:
 	var restart := UI.button("Restart duel", "ghost", 17)
 	restart.pressed.connect(func():
 		_close_overlay()
-		play_again.emit(config))
+		play_again.emit(_fresh_config()))
 	body.add_child(restart)
 
 
@@ -2074,5 +2090,6 @@ func _auto_play() -> void:
 	var best := DuelAI.choose_move(duel, 0)
 	if best.is_empty():
 		return
+	_close_overlay()
 	_toast("Time", "The realm chose for you.")
 	_play_card(best.card, maxi(0, best.group))

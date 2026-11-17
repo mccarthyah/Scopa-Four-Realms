@@ -85,6 +85,8 @@ func run(m: Control) -> void:
 	_test_ai_games()
 	_test_quests()
 	_test_save_resume()
+	_test_completed_hand_resume()
+	_test_veiled_capture()
 	_test_ai_speed()
 	_test_profile_io()
 	_test_deal()
@@ -110,6 +112,7 @@ func run(m: Control) -> void:
 	await _test_menu_sheets()
 	await _test_menu_pointer_input()
 	await _test_tap_play()
+	await _test_capture_choice()
 	await _test_raid_picker()
 	await _test_other_oath_picker_signals()
 	await _audit_screens()
@@ -567,7 +570,12 @@ func _test_landscape_title() -> void:
 	host.add_child(title)
 	for i in range(12): await get_tree().process_frame
 	var good: bool = title._title_landscape and title._title_right.visible
-	if title._mode_list.get_parent() != title._title_right or title._mode_list.columns != 2 or title._faction_grid.columns != 2: good = false
+	if title._mode_list.get_parent() != title._title_right or title._mode_list.columns != 2 or title._faction_grid.columns != 4: good = false
+	if title._title_right.size.x <= title._title_left.size.x: good = false
+	var mast: TextureRect = title._title_parts[0]
+	if mast.custom_minimum_size.y >= 250.0: good = false
+	var last_mode: Control = title._mode_list.get_child(-1)
+	if last_mode.get_global_rect().end.y > title._scroll.get_global_rect().end.y: good = false
 	if title._title_left.get_global_rect().end.x > title._title_right.get_global_rect().position.x: good = false
 	if title._scroll.vertical_scroll_mode != ScrollContainer.SCROLL_MODE_SHOW_NEVER or title._scroll.get_v_scroll_bar().visible: good = false
 	# Row activation happens on a stationary release, not when a swipe starts.
@@ -2120,6 +2128,89 @@ func _test_save_resume() -> void:
 			ok("restored duel continues cleanly")
 
 
+func _test_capture_choice() -> void:
+	var screen = load("res://scripts/screens/duel.gd").new()
+	screen.config = {"mode": T.Mode.QUICK}
+	main.add_child(screen)
+	await get_tree().create_timer(0.8).timeout
+	var three_first := C.make(3, T.FORGE)
+	var three_second := C.make(3, T.GROVE)
+	var four_first := C.make(4, T.FORGE)
+	var four_second := C.make(4, T.GROVE)
+	var seven := C.make(7, T.FORGE)
+	screen.duel.table = [three_first, three_second, four_first, four_second]
+	screen.duel.hands[0] = [seven]
+	screen._on_hand_card(seven)
+	screen._on_table_card(four_second)
+	var panel: PanelContainer
+	for child in screen.get_children():
+		if child is PanelContainer and child.z_index == 101:
+			panel = child
+	if panel == null:
+		fail("overlapping capture did not offer a choice")
+	else:
+		var body: VBoxContainer = panel.get_meta("body")
+		var selected := false
+		for child in body.get_children():
+			if child is Button and child.text == C.short(three_second) + " + " + C.short(four_second):
+				child.pressed.emit()
+				selected = true
+				break
+		await get_tree().create_timer(0.8).timeout
+		if selected and screen.duel.captured[0] == [three_second, four_second, seven]:
+			ok("capture picker can select a previously unreachable overlapping group")
+		else:
+			fail("capture picker did not apply the chosen overlapping group")
+	main.remove_child(screen)
+	screen.queue_free()
+	Profile.clear_duel()
+
+
+func _test_completed_hand_resume() -> void:
+	var original = DuelScript.new({"mode": T.Mode.RANKED, "seed": 414, "player_faction": T.GROVE,
+		"bot_faction": T.CROWN, "oaths": false})
+	while not original.hand_over:
+		var actor: int = original.turn
+		var move := DuelAI.choose_move(original, actor)
+		if move.is_empty():
+			fail("no legal play while constructing a completed save")
+			return
+		original.play(actor, move.card, move.group)
+	var save: Dictionary = JSON.parse_string(JSON.stringify({"state": original.to_dict()}))
+	if not DuelScript.valid_save(save):
+		fail("completed hand snapshot was rejected")
+		return
+	var restored = DuelScript.new()
+	restored.from_dict(save.state)
+	if not restored.hand_over or restored.score_hand() != original.score_hand() or restored.rng.state != original.rng.state:
+		fail("completed hand score or RNG state changed on reload")
+	elif restored.bot_faction != T.CROWN or restored.oaths_enabled:
+		fail("resumed match configuration changed")
+	else:
+		ok("completed hand restores its score, rules and RNG state")
+	save.state.hands[0].append(999)
+	if DuelScript.valid_save(save):
+		fail("save validation accepted an invalid card ID")
+	else:
+		ok("save validation rejects an invalid card ID")
+
+
+func _test_veiled_capture() -> void:
+	var duel = DuelScript.new({"mode": T.Mode.CAMPAIGN, "campaign": T.CAMPAIGNS[0]})
+	var hidden := C.make(6, T.FORGE)
+	var visible := C.make(6, T.CROWN)
+	var played := C.make(6, T.GROVE)
+	duel.table = [hidden, visible]
+	duel.veiled = hidden
+	duel.hands[0] = [played]
+	var move := DuelAI.choose_move(duel, 0)
+	var result: Dictionary = duel.play(0, move.card, move.group)
+	if result.captured == [visible, played] and not result.scopa and duel.table == [hidden]:
+		ok("AI-assisted play uses visible cards and leaves no false sweep")
+	else:
+		fail("veiled capture used the wrong group or awarded a false sweep")
+
+
 func _test_profile_io() -> void:
 	# integers must survive a JSON round-trip as integers (card ids are ints)
 	var probe := {"deck": [3, 17, 39], "n": 2}
@@ -2244,7 +2335,7 @@ func _audit_screens() -> void:
 		d._on_hand_card(card)
 		await get_tree().process_frame
 		var groups: Array = d.duel.groups_for_player(0, card)
-		if groups.size() > 0:
+		if groups.size() == 1:
 			d._on_table_card(groups[0][0])
 		else:
 			d._confirm_play(card)
@@ -2341,7 +2432,15 @@ func _test_ui_paths() -> void:
 	if d2._overlay == null:
 		fail("hand summary sheet did not open")
 	else:
-		ok("hand summary sheet builds (score table, quests, buttons)")
+		var dim: Control = d2._overlay
+		var event := InputEventMouseButton.new()
+		event.button_index = MOUSE_BUTTON_LEFT
+		event.pressed = true
+		dim.gui_input.emit(event)
+		if d2._overlay == dim:
+			ok("hand summary keeps its progression controls after an outside tap")
+		else:
+			fail("outside tap dismissed the only hand progression controls")
 	d2._close_overlay()
 
 	# resume through the real screens: save a mid-hand duel, go to the menu,

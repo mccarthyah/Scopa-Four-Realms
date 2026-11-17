@@ -11,20 +11,17 @@ config_version=5
 [application]
 
 config/name="Four Realms"
-; Preserve the old user:// location on desktop and Web for existing saves.
-; iOS and Android retain their sandbox-specific user data paths.
-config/use_custom_user_dir=true
-config/custom_user_dir_name="godot/app_userdata/Scopa- Four Realms"
-config/custom_user_dir_name.windows="Godot/app_userdata/Scopa- Four Realms"
-config/custom_user_dir_name.macos="Godot/app_userdata/Scopa- Four Realms"
 config/description="A fantasy card game of four factions, Oaths, quests and quick duels, inspired by the Italian game Scopa."
 run/main_scene="res://scenes/main.tscn"
+config/use_custom_user_dir=true
+config/custom_user_dir_name="godot/app_userdata/Scopa- Four Realms"
 config/features=PackedStringArray("4.7", "Mobile")
 run/max_fps=60
 boot_splash/bg_color=Color(0.078, 0.071, 0.109, 1)
-boot_splash/show_image=true
 boot_splash/image="res://assets/branding/four_realms_logo.png"
 config/icon="res://icon.svg"
+config/custom_user_dir_name.windows="Godot/app_userdata/Scopa- Four Realms"
+config/custom_user_dir_name.macos="Godot/app_userdata/Scopa- Four Realms"
 
 [autoload]
 
@@ -47,7 +44,6 @@ window/size/window_width_override=540
 window/size/window_height_override=960
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
-; Sensor permits both portrait and either landscape direction on mobile.
 window/handheld/orientation=6
 
 [gui]
