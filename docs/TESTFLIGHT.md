@@ -6,9 +6,10 @@ upload a signed IPA to App Store Connect. The run is manual and does not submit
 for App Review or assign testers. Apple processes an uploaded build before it
 appears in TestFlight; external testing may require Beta App Review.
 
-**Status:** An unsigned Xcode archive succeeded on GitHub's macOS 26 runner
-with Xcode 26.6. Cloud signing, Apple upload, and a physical iOS device have not
-yet been verified. Apple account setup and a signed run are still required.
+**Status:** A macOS 26 / Xcode 26.6 run successfully archived, cloud-signed,
+and uploaded version 1.0 build 1 to App Store Connect. Apple processing and
+physical iOS device testing are separate; successful upload does not establish
+that the build is available to testers.
 
 ## Recommended: cloud signing, no personal Mac
 
@@ -52,8 +53,9 @@ Cloud signing uses an unsigned Xcode archive and asks Xcode, authenticated with
 the API key, to export with automatic signing. Apple may create or update
 profiles and cloud signing assets. It depends on Apple account permissions and
 cloud-signing availability; if this unsigned-archive approach fails for your
-account or Xcode version, use the manual signing alternative below. It has not
-been validated against this Apple account.
+account or Xcode version, use the manual signing alternative below. Cloud signing
+and upload succeeded once with this app's Apple account; future runs still depend
+on valid credentials and Apple processing.
 
 ## Run the workflow
 
