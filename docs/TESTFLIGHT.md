@@ -6,9 +6,9 @@ upload a signed IPA to App Store Connect. The run is manual and does not submit
 for App Review or assign testers. Apple processes an uploaded build before it
 appears in TestFlight; external testing may require Beta App Review.
 
-**Status:** Godot's Xcode-project export and workflow syntax have been checked.
-The cloud signing, Xcode archive, Apple upload, and a physical iOS device have
-not yet been verified. Apple account setup and a real run are still required.
+**Status:** An unsigned Xcode archive succeeded on GitHub's macOS 26 runner
+with Xcode 26.6. Cloud signing, Apple upload, and a physical iOS device have not
+yet been verified. Apple account setup and a signed run are still required.
 
 ## Recommended: cloud signing, no personal Mac
 
