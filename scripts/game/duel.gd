@@ -308,7 +308,8 @@ func _advance_turn() -> void:
 				_end_hand()
 				return
 	else:
-		if hands[0].is_empty():
+		# Puzzles are challenges with a fixed move budget, not a full deal.
+		if hands[0].is_empty() or turn_count >= int(puzzle.get("moves", hands[0].size() + turn_count)):
 			_end_hand()
 			return
 
@@ -422,7 +423,9 @@ func _end_hand() -> void:
 	if hand_over:
 		return
 	hand_over = true
-	if last_capturer >= 0:
+	# The normal final-table award would falsely satisfy puzzle objectives with
+	# cards the player never captured. Leave the puzzle table as played.
+	if last_capturer >= 0 and puzzle.is_empty():
 		for c in table:
 			captured[last_capturer].append(c)
 			if last_capturer == 0:
