@@ -144,11 +144,12 @@ the opponent's hand has the same proportions as a playfield card. The corners ar
 anti-aliased, since a curve drawn without AA is visibly jagged, and the selection
 rings and shadow follow the card's own curve rather than a fixed one.
 
-This matters because the low-spec mode squares off every panel, chip and button in
-the game to save time on a software rasteriser — which is why cards were square on
-the target machine. Cards are now the documented exception: `UI.flat()` takes a
-`keep_corners` flag, so DOM chrome stays cheap and cards stay card-shaped. An audit
-check asserts both halves of that, so it cannot regress in either direction.
+The menu, HUD, buttons, faction tiles, and the felt now use pre-rendered,
+stretchable nine-slice frames. Their rounded, gilded corners also appear in
+low-spec mode without runtime texture baking, GPU readback, or tessellating every
+panel each frame. Special-purpose fallback primitives still use cheap square
+corners in low-spec mode; the card shapes and rings remain independently rounded.
+`python3 tools/build_ui_frames.py` rebuilds the small static frame textures.
 
 ### Animation settings
 
@@ -291,6 +292,7 @@ scripts/
     duel.gd              HUD, table, hand, Oath sheets, score sheet, celebrations
   audit.gd               headless self-test + layout audit (dev only)
 assets/cards/            pre-rendered card faces, backs and lightweight effects atlases
+assets/ui/               pre-rendered nine-slice frames for the menu, HUD and felt
 assets/suits/            static painted suit emblems
 tools/                   offline atlas generators and original card sheets
 audio/                   generated WAVs: deal, capture, scopa, favor, oath, win, lose, tick…

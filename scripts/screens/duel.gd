@@ -657,26 +657,11 @@ const BOARD_THEMES := [
 
 func _draw_table_felt() -> void:
 	var r := Rect2(Vector2.ZERO, _table_box.size)
-	var theme: Array = BOARD_THEMES[clampi(Profile.board_theme, 0, BOARD_THEMES.size() - 1)]
-	# No shadow_size here: a 12px shadow blur is a gaussian pass over the whole
-	# board on every repaint, which is ruinous on a software rasteriser. A flat
-	# offset block reads the same at this size.
-	var sb := UI.flat(Color(0, 0, 0, 0.30), 20)
-	_table_box.draw_style_box(sb, Rect2(r.position + Vector2(0, 4), r.size))
-	var sb2 := UI.flat(theme[0], 20, Color("aa8746"), 3)
-	_table_box.draw_style_box(sb2, r)
-	# A restrained double gold frame and corner ticks echo the supplied mockup
-	# without adding input layers or changing the card placement area.
-	var inner := r.grow(-8.0)
-	if inner.size.x > 0 and inner.size.y > 0:
-		_table_box.draw_rect(inner, Color(0.85, 0.69, 0.32, 0.40), false, 1.5)
-	for sx in [0.0, 1.0]:
-		for sy in [0.0, 1.0]:
-			var point := Vector2(13.0 if sx == 0 else r.size.x - 13.0, 13.0 if sy == 0 else r.size.y - 13.0)
-			var dx := 18.0 if sx == 0 else -18.0
-			var dy := 18.0 if sy == 0 else -18.0
-			_table_box.draw_line(point, point + Vector2(dx, 0), Color(0.92, 0.74, 0.34, 0.7), 2.0)
-			_table_box.draw_line(point, point + Vector2(0, dy), Color(0.92, 0.74, 0.34, 0.7), 2.0)
+	# The complete rounded felt and engraved frame are built offline and scaled
+	# as nine slices, so low-spec machines keep the shape without expensive AA.
+	var felt_names := ["felt_green", "felt_blue", "felt_red", "felt_purple"]
+	var selected: int = clampi(Profile.board_theme, 0, felt_names.size() - 1)
+	_table_box.draw_style_box(UI.fantasy_style(felt_names[selected], 0, 0), r)
 	# A subtle contained rune is decorative only and never extends past the felt.
 	var c := r.size * Vector2(0.5, 0.48)
 	var radius := minf(r.size.x, r.size.y) * 0.30

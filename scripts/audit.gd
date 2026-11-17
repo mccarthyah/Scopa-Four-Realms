@@ -96,6 +96,7 @@ func run(m: Control) -> void:
 	await _test_card_corners()
 	_test_card_atlas()
 	_test_software_draw_policy()
+	_test_prebuilt_ui_frames()
 	_test_frame_interval_summary()
 	_test_effect_atlas()
 	await _test_table_fit()
@@ -1034,11 +1035,11 @@ func _test_card_corners() -> void:
 		fail("card corner proportion drifts with size (%.3f vs %.3f)" % [p_small, p_big])
 	else:
 		ok("corner radius keeps its proportion at every card size (%.1f%%)" % (p_big * 100.0))
-	# chrome stays square, so this did not leak into popups
+	# The primitive fallback stays cheap; primary chrome uses textured frames.
 	if UI.flat(Color.WHITE, 12).corner_radius_top_left != 0:
-		fail("card corners: popup chrome is now rounded too (LOW_SPEC lost)")
+		fail("card corners: low-spec primitive fallback is unexpectedly tessellated")
 	else:
-		ok("popups and chips stay square under LOW_SPEC")
+		ok("low-spec primitive fallback remains cheap while cards keep their curve")
 	# the rings around a card must follow its curve, not a fixed one
 	var cv := CardView.new()
 	cv.setup(5, true, 116, 163)
@@ -1158,6 +1159,27 @@ func _test_software_draw_policy() -> void:
 	if not redundant and clear.is_equal_approx(Color("171320")):
 		ok("screen clear supplies dark margins without a redundant fullscreen backdrop draw")
 	else: fail("software path: redundant backdrop or incorrect clear colour")
+
+
+## Verify the actual offline artwork remains transparent at its corners, has a
+## visible interior/frame and is used for standard low-spec panel chrome.
+func _test_prebuilt_ui_frames() -> void:
+	var was_low := UI.LOW_SPEC
+	UI.LOW_SPEC = true
+	var good := UI.panel() is StyleBoxTexture
+	for key in UI.FRAME_TEXTURES:
+		var tex: Texture2D = UI.FRAME_TEXTURES[key]
+		if tex == null or tex.get_width() != 96 or tex.get_height() != 96:
+			good = false
+			continue
+		var img: Image = tex.get_image()
+		if img == null or img.get_pixel(0, 0).a > 0.05 or img.get_pixel(48, 3).a < 0.5:
+			good = false
+	if good:
+		ok("offline rounded nine-slice frames have transparent corners and remain active in low-spec mode")
+	else:
+		fail("prebuilt UI frames missing, opaque at corners, or not used under low-spec")
+	UI.LOW_SPEC = was_low
 
 
 ## Diagnostics describe real main-loop intervals, not inferred GPU time.

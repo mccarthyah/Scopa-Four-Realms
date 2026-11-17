@@ -118,7 +118,7 @@ func _detect_low_spec() -> void:
 		or adapter == ""
 	UI.LOW_SPEC = soft
 	print("[scopa] low_spec   : ", UI.LOW_SPEC,
-		" (simplified UI, rounded cards, no glyph shadows)" if UI.LOW_SPEC else " (full visual style)")
+		" (pre-rendered UI frames, rounded cards, no glyph shadows)" if UI.LOW_SPEC else " (full visual style)")
 	if OS.get_cmdline_user_args().has("--full-visuals"):
 		UI.LOW_SPEC = false
 		print("[scopa] low_spec   : overridden to false by --full-visuals")

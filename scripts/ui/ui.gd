@@ -4,6 +4,20 @@ extends RefCounted
 class_name UI
 
 const T := preload("res://scripts/tables.gd")
+const FRAME_TEXTURES := {
+	"panel": preload("res://assets/ui/panel.png"),
+	"chip": preload("res://assets/ui/chip.png"),
+	"chip_active": preload("res://assets/ui/chip_active.png"),
+	"button": preload("res://assets/ui/button.png"),
+	"button_hover": preload("res://assets/ui/button_hover.png"),
+	"button_gold": preload("res://assets/ui/button_gold.png"),
+	"frame": preload("res://assets/ui/frame.png"),
+	"frame_active": preload("res://assets/ui/frame_active.png"),
+	"felt_green": preload("res://assets/ui/felt_green.png"),
+	"felt_blue": preload("res://assets/ui/felt_blue.png"),
+	"felt_red": preload("res://assets/ui/felt_red.png"),
+	"felt_purple": preload("res://assets/ui/felt_purple.png"),
+}
 
 # --- palette -----------------------------------------------------------------
 const INK := Color("070e19")
@@ -92,10 +106,9 @@ const CARD_H_BIG := 174
 static var LOW_SPEC := false
 
 
-## LOW_SPEC squares off DOM chrome - popups, chips, buttons - because rounded
-## corners there are invisible and the rounding costs time on a software
-## rasteriser. Cards are the exception: a playing card's curved corners are a
-## defining feature, so anything drawn with keep_corners keeps them.
+## LOW_SPEC squares off the fallback primitive to keep it cheap. Major UI chrome
+## instead uses pre-rendered nine-slice textures below, so it still looks rounded.
+## Playing cards retain their own proportional geometry via keep_corners.
 static func flat(col: Color, radius: int = 12, border: Color = Color(0, 0, 0, 0), bw: int = 0,
 		keep_corners: bool = false) -> StyleBoxFlat:
 	var s := StyleBoxFlat.new()
@@ -171,17 +184,32 @@ class _BoxPainter extends Control:
 			draw_style_box(box, Rect2(Vector2.ZERO, size))
 
 
-static func panel(col: Color = PANEL, radius: int = 18, border: Color = Color("8f754c"), bw: int = 2) -> StyleBoxFlat:
+## Pre-rendered, nine-slice art keeps rounded fantasy frames on the software
+## renderer without per-frame viewport baking, GPU readback or mesh tessellation.
+static func fantasy_style(kind: String = "panel", margin_x: float = 16, margin_y: float = 12) -> StyleBoxTexture:
+	var frame := StyleBoxTexture.new()
+	frame.texture = FRAME_TEXTURES.get(kind, FRAME_TEXTURES.panel)
+	frame.texture_margin_left = 20.0
+	frame.texture_margin_top = 20.0
+	frame.texture_margin_right = 20.0
+	frame.texture_margin_bottom = 20.0
+	frame.content_margin_left = margin_x
+	frame.content_margin_right = margin_x
+	frame.content_margin_top = margin_y
+	frame.content_margin_bottom = margin_y
+	return frame
+
+
+static func panel(col: Color = PANEL, radius: int = 18, border: Color = Color("8f754c"), bw: int = 2) -> StyleBox:
+	# Standard panels share a single pre-rendered frame. Keep specialized
+	# transparent, faction-coloured and result panels as their original styles.
+	if col == PANEL or col == BG2:
+		return fantasy_style("panel")
 	var s := flat(col, radius, border, bw)
 	s.content_margin_left = 16
 	s.content_margin_right = 16
 	s.content_margin_top = 12
 	s.content_margin_bottom = 12
-	# No shadow_size: every StyleBoxFlat with a shadow blur costs a gaussian pass
-	# each time it is drawn, and these panels are on screen constantly. A 2px
-	# darker border gives the same sense of depth for free.
-	s.shadow_color = Color(0, 0, 0, 0.0)
-	s.shadow_size = 0
 	s.border_color = Color(border.r, border.g, border.b, maxf(border.a, 0.55))
 	return s
 
@@ -223,9 +251,9 @@ static func button(txt: String, kind: String = "primary", size: int = 24) -> But
 			col = PANEL_HI
 			txt_col = TEXT
 		"ghost":
-			b.add_theme_stylebox_override("normal", flat(Color(0, 0, 0, 0), 12, Color("8c7448"), 2))
-			b.add_theme_stylebox_override("hover", flat(Color(1, 1, 1, 0.06), 12, GOLD, 2))
-			b.add_theme_stylebox_override("pressed", flat(GOLD, 12, GOLD, 2))
+			b.add_theme_stylebox_override("normal", fantasy_style("button", 6, 4))
+			b.add_theme_stylebox_override("hover", fantasy_style("button_hover", 6, 4))
+			b.add_theme_stylebox_override("pressed", fantasy_style("button_gold", 6, 4))
 			b.add_theme_color_override("font_color", TEXT)
 			b.add_theme_color_override("font_hover_color", GOLD)
 			b.add_theme_color_override("font_pressed_color", INK)
@@ -234,13 +262,19 @@ static func button(txt: String, kind: String = "primary", size: int = 24) -> But
 		"danger":
 			col = BAD
 			txt_col = Color("fff2ef")
-	b.add_theme_stylebox_override("normal", flat(col, 14))
-	b.add_theme_stylebox_override("hover", flat(col.lightened(0.12), 14))
-	b.add_theme_stylebox_override("pressed", flat(col.darkened(0.18), 14))
-	b.add_theme_stylebox_override("disabled", flat(col.darkened(0.45), 14))
+	if kind == "danger":
+		b.add_theme_stylebox_override("normal", flat(col, 14))
+		b.add_theme_stylebox_override("hover", flat(col.lightened(0.12), 14))
+		b.add_theme_stylebox_override("pressed", flat(col.darkened(0.18), 14))
+		b.add_theme_stylebox_override("disabled", flat(col.darkened(0.45), 14))
+	else:
+		b.add_theme_stylebox_override("normal", fantasy_style("button_gold" if kind == "primary" else "button", 8, 5))
+		b.add_theme_stylebox_override("hover", fantasy_style("button_hover", 8, 5))
+		b.add_theme_stylebox_override("pressed", fantasy_style("button_gold", 8, 5))
+		b.add_theme_stylebox_override("disabled", fantasy_style("panel", 8, 5))
 	b.add_theme_color_override("font_color", txt_col)
-	b.add_theme_color_override("font_hover_color", txt_col)
-	b.add_theme_color_override("font_pressed_color", txt_col)
+	b.add_theme_color_override("font_hover_color", TEXT if kind != "danger" else txt_col)
+	b.add_theme_color_override("font_pressed_color", INK if kind != "danger" else txt_col)
 	b.add_theme_color_override("font_disabled_color", Color(txt_col.r, txt_col.g, txt_col.b, 0.4))
 	b.custom_minimum_size = Vector2(0, 60)
 	return b
@@ -275,7 +309,7 @@ static func vspace(w: int = 8) -> Control:
 ## Rounded "chip" with a label, used for HUD stats.
 static func chip(txt: String, col: Color = PANEL_HI, txt_col: Color = TEXT, size: int = 18) -> PanelContainer:
 	var p := PanelContainer.new()
-	p.add_theme_stylebox_override("panel", flat(col, 12))
+	p.add_theme_stylebox_override("panel", fantasy_style("chip_active" if txt_col == GOLD else "chip", 0, 0))
 	var m := MarginContainer.new()
 	m.add_theme_constant_override("margin_left", 10)
 	m.add_theme_constant_override("margin_right", 10)
@@ -292,7 +326,7 @@ static func set_chip(p: PanelContainer, txt: String, col: Color = PANEL_HI, txt_
 	var l: Label = p.get_child(0).get_child(0)
 	l.text = txt
 	l.add_theme_color_override("font_color", txt_col)
-	p.add_theme_stylebox_override("panel", flat(col, 12))
+	p.add_theme_stylebox_override("panel", fantasy_style("chip_active" if txt_col == GOLD else "chip", 0, 0))
 
 
 static func faction_color(f: int) -> Color:

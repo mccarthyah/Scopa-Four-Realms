@@ -226,10 +226,8 @@ func _faction_card(f: int) -> Button:
 	b.custom_minimum_size = Vector2(0, 132)
 	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	b.toggle_mode = true
-	b.add_theme_stylebox_override("normal", UI.flat(UI.PANEL, 14, Color("806a40"), 1))
-	b.add_theme_stylebox_override("hover", UI.flat(UI.PANEL_HI, 14, info.color, 2))
-	b.add_theme_stylebox_override("pressed", UI.flat(UI.PANEL_HI, 14, info.color, 2))
-	b.add_theme_stylebox_override("focus", UI.flat(Color(0, 0, 0, 0), 14))
+	for state in ["normal", "hover", "pressed", "focus"]:
+		b.add_theme_stylebox_override(state, StyleBoxEmpty.new())
 	b.pressed.connect(func():
 		faction = f
 		_refresh_factions()
@@ -257,6 +255,12 @@ func _faction_card(f: int) -> Button:
 	caption.offset_top = -45
 	caption.offset_bottom = -4
 	b.add_child(caption)
+	var frame := Panel.new()
+	frame.name = "FactionFrame"
+	frame.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	frame.add_theme_stylebox_override("panel", UI.fantasy_style("frame", 0, 0))
+	b.add_child(frame)
 
 	var v := VBoxContainer.new()
 	v.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -288,9 +292,8 @@ func _refresh_factions() -> void:
 		var b: Button = _faction_buttons[i]
 		var on: bool = i == faction
 		b.set_pressed_no_signal(on)
-		var border := Color("95e659") if on else Color("987a43")
-		b.add_theme_stylebox_override("normal", UI.flat(Color("18352b") if on else UI.PANEL, 14, border, 3 if on else 1))
-		b.add_theme_stylebox_override("pressed", UI.flat(Color("18352b"), 14, Color("95e659"), 3))
+		var frame: Panel = b.get_node("FactionFrame")
+		frame.add_theme_stylebox_override("panel", UI.fantasy_style("frame_active" if on else "frame", 0, 0))
 
 
 func _toggle(on: bool) -> Button:
@@ -355,7 +358,7 @@ func _mode_row(title: String, sub: String, badge: String, cb: Callable, accent: 
 	emblem.custom_minimum_size = Vector2(34, 38)
 	emblem.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	emblem.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	emblem.add_theme_stylebox_override("panel", UI.flat(Color("183526"), 22, Color("78c85e"), 2))
+	emblem.add_theme_stylebox_override("panel", UI.fantasy_style("button_hover", 0, 0))
 	var glyphs := {"RESUME": "▶", "QUICK": "✦", "XV": "XV", "RANKED": "★", "CAMPAIGN": "⚑", "PUZZLE": "✧", "LEARN": "i"}
 	var emblem_label := UI.label(str(glyphs.get(badge, "✦")), 20, Color("a7ec80"), true)
 	emblem_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
