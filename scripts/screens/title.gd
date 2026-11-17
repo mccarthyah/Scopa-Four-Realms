@@ -17,6 +17,11 @@ var _classic_toggle: Button
 var _codex: Control
 var _sheet_panel: PanelContainer
 var _scroll: ScrollContainer
+var _title_columns: HBoxContainer
+var _title_left: VBoxContainer
+var _title_right: VBoxContainer
+var _title_parts: Array = []
+var _title_landscape := false
 
 
 func _ready() -> void:
@@ -51,13 +56,31 @@ func _build() -> void:
 
 	_scroll = ScrollContainer.new()
 	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
 	_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	root.add_child(_scroll)
 
-	var col := VBoxContainer.new()
-	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	col.add_theme_constant_override("separation", 14)
-	_scroll.add_child(col)
+	_title_columns = HBoxContainer.new()
+	_title_columns.name = "TitleColumns"
+	_title_columns.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_title_columns.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_title_columns.mouse_filter = Control.MOUSE_FILTER_PASS
+	_title_columns.add_theme_constant_override("separation", 44)
+	_scroll.add_child(_title_columns)
+	_title_left = VBoxContainer.new()
+	_title_left.name = "TitleIdentity"
+	_title_left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_title_left.mouse_filter = Control.MOUSE_FILTER_PASS
+	_title_left.add_theme_constant_override("separation", 14)
+	_title_columns.add_child(_title_left)
+	_title_right = VBoxContainer.new()
+	_title_right.name = "TitleModes"
+	_title_right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_title_right.mouse_filter = Control.MOUSE_FILTER_PASS
+	_title_right.add_theme_constant_override("separation", 14)
+	_title_columns.add_child(_title_right)
+	_title_right.hide()
+	var col := _title_left
 
 	# ---- masthead -------------------------------------------------------
 	var mast := Control.new()
@@ -117,21 +140,71 @@ func _build() -> void:
 	_refresh_factions()
 
 	# ---- modes ---------------------------------------------------------
-	col.add_child(UI.spacer(2))
-	col.add_child(_section_header("DUEL TYPES", ""))
+	var mode_gap := UI.spacer(2)
+	col.add_child(mode_gap)
+	var mode_heading := _section_header("DUEL TYPES", "")
+	col.add_child(mode_heading)
 	_mode_list = VBoxContainer.new()
 	_mode_list.add_theme_constant_override("separation", 10)
 	col.add_child(_mode_list)
 	_build_modes()
 
 	# Settings live in their own dialog; keep the record on the title page.
-	col.add_child(UI.spacer(4))
-	col.add_child(_stats_panel())
-	col.add_child(UI.spacer(10))
+	var stats_gap := UI.spacer(4)
+	col.add_child(stats_gap)
+	var stats := _stats_panel()
+	col.add_child(stats)
+	var foot_gap := UI.spacer(10)
+	col.add_child(foot_gap)
 
 	var foot := UI.label("v1.0 · cosmetically yours, mechanically fair", 15, Color(UI.TEXT_DIM.r, UI.TEXT_DIM.g, UI.TEXT_DIM.b, 0.6), false, true)
 	foot.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	col.add_child(foot)
+	_title_parts = [mast, oath_heading, row, mode_gap, mode_heading, _mode_list,
+		stats_gap, stats, foot_gap, foot]
+	_update_title_layout()
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_RESIZED and is_node_ready() and not _title_parts.is_empty():
+		_update_title_layout()
+		_layout_sheet()
+
+
+## Move the existing controls so rotation keeps the selected faction, scroll
+## interactions, settings and callbacks. Portrait is still one touch-scroll page.
+func _update_title_layout() -> void:
+	if _title_parts.is_empty():
+		return
+	var wide := size.x > size.y * 1.12
+	if wide == _title_landscape:
+		return
+	_title_landscape = wide
+	_title_left.alignment = BoxContainer.ALIGNMENT_CENTER if wide else BoxContainer.ALIGNMENT_BEGIN
+	_title_right.alignment = BoxContainer.ALIGNMENT_CENTER if wide else BoxContainer.ALIGNMENT_BEGIN
+	if wide:
+		for i in [3, 4, 5]:
+			_title_parts[i].reparent(_title_right, false)
+		_title_right.show()
+	else:
+		_title_right.hide()
+		for node in _title_parts:
+			if node.get_parent() != _title_left:
+				node.reparent(_title_left, false)
+		for i in range(_title_parts.size()):
+			_title_left.move_child(_title_parts[i], i)
+	_scroll.scroll_vertical = 0
+
+
+## Keep an open sheet readable and inside the screen during rotation.
+func _layout_sheet() -> void:
+	if not is_instance_valid(_sheet_panel):
+		return
+	_sheet_panel.anchor_left = 0.5
+	_sheet_panel.anchor_right = 0.5
+	var width := minf(size.x * 0.92, 820.0)
+	_sheet_panel.offset_left = -width * 0.5
+	_sheet_panel.offset_right = width * 0.5
 
 
 func _section_header(title: String, sub: String) -> Control:
@@ -307,11 +380,24 @@ func _mode_row(title: String, sub: String, badge: String, cb: Callable, accent: 
 	go.pressed.connect(cb)
 	h.add_child(go)
 
-	# whole row is tappable
+	# A swipe beginning over a row must scroll rather than immediately launch a
+	# duel. Activate on release only if the pointer stayed inside the row.
+	var pointer := {"down": false, "start": Vector2.ZERO, "scroll": 0}
 	p.gui_input.connect(func(e):
-		if e is InputEventMouseButton and e.button_index == MOUSE_BUTTON_LEFT and e.pressed:
-			cb.call())
-	p.mouse_filter = Control.MOUSE_FILTER_STOP
+		if e is InputEventMouseButton and e.button_index == MOUSE_BUTTON_LEFT:
+			if e.pressed:
+				pointer.down = true
+				pointer.start = e.global_position
+				pointer.scroll = _scroll.scroll_vertical
+			else:
+				var tap: bool = pointer.down and e.global_position.distance_to(pointer.start) < 12.0 \
+					and abs(_scroll.scroll_vertical - int(pointer.scroll)) < 4 \
+					and p.get_global_rect().has_point(e.global_position)
+				pointer.down = false
+				if tap: cb.call()
+		elif e is InputEventMouseMotion and pointer.down and e.global_position.distance_to(pointer.start) >= 12.0:
+			pointer.down = false)
+	p.mouse_filter = Control.MOUSE_FILTER_PASS
 	return p
 
 
@@ -755,6 +841,7 @@ func _sheet(title: String) -> PanelContainer:
 	p.offset_bottom = 0
 	p.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	p.grow_vertical = Control.GROW_DIRECTION_BOTH
+	_layout_sheet()
 
 	var outer := VBoxContainer.new()
 	outer.add_theme_constant_override("separation", 10)
@@ -772,6 +859,7 @@ func _sheet(title: String) -> PanelContainer:
 
 	var sc := ScrollContainer.new()
 	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	sc.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
 	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	outer.add_child(sc)
 	var body := VBoxContainer.new()

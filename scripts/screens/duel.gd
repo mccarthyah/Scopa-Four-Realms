@@ -59,6 +59,8 @@ var _portrait_root: VBoxContainer
 var _landscape_root: HBoxContainer
 var _landscape_side: VBoxContainer
 var _landscape_table: VBoxContainer
+var _landscape_player: VBoxContainer
+var _layout_mode := "portrait"
 var _layout_parts := {}
 var _landscape := false
 var _layout_ready := false
@@ -161,7 +163,7 @@ func _build_duel() -> void:
 	add_child(_landscape_root)
 	_landscape_side = VBoxContainer.new()
 	_landscape_side.name = "DuelSidebar"
-	_landscape_side.custom_minimum_size = Vector2(440, 0)
+	_landscape_side.custom_minimum_size = Vector2(400, 0)
 	_landscape_side.add_theme_constant_override("separation", 8)
 	_landscape_root.add_child(_landscape_side)
 	_landscape_table = VBoxContainer.new()
@@ -169,6 +171,23 @@ func _build_duel() -> void:
 	_landscape_table.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_landscape_table.add_theme_constant_override("separation", 6)
 	_landscape_root.add_child(_landscape_table)
+	_landscape_player = VBoxContainer.new()
+	_landscape_player.name = "PlayerPanel"
+	_landscape_player.custom_minimum_size = Vector2(450, 0)
+	_landscape_player.add_theme_constant_override("separation", 10)
+	_landscape_root.add_child(_landscape_player)
+	_landscape_player.hide()
+	var player_spacer := Control.new()
+	player_spacer.name = "PlayerTopSpacer"
+	player_spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_landscape_player.add_child(player_spacer)
+	var player_heading := UI.label("YOUR HAND", 18, UI.GOLD)
+	player_heading.name = "PlayerHeading"
+	_landscape_player.add_child(player_heading)
+	var player_bottom := Control.new()
+	player_bottom.name = "PlayerBottomSpacer"
+	player_bottom.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_landscape_player.add_child(player_bottom)
 	_layout_ready = true
 	_apply_orientation_layout()
 	_table_grid.resized.connect(_schedule_layout_refresh)
@@ -326,17 +345,32 @@ func _apply_orientation_layout() -> void:
 	if not _layout_ready:
 		return
 	var wide := size.x > size.y * 1.12
-	if wide == _landscape:
+	# At true phone-landscape widths a separate player panel avoids squeezing
+	# everything into a portrait stack. Near-square layouts use two columns.
+	var mode := "full" if wide and size.x >= 1450.0 else ("compact" if wide else "portrait")
+	if mode == _layout_mode:
 		return
+	_layout_mode = mode
 	_landscape = wide
 	if wide:
 		for key in ["HUD", "TurnBar", "Quests"]:
 			_layout_parts[key].reparent(_landscape_side, false)
-		for key in ["BotHand", "Table", "Hand", "Actions"]:
-			_layout_parts[key].reparent(_landscape_table, false)
+		if mode == "full":
+			_layout_parts.BotHand.reparent(_landscape_side, false)
+			_layout_parts.Table.reparent(_landscape_table, false)
+			for key in ["Hand", "Actions"]:
+				_layout_parts[key].reparent(_landscape_player, false)
+			_landscape_player.move_child(_layout_parts.Hand, 2)
+			_landscape_player.move_child(_layout_parts.Actions, 3)
+			_landscape_player.show()
+		else:
+			_landscape_player.hide()
+			for key in ["BotHand", "Table", "Hand", "Actions"]:
+				_layout_parts[key].reparent(_landscape_table, false)
 		_portrait_root.hide()
 		_landscape_root.show()
 	else:
+		_landscape_player.hide()
 		for key in ["HUD", "TurnBar", "BotHand", "Table", "Quests", "Hand", "Actions"]:
 			_layout_parts[key].reparent(_portrait_root, false)
 		_landscape_root.hide()
@@ -358,7 +392,7 @@ func _refresh_after_layout() -> void:
 	if not is_inside_tree() or duel == null:
 		return
 	var hand_width: float = _hand_box.size.x
-	var hw: float = clampf(hand_width * 0.215, 112.0, 150.0)
+	var hw: float = _hand_card_width(hand_width)
 	_hand_box.custom_minimum_size = Vector2(0, int(hw * 1.404) + 36)
 	_refresh_table()
 	_refresh_hand()
@@ -666,6 +700,13 @@ func _refresh_all() -> void:
 		_favor_strip.queue_redraw()
 
 
+func _hand_card_width(available: float) -> float:
+	if _layout_mode == "full":
+		var count := maxi(duel.hands[0].size(), 3)
+		return clampf((available - 10.0 * float(count - 1) - 12.0) / float(count), 48.0, 150.0)
+	return clampf(available * 0.215, 112.0, 150.0)
+
+
 func _refresh_hand() -> void:
 	for c in _hand_row.get_children():
 		c.get_parent().remove_child(c)
@@ -675,7 +716,7 @@ func _refresh_hand() -> void:
 	var hand: Array = duel.hands[0].duplicate()
 	hand.sort_custom(C.sort_by_faction)
 	var my_turn := duel.is_my_turn(0) and not _busy
-	var hw: float = clampf(_hand_box.size.x * 0.215, 112.0, 150.0)
+	var hw: float = _hand_card_width(_hand_box.size.x)
 	for c in hand:
 		var cv := CardView.new()
 		cv.setup(c, true, int(hw), int(hw * 1.404))
@@ -708,7 +749,7 @@ func _table_layout(n: int, avail: Vector2) -> Dictionary:
 	if n <= 0:
 		return out
 	const GAP := 6.0
-	const MAX_CH := 208.0   # what cards were capped at on a roomy table before
+	var MAX_CH := 245.0 if _layout_mode == "full" else 208.0
 	const MIN_CW := 34.0    # small, but still a readable card
 	var w: float = maxf(avail.x, 80.0)
 	var h: float = maxf(avail.y, 80.0)
@@ -723,7 +764,9 @@ func _table_layout(n: int, avail: Vector2) -> Dictionary:
 		var ch_by_height: float = (h - GAP * float(rows - 1)) / float(rows)
 		var cw_by_height: float = ch_by_height / CardView.ASPECT
 		var cw: float = minf(minf(cw_by_width, cw_by_height), MAX_CH / CardView.ASPECT)
-		if cw > best_cw:
+		# In a roomy landscape, equal-size cards should use the width rather
+		# than unnecessarily stacking into a tall portrait-shaped block.
+		if cw > best_cw + 0.01 or (_layout_mode == "full" and absf(cw - best_cw) <= 0.01 and cols > best_cols):
 			best_cw = cw
 			best_cols = cols
 	best_cw = maxf(best_cw, MIN_CW)
@@ -1644,6 +1687,7 @@ func _oath_sheet(title: String, sub: String) -> PanelContainer:
 
 	var sc := ScrollContainer.new()
 	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	sc.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
 	p.add_child(sc)
 	var body := VBoxContainer.new()
 	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL

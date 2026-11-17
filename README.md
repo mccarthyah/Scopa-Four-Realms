@@ -80,10 +80,12 @@ Everything in the brief, playable end to end:
 
 ### Window sizes and orientation
 
-The title remains a centred, scrollable column. In a wide window the duel reflows
-into a sidebar for the opponent, turn and quests, beside a wider playfield for
-cards and actions. The same match and selection survive a window resize or device
-rotation; portrait keeps the original vertical table.
+Portrait keeps a scrollable single-column title and vertical table. In landscape,
+the title reflows into faction/record and mode columns. The duel uses an opponent
+and quest sidebar, a central playfield, and a separate hand/actions panel; less
+wide windows use a compact two-column version. Scroll indicators are hidden while
+scrolling remains enabled. The same match, selection, and open sheet survive a
+window resize or device rotation.
 
 In **Settings → Orientation**, choose **Auto**, **Landscape Left**, **Landscape
 Right** or **Portrait**. The preference is saved. On supported Android and iOS

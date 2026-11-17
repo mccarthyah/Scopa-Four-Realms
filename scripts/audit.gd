@@ -105,6 +105,7 @@ func run(m: Control) -> void:
 	await _test_orientation_setting()
 	await _test_settings_layout()
 	await _test_landscape_reflow()
+	await _test_landscape_title()
 	await _test_menu_sheets()
 	await _test_menu_pointer_input()
 	await _test_tap_play()
@@ -430,8 +431,9 @@ func _test_landscape_reflow() -> void:
 	var old_size := win.size
 	var old_scale := win.content_scale_size
 	var old_anim: bool = Profile.anim_enabled
+	var saved_duel: Dictionary = Profile.saved_duel.duplicate(true)
 	Profile.anim_enabled = false
-	win.content_scale_size = Vector2i(1280, 720)
+	win.content_scale_size = Vector2i(1706, 960)
 	win.size = Vector2i(1280, 720)
 	for i in range(5): await get_tree().process_frame
 	var host := Control.new()
@@ -445,14 +447,18 @@ func _test_landscape_reflow() -> void:
 	d.duel.turn = 0
 	d._refresh_all()
 	for i in range(6): await get_tree().process_frame
-	var good: bool = d._landscape and d._landscape_root.visible and not d._portrait_root.visible
+	var good: bool = d._landscape and d._layout_mode == "full" and d._landscape_root.visible and not d._portrait_root.visible
+	if d._layout_parts.Hand.get_parent() != d._landscape_player or d._layout_parts.BotHand.get_parent() != d._landscape_side:
+		good = false
+	var four: Dictionary = d._table_layout(4, d._table_grid.size)
+	if four.cols < 3: good = false
 	var bounds: Rect2 = d.get_global_rect()
 	for key in ["HUD", "TurnBar", "BotHand", "Table", "Quests", "Hand", "Actions"]:
 		var r: Rect2 = d._layout_parts[key].get_global_rect()
 		if r.position.x < bounds.position.x - 1 or r.position.y < bounds.position.y - 1 or r.end.x > bounds.end.x + 1 or r.end.y > bounds.end.y + 1:
 			print("  info  landscape out of bounds ", key, " ", r, " of ", bounds)
 			good = false
-	for count in range(1, 17):
+	for count in range(1, 41):
 		var layout: Dictionary = d._table_layout(count, d._table_grid.size)
 		for point in layout.at:
 			if point.x < -0.5 or point.y < -0.5 or point.x + layout.cw > d._table_grid.size.x + 0.5 or point.y + layout.ch > d._table_grid.size.y + 0.5:
@@ -501,17 +507,123 @@ func _test_landscape_reflow() -> void:
 	for i in range(4): await get_tree().process_frame
 	if d._overlay == null: good = false
 	d._close_overlay()
-	win.content_scale_size = Vector2i(1280, 720)
+	# A less-wide window uses the compact landscape variant, not the 3-column layout.
+	win.content_scale_size = Vector2i(1280, 960)
+	win.size = Vector2i(1280, 960)
+	for i in range(20): await get_tree().process_frame
+	if d._layout_mode != "compact" or d._selection != id or d.duel.to_dict() != state: good = false
+	win.content_scale_size = Vector2i(1706, 960)
 	win.size = Vector2i(1280, 720)
 	for i in range(20): await get_tree().process_frame
-	if not d._landscape or d._selection != id or d.duel.to_dict() != state: good = false
+	if not d._landscape or d._layout_mode != "full" or d._selection != id or d.duel.to_dict() != state: good = false
+	# A real pointer can select a hand card and capture a matching table card
+	# across the separate landscape panels, not just highlight it.
+	d.duel.table = [5, 9]
+	d.duel.hands[0] = [4, 8, 12]
+	d.duel.turn = 0
+	d._busy = false
+	d._selection = -1
+	d._refresh_all()
+	for i in range(6): await get_tree().process_frame
+	var chosen: Control = null
+	var target: Control = null
+	for card in d._hand_row.get_children():
+		if card.card_id == 4: chosen = card
+	if chosen != null:
+		_send_mouse_click(chosen.get_global_rect().get_center())
+		for i in range(4): await get_tree().process_frame
+		for card in d._table_grid.get_children():
+			if card.card_id == 5: target = card
+	if target == null or d._selection != 4:
+		good = false
+	else:
+		_send_mouse_click(target.get_global_rect().get_center())
+		for i in range(4): await get_tree().process_frame
+		if not d.duel.captured[0].has(4) or not d.duel.captured[0].has(5): good = false
 	if good: ok("landscape duel fits, receives clicks and preserves selection/state across both rotations")
 	else: fail("landscape duel reflow, bounds, hit testing or state preservation failed")
 	host.queue_free()
 	Profile.anim_enabled = old_anim
+	if saved_duel.is_empty(): Profile.clear_duel()
+	else: Profile.store_duel(saved_duel)
 	win.content_scale_size = old_scale
 	win.size = old_size
 	for i in range(5): await get_tree().process_frame
+
+
+## The title is genuinely reflowed in landscape; hiding the indicator must not
+## disable scrolling. Rotation must preserve the current faction and open sheet.
+func _test_landscape_title() -> void:
+	var old_seen: bool = Profile.seen_intro
+	Profile.seen_intro = true
+	var host := Control.new()
+	host.size = Vector2(1706, 960)
+	main.add_child(host)
+	var title = load("res://scripts/screens/title.gd").new()
+	host.add_child(title)
+	for i in range(12): await get_tree().process_frame
+	var good: bool = title._title_landscape and title._title_right.visible
+	if title._mode_list.get_parent() != title._title_right: good = false
+	if title._title_left.get_global_rect().end.x > title._title_right.get_global_rect().position.x: good = false
+	if title._scroll.vertical_scroll_mode != ScrollContainer.SCROLL_MODE_SHOW_NEVER or title._scroll.get_v_scroll_bar().visible: good = false
+	# Row activation happens on a stationary release, not when a swipe starts.
+	var calls := {"count": 0}
+	var row: Control = title._mode_row("Gesture test", "", "", func(): calls.count += 1, UI.GOLD)
+	title._title_right.add_child(row)
+	for i in range(3): await get_tree().process_frame
+	var pt: Vector2 = row.get_global_rect().get_center()
+	var press := InputEventMouseButton.new()
+	press.button_index = MOUSE_BUTTON_LEFT
+	press.pressed = true
+	press.global_position = pt
+	row.gui_input.emit(press)
+	if calls.count != 0: good = false
+	var motion := InputEventMouseMotion.new()
+	motion.global_position = pt + Vector2(0, -40)
+	row.gui_input.emit(motion)
+	var release := InputEventMouseButton.new()
+	release.button_index = MOUSE_BUTTON_LEFT
+	release.pressed = false
+	release.global_position = pt + Vector2(0, -40)
+	row.gui_input.emit(release)
+	if calls.count != 0: good = false
+	row.gui_input.emit(press)
+	release.global_position = pt
+	row.gui_input.emit(release)
+	if calls.count != 1: good = false
+	row.queue_free()
+	title.faction = 2
+	title._refresh_factions()
+	title._open_settings()
+	for i in range(6): await get_tree().process_frame
+	var sheet: Control = title._sheet_panel
+	if sheet == null or sheet.size.x > 821.0: good = false
+	if sheet != null:
+		var modal_scroll: ScrollContainer = sheet.get_meta("body").get_parent()
+		if modal_scroll.vertical_scroll_mode != ScrollContainer.SCROLL_MODE_SHOW_NEVER: good = false
+	host.size = Vector2(540, 600)
+	for i in range(12): await get_tree().process_frame
+	if title._title_landscape or title._mode_list.get_parent() != title._title_left or title.faction != 2 or title._sheet_panel != sheet: good = false
+	if sheet != null and (sheet.get_global_rect().position.x < host.get_global_rect().position.x - 1.0 or sheet.get_global_rect().end.x > host.get_global_rect().end.x + 1.0): good = false
+	title._codex_close()
+	for i in range(5): await get_tree().process_frame
+	# Exercise real wheel input over a row with a hidden scrollbar; reaching the
+	# bottom via ensure_control_visible alone would not prove user scrolling.
+	title._scroll.scroll_vertical = 0
+	for i in range(3): await get_tree().process_frame
+	var first_row: Control = title._mode_list.get_child(0)
+	var wheel_at: Vector2 = first_row.get_global_rect().position + Vector2(35, first_row.size.y * 0.5)
+	_send_mouse_button(wheel_at, MOUSE_BUTTON_WHEEL_DOWN)
+	for i in range(3): await get_tree().process_frame
+	if title._scroll.scroll_vertical <= 0: good = false
+	title._scroll.ensure_control_visible(title._title_parts[9])
+	for i in range(5): await get_tree().process_frame
+	if title._scroll.scroll_vertical <= 0: good = false
+	if good: ok("title reflows to two landscape columns, hides scrollbars, scrolls, and preserves selection/sheet on rotation")
+	else: fail("title landscape reflow, hidden scrolling or rotation state failed")
+	host.queue_free()
+	Profile.seen_intro = old_seen
+	await get_tree().process_frame
 
 
 ## Resize a real title instance to small and desktop-column dimensions. The
@@ -767,7 +879,7 @@ func _test_display_scaling() -> void:
 	else:
 		ok("no dead display/window/size/stretch/* key")
 
-	# A wide window must get a centred phone-shaped page, not a stretched canvas.
+	# True landscape gets a bounded wide stage; near-square windows stay narrow.
 	var win: Window = main.get_window()
 	var saved: Vector2i = win.size
 	win.size = Vector2i(780, 654)
@@ -788,11 +900,13 @@ func _test_display_scaling() -> void:
 		# legitimately gets a wider canvas with the same height, which is what
 		# aspect "expand" is for; the page then fills it and nothing clips.
 		var vp: Vector2 = main.get_viewport_rect().size
-		var wide: bool = vp.x > vp.y * 0.72
-		if wide and page.size.x > 620.0:
-			fail("a wide window stretched the page to %.0f px instead of ~540" % page.size.x)
+		var wide: bool = vp.x > vp.y * 1.12
+		if wide and absf(page.size.x - minf(vp.x, 1760.0)) < 3.0:
+			ok("landscape title uses a bounded wide stage for its two-column layout")
 		elif wide:
-			ok("a wide window keeps the page a %.0f px column" % page.size.x)
+			fail("landscape title stage width %.0f does not match viewport %.0f" % [page.size.x, vp.x])
+		elif vp.x > vp.y * 0.72 and page.size.x <= 542.0:
+			ok("near-square window keeps a readable portrait column")
 		elif absf(page.size.x - vp.x) < 2.0:
 			ok("a tall window fills its %.0f x %.0f canvas with no clipping" % [vp.x, vp.y])
 		else:

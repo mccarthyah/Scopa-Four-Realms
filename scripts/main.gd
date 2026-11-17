@@ -62,11 +62,8 @@ func _ready() -> void:
 		smoke.smoke_test(self)
 
 
-## The design is a 540x960 phone page. With stretch mode "canvas_items" and aspect
-## "expand", a WIDE window expands the design canvas horizontally instead of
-## scaling up - on a desktop window that produced a 1144 px page with the layout
-## smeared across it. So on anything wider than tall, draw the page at a fixed
-## design width and centre it, letting the margins be margin.
+## Portrait remains a readable phone column. Both the title and duel get a
+## dedicated landscape layout rather than a stretched or centred portrait page.
 const DESIGN_WIDTH := 540.0
 
 
@@ -87,14 +84,12 @@ func _swap(screen: Control) -> void:
 		t.tween_property(screen, "modulate:a", 1.0, 0.22)
 
 
-## Keep the page a phone page: full-bleed on a tall/near-square window, but capped
-## to DESIGN_WIDTH and centred when the window is wide (a desktop window).
+## Landscape screens receive a bounded wide stage; near-square windows keep
+## the readable portrait column. Both layouts reflow without restarting play.
 func _layout_stage(screen: Control) -> void:
 	screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var v := get_viewport_rect().size
-	# The title remains a readable centred column. The duel uses a real wide
-	# layout when the canvas is landscape, instead of stretching a phone page.
-	if screen is DuelScreen and v.x > v.y * 1.12:
+	if v.x > v.y * 1.12:
 		var w: float = minf(1760.0, v.x)
 		var margin: float = maxf((v.x - w) * 0.5, 0.0)
 		screen.anchor_left = 0.0
