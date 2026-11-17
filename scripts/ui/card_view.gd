@@ -180,10 +180,13 @@ func _draw() -> void:
 	var alpha := 1.0  # the node's modulate carries fade/dim; see _process
 
 
-	# --- drop shadow: one cheap quad, no blur pass
+	# Each separate shadow alternates the effect texture with the face atlas,
+	# splitting batches for every card. On software renderers omit that subtle
+	# decoration when the supplied atlas is present; the card frames stay intact.
+	# Keep vector shadows on full visual quality and when the atlas is missing.
 	_ensure_styles()
-	var shadow_rect := Rect2(visible_rect.position + Vector2(0, 3), visible_rect.size)
-	if not UI.LOW_SPEC or not EffectAtlas.draw_sprite(self, shadow_rect, EffectAtlas.SHADOW):
+	if _needs_separate_shadow():
+		var shadow_rect := Rect2(visible_rect.position + Vector2(0, 3), visible_rect.size)
 		draw_style_box(_sb_shadow, shadow_rect)
 
 	# Use the supplied artwork on every renderer. Face cells already contain
@@ -224,6 +227,12 @@ func _draw() -> void:
 	if hinted:
 		draw_circle(visible_rect.position + Vector2(visible_rect.size.x - 12, 12), 5.0,
 			Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, alpha))
+
+
+## Keep fallback art legible while avoiding an effect/face texture switch for
+## every card on the software path when the prebuilt atlas is available.
+static func _needs_separate_shadow() -> bool:
+	return not UI.LOW_SPEC or CardArt.atlas_texture() == null
 
 
 ## Corner radius for a rect of this size, matching the card art exactly.

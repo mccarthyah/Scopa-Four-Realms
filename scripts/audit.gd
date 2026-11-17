@@ -95,6 +95,8 @@ func run(m: Control) -> void:
 	await _test_bot_hand_scale()
 	await _test_card_corners()
 	_test_card_atlas()
+	_test_software_draw_policy()
+	_test_frame_interval_summary()
 	_test_effect_atlas()
 	await _test_table_fit()
 	await _test_display_scaling()
@@ -1013,6 +1015,46 @@ func _test_card_atlas() -> void:
 		fail("card atlas: missing texture did not trigger vector fallback")
 	else:
 		ok("missing atlas triggers vector artwork fallback")
+
+
+## Prevent expensive software-rendering regressions without suppressing the
+## vector fallback or the full-quality card decoration.
+func _test_software_draw_policy() -> void:
+	var previous_low: bool = UI.LOW_SPEC
+	var previous_checked: bool = CardArt._atlas_checked
+	var previous_tex: Texture2D = CardArt.atlas_texture()
+	var CardViewScript = load("res://scripts/ui/card_view.gd")
+	UI.LOW_SPEC = true
+	var no_low_shadow: bool = not CardViewScript._needs_separate_shadow()
+	UI.LOW_SPEC = false
+	var full_shadow: bool = CardViewScript._needs_separate_shadow()
+	UI.LOW_SPEC = true
+	CardArt._atlas_checked = true
+	CardArt._atlas = null
+	var fallback_shadow: bool = CardViewScript._needs_separate_shadow()
+	CardArt._atlas = previous_tex
+	CardArt._atlas_checked = previous_checked
+	UI.LOW_SPEC = previous_low
+	if previous_tex != null and no_low_shadow and full_shadow and fallback_shadow:
+		ok("software path avoids per-card shadow texture switches; full quality and fallback retain shadows")
+	else: fail("software shadow policy broke atlas, full quality or vector fallback")
+	var redundant := false
+	for node in main.get_children():
+		if node is ColorRect and node.z_index < 0:
+			redundant = true
+	var clear: Color = RenderingServer.get_default_clear_color()
+	if not redundant and clear.is_equal_approx(Color("171320")):
+		ok("screen clear supplies dark margins without a redundant fullscreen backdrop draw")
+	else: fail("software path: redundant backdrop or incorrect clear colour")
+
+
+## Diagnostics describe real main-loop intervals, not inferred GPU time.
+func _test_frame_interval_summary() -> void:
+	var empty: Dictionary = main._summarize_frame_intervals(PackedFloat32Array())
+	var stats: Dictionary = main._summarize_frame_intervals(PackedFloat32Array([16.0, 33.0, 34.0, 50.0, 51.0, 120.0]))
+	if empty.count == 0 and stats.count == 6 and stats.p95 == 120.0 and stats.max == 120.0 and stats.over50 == 2:
+		ok("frame interval diagnostics report p95, maximum and over-50ms samples")
+	else: fail("frame interval diagnostics aggregate samples incorrectly")
 
 
 ## Actual imported effect sprites must stay visible, transparent, and correctly

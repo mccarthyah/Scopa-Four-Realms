@@ -293,8 +293,10 @@ fonts/                   Cinzel (display) and Alegreya Sans (text), both OFL
 The 40 supplied faces and three existing backs share one imported static atlas
 on **all** renderers. The source sheets are retained under `tools/card_sources/`,
 which Godot ignores so the full-resolution sheets are not packed into the game.
-Selection, spin and highlights remain live. On software renderers, card effects,
-felt sigils and Favor pips use a second static atlas. If the card atlas is missing,
+Selection, spin and highlights remain live. On software renderers, highlights,
+felt sigils and Favor pips use a second static atlas. To reduce texture switches,
+separate card shadows are omitted on that path while the card atlas is present;
+full-quality visuals and the vector fallback retain their shadows. If the card atlas is missing,
 the old vector artwork is used as a fallback. There is **no runtime atlas baking
 or GPU readback**.
 
@@ -364,3 +366,9 @@ The audit is excluded from exported builds (`exclude_filter` in `export_presets.
 
 Cinzel and Alegreya Sans are licensed under the SIL Open Font License (Google Fonts).
 Scopa is a traditional Italian game; this is an unaffiliated fan reimagining.
+
+### TestFlight builds
+
+See [docs/TESTFLIGHT.md](docs/TESTFLIGHT.md) for the manually triggered iOS
+build workflow, required Apple signing secrets, and optional TestFlight upload.
+The first real Apple-signed run and physical iOS testing are still required.

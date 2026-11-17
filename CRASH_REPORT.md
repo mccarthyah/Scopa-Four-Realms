@@ -189,29 +189,21 @@ The project contains **no 3D of any kind**: no `Node3D`, `MeshInstance3D`,
 `Camera3D`, no shaders, no `WorldEnvironment`, no post-processing. Everything is
 `Control._draw()` and textures.
 
-That was never the problem. The problem was *how much* 2D work each frame asked
-for. From the field log (`draws`/`prims`/`frame_ms` come from the heartbeat):
+Earlier field logs showed substantial 2D rendering work: 199–269 draw calls
+and 12,414–17,305 primitives per frame in the affected scenes. Subsequent
+changes reduced vector drawing, background work and blurred panel shadows.
+Current card art uses a **prebuilt imported atlas**, not runtime texture baking
+or readback. If the atlas is unavailable, the vector fallback keeps cards
+visible. Interaction feedback remains live.
 
-| | before | after |
-|---|---|---|
-| draw calls per frame | 199–269 | a few dozen |
-| primitives per frame | 12,414–17,305 | ~1,000 |
-| frame time (CPU) | 24–114 ms | should be a few ms |
+The software-rendering path also avoids a redundant fullscreen backdrop and
+omits separate card drop shadows when the card atlas is available. Full-quality
+rendering and the vector fallback retain their shadows. Low-spec mode still caps
+frame rate at 30 FPS to leave CPU time for input and the host.
 
-Three things were responsible, all now fixed:
-
-1. **Every card was redrawn as vector geometry every frame** — about 60
-   primitives each, including six `StyleBoxFlat` allocations and one with an
-   8px shadow blur (`shadow_size` costs a gaussian pass per draw). Cards are now
-   rasterised **once** at startup into a texture (`scripts/ui/card_atlas.gd`,
-   40 faces + 3 backs, ~5 MB) and blitted as a single quad. Interaction
-   feedback — lift, glow ring, selection, capturable pulse — stays live.
-2. **Background gradient/glow/vignette rebuilt every frame** — ~11 Mpix of alpha
-   fill per frame, about 12x overdraw. Now five cached `GradientTexture2D` quads.
-3. **Shadow blurs on every panel and the board** — `UI.panel()` used a shadow
-   blur, and these are on screen constantly. Replaced with a flat offset block
-   and a slightly stronger border.
-
-If the atlas cannot bake (a renderer that will not hand back an image, or
-`--headless`), every card falls back to a cheap flat vector face and the game
-keeps working — it never renders blank.
+Heartbeat logs now report `process_ms` (Godot's process-time monitor), plus
+`interval_p95_ms`, `interval_max_ms`, and `interval_over50` for the last
+heartbeat window. The interval figures measure wall-clock time between main-loop
+frames; they include the frame cap, scheduling and stalls. They do not by
+themselves identify a GPU, CPU or operating-system bottleneck. Older logs call
+the process-time monitor `frame_ms`.

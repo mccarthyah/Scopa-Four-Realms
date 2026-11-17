@@ -7,6 +7,10 @@ const DuelScreen := preload("res://scripts/screens/duel.gd")
 
 var current: Control = null
 var _stage := "boot"
+# Cheap wall-clock frame intervals for diagnosing stutter. These include the
+# intentional FPS cap and OS scheduling; they are not GPU timing measurements.
+var _last_frame_time_us := 0
+var _frame_intervals_ms := PackedFloat32Array()
 
 
 func _notification(what: int) -> void:
@@ -15,15 +19,36 @@ func _notification(what: int) -> void:
 		_layout_stage(current)
 
 
+func _process(_delta: float) -> void:
+	var now: int = Time.get_ticks_usec()
+	if _last_frame_time_us > 0 and _frame_intervals_ms.size() < 2048:
+		_frame_intervals_ms.append(float(now - _last_frame_time_us) / 1000.0)
+	_last_frame_time_us = now
+
+
+## Summarise the preceding heartbeat interval. Wall-clock intervals include the
+## 30 FPS cap and scheduling, so they reveal stutter but do not identify its cause.
+func _summarize_frame_intervals(samples: PackedFloat32Array) -> Dictionary:
+	if samples.is_empty():
+		return {"count": 0, "p95": 0.0, "max": 0.0, "over50": 0}
+	var sorted := samples.duplicate()
+	sorted.sort()
+	var over50 := 0
+	for interval in sorted:
+		if interval > 50.0:
+			over50 += 1
+	var p95_index: int = clampi(int(ceil(float(sorted.size()) * 0.95)) - 1, 0, sorted.size() - 1)
+	return {"count": sorted.size(), "p95": sorted[p95_index],
+		"max": sorted[sorted.size() - 1], "over50": over50}
+
+
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	# paint the backdrop immediately so a slow first frame is never a black window
-	var bg := ColorRect.new()
-	bg.color = Color("171320")
-	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	bg.z_index = -10
-	add_child(bg)
+	# The renderer already clears the screen before every frame. Use that clear
+	# colour for the margins and first frame instead of drawing a second full-
+	# window ColorRect beneath the screen's own opaque background. This avoids
+	# a redundant full-screen pass on software renderers without changing it.
+	RenderingServer.set_default_clear_color(Color("171320"))
 	_detect_low_spec()
 	_report_environment()
 	show_title()
@@ -136,12 +161,16 @@ func _report_environment() -> void:
 	hb.wait_time = 5.0
 	hb.autostart = true
 	hb.timeout.connect(func():
-		# frame_ms = script+CPU time per frame; draws/prims = how much the renderer
-		# is being asked to do. If fps is low and frame_ms is small, the machine is
-		# fill-rate bound (software rasteriser), not script bound.
+		var stats := _summarize_frame_intervals(_frame_intervals_ms)
+		_frame_intervals_ms.clear()
+		# A process-time sample and wall-clock intervals are useful symptoms, but
+		# neither one alone proves whether the CPU, GPU or scheduler is at fault.
 		print("[scopa] heartbeat stage=", _stage,
 			" fps=", Engine.get_frames_per_second(),
-			" frame_ms=", "%.1f" % (Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0),
+			" process_ms=", "%.1f" % (Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0),
+			" interval_p95_ms=", "%.1f" % stats.p95,
+			" interval_max_ms=", "%.1f" % stats.max,
+			" interval_over50=", stats.over50, "/", stats.count,
 			" draws=", int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)),
 			" prims=", int(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME)),
 			" nodes=", int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT)),
