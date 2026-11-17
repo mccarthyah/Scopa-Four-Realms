@@ -31,7 +31,11 @@ var card_id := -1
 var face_up := true
 var playable := false
 var selected := false
-var dim := false
+var dim := false:
+	set(value):
+		dim = value
+		modulate.a = clampf(_fig, 0.0, 1.0) * (0.6 if dim else 1.0)
+		queue_redraw()
 var hinted := false
 var capturable := false
 var animated_in := false
@@ -146,6 +150,8 @@ func _process(delta: float) -> void:
 
 
 func _gui_input(event: InputEvent) -> void:
+	if event.device == InputEvent.DEVICE_ID_EMULATION:
+		return
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		pressed.emit()
 		accept_event()

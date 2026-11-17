@@ -51,7 +51,7 @@ func _ready() -> void:
 	RenderingServer.set_default_clear_color(Color("171320"))
 	_detect_low_spec()
 	_report_environment()
-	show_title()
+	show_title(true)
 	if OS.get_cmdline_user_args().has("--audit"):
 		var audit = load("res://scripts/audit.gd").new()
 		add_child(audit)
@@ -72,23 +72,25 @@ func _is_wide() -> bool:
 	return v.x > v.y * 0.72
 
 
-func _swap(screen: Control) -> void:
+func _swap(screen: Control, fade: bool = true) -> void:
 	if current != null and is_instance_valid(current):
 		current.queue_free()
 	current = screen
 	add_child(screen)
 	_layout_stage(screen)
-	if Profile.anim_enabled and not UI.LOW_SPEC:
+	if fade and Profile.anim_enabled and not UI.LOW_SPEC:
 		screen.modulate.a = 0.0
 		var t := create_tween()
 		t.tween_property(screen, "modulate:a", 1.0, 0.22)
 
 
-## Landscape screens receive a bounded wide stage; near-square windows keep
-## the readable portrait column. Both layouts reflow without restarting play.
+## Home uses the whole window. Gameplay keeps its bounded stage, and both
+## layouts reflow without restarting play.
 func _layout_stage(screen: Control) -> void:
 	screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var v := get_viewport_rect().size
+	if screen is TitleScreen:
+		return
 	if v.x > v.y * 1.12:
 		var w: float = minf(1760.0, v.x)
 		var margin: float = maxf((v.x - w) * 0.5, 0.0)
@@ -173,12 +175,14 @@ func _report_environment() -> void:
 	add_child(hb)
 
 
-func show_title() -> void:
+func show_title(from_splash: bool = false) -> void:
 	_stage = "title:building"
 	print("[scopa] stage -> title")
 	var s := TitleScreen.new()
 	s.start_duel.connect(_start_duel)
-	_swap(s)
+	_swap(s, not from_splash)
+	if from_splash and not OS.get_cmdline_user_args().has("--audit") and not OS.get_cmdline_user_args().has("--smoke"):
+		s.play_intro()
 	# if the title screen never builds anything, say so instead of showing a
 	# blank window with no explanation
 	await get_tree().process_frame

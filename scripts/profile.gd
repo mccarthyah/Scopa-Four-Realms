@@ -20,6 +20,7 @@ var quests_done := 0
 var puzzles_solved := 0
 var campaign_cleared: Array = []
 var classic_mode := false
+var confirm_card_play := false
 ## Auto follows the window/device; left/right are device orientations on mobile.
 var orientation := "auto"
 var _orientation_correction_queued := false
@@ -68,6 +69,7 @@ func load_profile() -> void:
 	puzzles_solved = d.get("puzzles_solved", 0)
 	campaign_cleared = d.get("campaign_cleared", [])
 	classic_mode = d.get("classic_mode", false)
+	confirm_card_play = bool(d.get("confirm_card_play", false))
 	orientation = str(d.get("orientation", "auto"))
 	if orientation not in ["auto", "landscape_left", "landscape_right", "portrait"]:
 		orientation = "auto"
@@ -94,6 +96,7 @@ func save_profile() -> bool:
 		"best_renown": best_renown, "total_glory": total_glory, "scopas": scopas,
 		"quests_done": quests_done, "puzzles_solved": puzzles_solved,
 		"campaign_cleared": campaign_cleared, "classic_mode": classic_mode,
+		"confirm_card_play": confirm_card_play,
 		"orientation": orientation,
 		"seen_intro": seen_intro, "card_back": card_back, "board_theme": board_theme,
 		"anim_enabled": anim_enabled, "anim_spin": anim_spin,

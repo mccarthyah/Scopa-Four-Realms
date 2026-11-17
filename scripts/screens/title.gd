@@ -2,11 +2,12 @@ extends Control
 ## Title + mode select.  Also hosts the faction picker and the codex.
 
 const UI := preload("res://scripts/ui/ui.gd")
+const SettingsPanel := preload("res://scripts/ui/settings_panel.gd")
 const CardView := preload("res://scripts/ui/card_view.gd")
 const CardArt := preload("res://scripts/ui/card_art.gd")
 const RealmBackground := preload("res://scripts/ui/background.gd")
+const PUBLISHER_LOGO := preload("res://assets/branding/veloce_logo_transparent.png")
 const LOGO_TRANSPARENT := preload("res://assets/branding/four_realms_logo.png")
-const LOGO_SCENIC := preload("res://assets/branding/four_realms_scenic.png")
 const TILE_ART := [preload("res://assets/branding/forge_tile.png"), preload("res://assets/branding/grove_tile.png"), preload("res://assets/branding/horde_tile.png"), preload("res://assets/branding/crown_tile.png")]
 const MODE_ART := preload("res://assets/branding/panel_landscape.png")
 
@@ -18,7 +19,6 @@ const C := preload("res://scripts/game/cards.gd")
 var faction := T.FORGE
 var _faction_buttons: Array = []
 var _mode_list: GridContainer
-var _classic_toggle: Button
 var _codex: Control
 var _sheet_panel: PanelContainer
 var _scroll: ScrollContainer
@@ -29,6 +29,12 @@ var _title_right: VBoxContainer
 var _title_parts: Array = []
 var _title_landscape := false
 var _mode_rows: Array[Callable] = []
+var _intro_layer: Control
+var _intro_progress := 0.0
+var _intro_phase := "menu"
+
+var _faction_power_title: Label
+var _faction_power_text: Label
 
 
 func _ready() -> void:
@@ -90,11 +96,10 @@ func _build() -> void:
 	_title_right.hide()
 	var col := _title_left
 
-	# Portrait uses the supplied scenic artwork; the landscape identity column
-	# uses its transparent counterpart. Both preserve their full aspect ratio.
+	# The same transparent logo carries from the splash into either layout.
 	var mast := TextureRect.new()
 	mast.name = "Masthead"
-	mast.texture = LOGO_SCENIC
+	mast.texture = LOGO_TRANSPARENT
 	mast.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	mast.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	mast.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
@@ -105,6 +110,7 @@ func _build() -> void:
 	_mode_list = GridContainer.new()
 	_mode_list.columns = 1
 	_mode_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_mode_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_mode_list.add_theme_constant_override("h_separation", 10)
 	_mode_list.add_theme_constant_override("v_separation", 10)
 	col.add_child(_mode_list)
@@ -120,6 +126,7 @@ func _notification(what: int) -> void:
 	if what == NOTIFICATION_RESIZED and is_node_ready() and not _title_parts.is_empty():
 		_update_title_layout()
 		_layout_sheet()
+		_place_intro_logo(_intro_progress)
 
 
 ## Move the existing controls so rotation keeps the selected faction, scroll
@@ -132,10 +139,11 @@ func _update_title_layout() -> void:
 	_title_landscape = wide
 	_mode_list.columns = 2
 	var mast: TextureRect = _title_parts[0]
-	mast.texture = LOGO_TRANSPARENT if wide else LOGO_SCENIC
-	mast.custom_minimum_size.y = clampf(size.y * 0.31, 150.0, 320.0) if wide else clampf(size.y * 0.25, 80.0, 240.0) if size.y >= 700.0 else 80.0
-	_title_left.size_flags_stretch_ratio = 0.8 if wide else 1.0
-	_title_right.size_flags_stretch_ratio = 1.0
+	mast.texture = LOGO_TRANSPARENT
+	mast.custom_minimum_size.y = clampf(size.y * 0.48, 180.0, 620.0) if wide else clampf(size.y * 0.32, 100.0, 440.0)
+	mast.size_flags_vertical = Control.SIZE_EXPAND_FILL if wide else Control.SIZE_FILL
+	_title_left.size_flags_stretch_ratio = 0.85 if wide else 1.0
+	_title_right.size_flags_stretch_ratio = 1.15 if wide else 1.0
 	_title_left.add_theme_constant_override("separation", 16)
 	_title_columns.add_theme_constant_override("separation", 32)
 	_title_margin.add_theme_constant_override("margin_left", 24 if wide else 18)
@@ -153,6 +161,11 @@ func _update_title_layout() -> void:
 			_title_margin.add_theme_constant_override("margin_right", int(maxf(24, global_position.x + size.x - bottom_right.x)))
 			_title_margin.add_theme_constant_override("margin_top", int(maxf(16, top_left.y)))
 			_title_margin.add_theme_constant_override("margin_bottom", int(maxf(16, viewport.y - bottom_right.y)))
+	var record_scale := 1.3 if wide else clampf(size.x / 540.0, 1.0, 1.3)
+	for label in _title_parts[2].find_children("*", "Label", true, false):
+		if not label.has_meta("home_font_size"):
+			label.set_meta("home_font_size", label.get_theme_font_size("font_size"))
+		label.add_theme_font_size_override("font_size", int(float(label.get_meta("home_font_size")) * record_scale))
 	_mode_list.add_theme_constant_override("h_separation", 12)
 	_mode_list.add_theme_constant_override("v_separation", 12)
 	for style_row in _mode_rows:
@@ -173,9 +186,103 @@ func _update_title_layout() -> void:
 		_scroll.scroll_vertical = 0
 
 
+## The runtime splash follows the actual viewport after Profile applies the
+## saved orientation. A static engine splash cannot read saved preferences.
+func play_intro() -> void:
+	if is_instance_valid(_intro_layer):
+		return
+	_intro_progress = 0.0
+	_intro_phase = "veloce"
+	_intro_layer = Control.new()
+	_intro_layer.name = "SplashTransition"
+	_intro_layer.z_index = 200
+	_intro_layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_intro_layer.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(_intro_layer)
+	var curtain := ColorRect.new()
+	curtain.color = Color(0.078, 0.071, 0.109, 1)
+	curtain.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_intro_layer.add_child(curtain)
+	var publisher := TextureRect.new()
+	publisher.name = "PublisherLogo"
+	publisher.texture = PUBLISHER_LOGO
+	publisher.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	publisher.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	publisher.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	publisher.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_intro_layer.add_child(publisher)
+	publisher.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	publisher.anchor_left = 0.08
+	publisher.anchor_right = 0.92
+	publisher.anchor_top = 0.15
+	publisher.anchor_bottom = 0.85
+	var flying := TextureRect.new()
+	flying.name = "MovingLogo"
+	flying.texture = LOGO_TRANSPARENT
+	flying.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	flying.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	flying.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	flying.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	flying.modulate.a = 0.0
+	_intro_layer.add_child(flying)
+	var mast: TextureRect = _title_parts[0]
+	mast.modulate.a = 0.0
+	_title_margin.modulate.a = 0.0
+	_place_intro_logo(0.0)
+	var tween := create_tween()
+	tween.tween_interval(1.0)
+	if Profile.anim_enabled:
+		tween.tween_callback(func(): _intro_phase = "fade")
+		tween.tween_property(publisher, "modulate:a", 0.0, 0.7)
+		tween.parallel().tween_property(flying, "modulate:a", 1.0, 0.7)
+		tween.tween_interval(0.3)
+		tween.tween_callback(func(): _intro_phase = "four_realms")
+		tween.tween_method(_place_intro_logo, 0.0, 1.0, 2.2).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+		tween.parallel().tween_property(curtain, "modulate:a", 0.0, 1.6).set_delay(0.3)
+		tween.parallel().tween_property(_title_margin, "modulate:a", 1.0, 1.2).set_delay(0.8)
+	else:
+		# Keep the publisher/game sequence while respecting disabled animation.
+		tween.tween_callback(func():
+			_intro_phase = "four_realms"
+			publisher.hide()
+			flying.modulate.a = 1.0)
+		tween.tween_interval(0.5)
+	await tween.finished
+	mast.modulate.a = 1.0
+	_title_margin.modulate.a = 1.0
+	_intro_layer.queue_free()
+	_intro_layer = null
+	_intro_phase = "menu"
+
+
+func _place_intro_logo(progress: float) -> void:
+	_intro_progress = progress
+	if not is_instance_valid(_intro_layer):
+		return
+	var flying := _intro_layer.get_node_or_null("MovingLogo") as TextureRect
+	if flying == null:
+		return
+	var mast: TextureRect = _title_parts[0]
+	var texture_size := Vector2(LOGO_TRANSPARENT.get_size())
+	var start_size := texture_size * minf(size.x * 0.9 / texture_size.x, size.y * 0.9 / texture_size.y)
+	var start := Rect2((size - start_size) * 0.5, start_size)
+	var target_size := texture_size * minf(mast.size.x / texture_size.x, mast.size.y / texture_size.y)
+	var target := Rect2(mast.global_position - global_position + (mast.size - target_size) * 0.5, target_size)
+	flying.position = start.position.lerp(target.position, progress)
+	flying.size = start.size.lerp(target.size, progress)
+
+
 ## Keep an open sheet readable and inside the screen during rotation.
+func _open_settings() -> void:
+	var sheet := _sheet("SETTINGS")
+	SettingsPanel.populate(sheet, _codex_close, _layout_sheet)
+
+
 func _layout_sheet() -> void:
 	if not is_instance_valid(_sheet_panel):
+		return
+	if _sheet_panel.has_meta("settings_grid"):
+		SettingsPanel.layout(_sheet_panel, size, _title_landscape)
 		return
 	_sheet_panel.anchor_left = 0.5
 	_sheet_panel.anchor_right = 0.5
@@ -191,7 +298,12 @@ func _layout_sheet() -> void:
 		layout.columns = 2 if _title_landscape else 1
 		modes.columns = 1 if _title_landscape else 2
 		for button in factions.get_children():
-			button.custom_minimum_size.y = 230.0 if _title_landscape else 160.0
+			button.custom_minimum_size.y = 230.0 if _title_landscape else 140.0
+		_faction_power_title.add_theme_font_size_override("font_size", 28 if _title_landscape else 24)
+		_faction_power_text.add_theme_font_size_override("font_size", 26 if _title_landscape else 20)
+		var power_font := _faction_power_text.get_theme_font("font")
+		var power_size := _faction_power_text.get_theme_font_size("font_size")
+		_faction_power_text.custom_minimum_size.y = power_font.get_height(power_size) * 2.0 + 4.0
 		var body: VBoxContainer = _sheet_panel.get_meta("navigation_body")
 		var outer: VBoxContainer = body.get_parent().get_parent()
 		var chrome := outer.get_combined_minimum_size().y + _sheet_panel.get_theme_stylebox("panel").get_minimum_size().y
@@ -200,30 +312,6 @@ func _layout_sheet() -> void:
 		_sheet_panel.anchor_bottom = 0.5
 		_sheet_panel.offset_top = -height * 0.5
 		_sheet_panel.offset_bottom = height * 0.5
-	if settings and _sheet_panel.has_meta("settings_grid"):
-		var grid: GridContainer = _sheet_panel.get_meta("settings_grid")
-		grid.columns = 2 if _title_landscape and width >= 1020.0 else 1
-		var factor := 1.3 if _title_landscape else 1.0
-		var controls: Array[Node] = [_sheet_panel]
-		while not controls.is_empty():
-			var control := controls.pop_back() as Node
-			controls.append_array(control.get_children())
-			if control.has_meta("settings_font_size"):
-				control.add_theme_font_size_override("font_size", int(control.get_meta("settings_font_size") * factor))
-			if control.has_meta("settings_minimum"):
-				var minimum: Vector2 = control.get_meta("settings_minimum")
-				minimum.y = maxf(minimum.y, 44.0) * factor
-				control.custom_minimum_size = minimum
-		var outer: VBoxContainer = grid.get_parent().get_parent().get_parent()
-		var chrome := outer.get_combined_minimum_size().y + _sheet_panel.get_theme_stylebox("panel").get_minimum_size().y
-		var height := minf(size.y * 0.9, grid.get_combined_minimum_size().y + chrome + 8.0)
-		_sheet_panel.anchor_top = 0.5
-		_sheet_panel.anchor_bottom = 0.5
-		_sheet_panel.offset_top = -height * 0.5
-		_sheet_panel.offset_bottom = height * 0.5
-
-
-
 
 func _faction_card(f: int) -> Button:
 	var info: Dictionary = T.FACTIONS[f]
@@ -307,31 +395,17 @@ func _refresh_factions() -> void:
 		b.set_pressed_no_signal(on)
 		var frame: Panel = b.get_node("FactionFrame")
 		frame.add_theme_stylebox_override("panel", UI.fantasy_style("frame_active" if on else "frame", 0, 0))
+	_refresh_faction_power()
 
 
-func _toggle(on: bool) -> Button:
-	var b := Button.new()
-	b.toggle_mode = true
-	b.button_pressed = on
-	b.focus_mode = Control.FOCUS_NONE
-	b.custom_minimum_size = Vector2(64, 36)
-	b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	b.add_theme_stylebox_override("normal", UI.flat(UI.PANEL, 18, Color("453a5c"), 2))
-	b.add_theme_stylebox_override("hover", UI.flat(UI.PANEL_HI, 18, UI.GOLD, 2))
-	b.add_theme_stylebox_override("pressed", UI.flat(UI.GOLD, 18))
-	b.add_theme_stylebox_override("focus", UI.flat(Color(0, 0, 0, 0), 18))
-	b.draw.connect(func():
-		var r := Rect2(Vector2.ZERO, b.size)
-		var cx := r.size.x * (0.66 if b.button_pressed else 0.34)
-		# Dark on gold when enabled; the former gold-on-gold thumb was invisible.
-		b.draw_circle(Vector2(cx, r.size.y * 0.5), 13.0, UI.INK if b.button_pressed else UI.TEXT_DIM))
-	return b
-
-
-func _refresh_toggle() -> void:
-	if is_instance_valid(_classic_toggle):
-		_classic_toggle.set_pressed_no_signal(Profile.classic_mode)
-		_classic_toggle.queue_redraw()
+func _refresh_faction_power() -> void:
+	if not is_instance_valid(_faction_power_title):
+		return
+	var info: Dictionary = T.FACTIONS[faction]
+	_faction_power_title.text = "%s · %s" % [info.name, info.oath]
+	_faction_power_title.add_theme_color_override("font_color", info.pale)
+	_faction_power_text.text = info.oath_short
+	_layout_sheet.call_deferred()
 
 
 func _build_modes() -> void:
@@ -367,6 +441,7 @@ func _open_new_game() -> void:
 	var sheet := _sheet("NEW GAME")
 	sheet.set_meta("settings", true)
 	var body: VBoxContainer = sheet.get_meta("body")
+	body.add_theme_constant_override("separation", 8)
 	body.add_child(UI.label("Choose your faction", 28 if _title_landscape else 24, UI.GOLD))
 	var layout := GridContainer.new()
 	layout.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -386,13 +461,39 @@ func _open_new_game() -> void:
 		art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		factions.add_child(button)
 		_faction_buttons.append(button)
+	var choices := VBoxContainer.new()
+	choices.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	choices.add_theme_constant_override("separation", 8)
+	layout.add_child(choices)
+	var power := PanelContainer.new()
+	power.name = "FactionPower"
+	power.add_theme_stylebox_override("panel", UI.fantasy_style("panel", 12, 8))
+	choices.add_child(power)
+	var power_content := VBoxContainer.new()
+	power_content.add_theme_constant_override("separation", 4)
+	power.add_child(power_content)
+	_faction_power_title = UI.label("", 24, UI.GOLD, false, true)
+	_faction_power_title.name = "FactionPowerTitle"
+	_faction_power_title.autowrap_mode = TextServer.AUTOWRAP_OFF
+	_faction_power_title.clip_text = true
+	_faction_power_title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	_faction_power_title.add_theme_font_override("font", ThemeDB.fallback_font)
+	power_content.add_child(_faction_power_title)
+	_faction_power_text = UI.label("", 20, UI.TEXT, false, true)
+	_faction_power_text.name = "FactionPowerDescription"
+	_faction_power_text.max_lines_visible = 2
+	_faction_power_text.add_theme_font_override("font", ThemeDB.fallback_font)
+	power_content.add_child(_faction_power_text)
+	var usage := UI.label("Oaths are off in Classic mode" if Profile.classic_mode else "1 Favor · Once per hand", 18, UI.TEXT_DIM, false, true)
+	usage.add_theme_font_override("font", ThemeDB.fallback_font)
+	power_content.add_child(usage)
 	_refresh_factions()
 	var modes := GridContainer.new()
 	modes.columns = 2
 	modes.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	modes.add_theme_constant_override("h_separation", 12)
-	modes.add_theme_constant_override("v_separation", 12)
-	layout.add_child(modes)
+	modes.add_theme_constant_override("v_separation", 8)
+	choices.add_child(modes)
 	var entries := [
 		["Duel", "One hand", "QUICK", func(): _launch(T.Mode.QUICK), UI.GOLD],
 		["Fifteen", "Capture totals of 15", "XV", _launch_quindici, Color("6fa8d4")],
@@ -403,7 +504,8 @@ func _open_new_game() -> void:
 		var row := _mode_row(entry[0], entry[1], entry[2], entry[3], entry[4], false)
 		row.name = entry[0] + "Entry"
 		modes.add_child(row)
-		row.custom_minimum_size.y = 130.0
+		row.custom_minimum_size.y = 100.0
+		row.add_theme_stylebox_override("panel", UI.fantasy_style("panel", 12, 8))
 	var back := UI.button("Back", "secondary", 24)
 	back.pressed.connect(_codex_close)
 	body.get_parent().get_parent().add_child(back)
@@ -476,8 +578,8 @@ func _mode_row(title: String, sub: String, badge: String, cb: Callable, accent: 
 	var apply_type := func():
 		t.add_theme_font_override("font", ThemeDB.fallback_font)
 		subtitle.add_theme_font_override("font", ThemeDB.fallback_font)
-		t.add_theme_font_size_override("font_size", 34 if _title_landscape else (27 if size.x >= 460 else 18))
-		subtitle.add_theme_font_size_override("font_size", 25 if _title_landscape else (20 if size.x >= 460 else 14))
+		t.add_theme_font_size_override("font_size", int(clampf(size.y * 0.04, 30, 42)) if _title_landscape else int(clampf(size.x * 0.05, 26, 38)))
+		subtitle.add_theme_font_size_override("font_size", int(clampf(size.y * 0.028, 23, 30)) if _title_landscape else int(clampf(size.x * 0.033, 18, 26)))
 	p.resized.connect(apply_type)
 
 	var go := UI.button("", "ghost", 18)
@@ -495,6 +597,7 @@ func _mode_row(title: String, sub: String, badge: String, cb: Callable, accent: 
 	var apply_style := func(wide: bool):
 		p.add_theme_stylebox_override("panel", landscape_style if wide else portrait_style)
 		p.custom_minimum_size.y = 150.0 if wide else (112.0 if size.x >= 460 else 80.0)
+		p.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		backdrop.modulate = Color(0.40, 0.46, 0.52) if wide else Color(0.48, 0.53, 0.58)
 		h.add_theme_constant_override("separation", 6)
 		emblem.visible = wide or size.x >= 460
@@ -553,185 +656,6 @@ func _mode_row(title: String, sub: String, badge: String, cb: Callable, accent: 
 
 
 ## One scrollable dialog for rules, cosmetics and animation preferences.
-func _open_settings() -> void:
-	var sheet := _sheet("SETTINGS")
-	sheet.set_meta("settings", true)
-	var body: VBoxContainer = sheet.get_meta("body")
-	body.add_theme_constant_override("separation", 0)
-	var grid := GridContainer.new()
-	grid.name = "SettingsGrid"
-	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	grid.add_theme_constant_override("h_separation", 16)
-	grid.add_theme_constant_override("v_separation", 12)
-	body.add_child(grid)
-	var left := VBoxContainer.new()
-	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	left.add_theme_constant_override("separation", 12)
-	grid.add_child(left)
-	var gameplay := PanelContainer.new()
-	gameplay.add_theme_stylebox_override("panel", UI.fantasy_style("panel", 14, 12))
-	left.add_child(gameplay)
-	var gameplay_rows := VBoxContainer.new()
-	gameplay_rows.add_theme_constant_override("separation", 8)
-	gameplay.add_child(gameplay_rows)
-	for section in [_classic_panel(), _orientation_panel()]:
-		section.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
-		gameplay_rows.add_child(section)
-	left.add_child(_cosmetics_panel())
-	var animation := _animation_panel()
-	animation.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	animation.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	grid.add_child(animation)
-	var outer: VBoxContainer = body.get_parent().get_parent()
-	var done := UI.button("Done", "primary", 22)
-	done.name = "SettingsDone"
-	done.size_flags_horizontal = Control.SIZE_SHRINK_END
-	done.custom_minimum_size = Vector2(140, 48)
-	done.pressed.connect(_codex_close)
-	outer.add_child(done)
-	var controls: Array[Node] = [sheet]
-	while not controls.is_empty():
-		var control := controls.pop_back() as Node
-		controls.append_array(control.get_children())
-		if control is Label or control is Button:
-			control.add_theme_font_override("font", ThemeDB.fallback_font)
-			control.set_meta("settings_font_size", maxi(control.get_theme_font_size("font_size"), 20))
-		if control is Button:
-			control.set_meta("settings_minimum", control.custom_minimum_size)
-	sheet.set_meta("settings_grid", grid)
-	grid.minimum_size_changed.connect(_layout_sheet)
-	_layout_sheet()
-	_layout_sheet.call_deferred()
-
-
-func _orientation_panel() -> Control:
-	var panel := PanelContainer.new()
-	panel.name = "OrientationSettings"
-	panel.add_theme_stylebox_override("panel", UI.fantasy_style("panel", 10, 8))
-	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 4)
-	panel.add_child(col)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 12)
-	col.add_child(row)
-	row.add_child(UI.label("Orientation", 22, UI.TEXT))
-	var choice := OptionButton.new()
-	choice.name = "OrientationChoice"
-	choice.custom_minimum_size = Vector2(100, 44)
-	choice.fit_to_longest_item = false
-	choice.clip_text = true
-	choice.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	choice.add_theme_font_override("font", UI.font_bold())
-	choice.add_theme_font_size_override("font_size", 16)
-	choice.add_theme_color_override("font_color", UI.TEXT)
-	choice.add_theme_color_override("font_hover_color", UI.GOLD)
-	choice.add_theme_stylebox_override("normal", UI.flat(UI.BG2, 8, Color("4a3f5e"), 1))
-	choice.add_theme_stylebox_override("hover", UI.flat(UI.PANEL_HI, 8, UI.GOLD, 1))
-	choice.add_theme_stylebox_override("pressed", UI.flat(UI.PANEL_HI, 8, UI.GOLD, 1))
-	var values := ["auto", "landscape_left", "landscape_right", "portrait"]
-	for text in ["Auto", "Landscape Left", "Landscape Right", "Portrait"]:
-		choice.add_item(text)
-	choice.select(maxi(values.find(Profile.orientation), 0))
-	choice.item_selected.connect(func(index: int):
-		Profile.set_orientation(values[index])
-		Sfx.play("select", -14.0))
-	row.add_child(choice)
-	var note := "Auto follows the device. Forced directions use the phone orientation."
-	if Engine.is_embedded_in_editor():
-		choice.disabled = true
-		note = "The embedded Game panel cannot resize. Stop the game, turn off Embed Game on Next Play in Godot's Game tab, then run again in a separate window."
-	elif OS.has_feature("web"):
-		choice.disabled = true
-		note = "The browser controls orientation; the layout follows the window."
-	elif not DisplayServer.has_feature(DisplayServer.FEATURE_ORIENTATION):
-		note = "Auto follows the window. On desktop, forced modes resize the window."
-	choice.tooltip_text = note
-	if choice.disabled:
-		col.add_child(UI.label(note, 14, UI.TEXT_DIM, false, true))
-	return panel
-
-
-func _classic_panel() -> Control:
-	var panel := PanelContainer.new()
-	panel.name = "ClassicSettings"
-	panel.add_theme_stylebox_override("panel", UI.fantasy_style("panel", 10, 8))
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 12)
-	panel.add_child(row)
-	var labels := VBoxContainer.new()
-	labels.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(labels)
-	labels.add_child(UI.label("Classic · Oaths off", 22, UI.TEXT, false, true))
-	labels.tooltip_text = "Oaths off. Pure card play, no Favor."
-	_classic_toggle = _toggle(Profile.classic_mode)
-	_classic_toggle.set_meta("setting_key", "classic_mode")
-	_classic_toggle.tooltip_text = "Enable or disable Classic Mode"
-	_classic_toggle.pressed.connect(func():
-		Profile.classic_mode = not Profile.classic_mode
-		Profile.save_profile()
-		_refresh_toggle()
-		Sfx.play("select", -14.0))
-	row.add_child(_classic_toggle)
-	return panel
-
-
-## Presentation settings. Every animation can be turned off and the game stays
-## completely playable - they are flourish, not mechanics.
-func _animation_panel() -> Control:
-	var p := PanelContainer.new()
-	p.name = "AnimationSettings"
-	p.add_theme_stylebox_override("panel", UI.fantasy_style("panel", 10, 8))
-	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 4)
-	p.add_child(v)
-	var h := HBoxContainer.new()
-	v.add_child(h)
-	h.add_child(UI.label("ANIMATION", 18, UI.GOLD))
-	var sp := Control.new()
-	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	h.add_child(sp)
-
-
-	var rows := [
-		["anim_enabled", "All animation", "Master switch. Off = instant, zero flourish."],
-		["anim_spin", "Card spin", "Played cards turn a full 360 as they land."],
-		["anim_slow", "Slower play", "Holds the beat so captures stay readable."],
-		["anim_match", "Match cue", "Flash a ring on each card being taken."],
-	]
-	var toggles := {}
-	for row in rows:
-		var key: String = row[0]
-		var r := HBoxContainer.new()
-		r.add_theme_constant_override("separation", 12)
-		v.add_child(r)
-		var tv := VBoxContainer.new()
-		tv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		tv.add_theme_constant_override("separation", 0)
-		r.add_child(tv)
-		tv.add_child(UI.label(row[1], 19, UI.TEXT, true))
-		r.tooltip_text = row[2]
-		var t := _toggle(bool(Profile.get(key)))
-		t.set_meta("setting_key", key)
-		var k := key
-		t.pressed.connect(func():
-			Profile.set(k, not bool(Profile.get(k)))
-			Profile.save_profile()
-			Sfx.play("select", -14.0))
-		r.add_child(t)
-		toggles[key] = t
-	# the sub-switches only mean anything while the master is on
-	var dim_subs := func() -> void:
-		var on: bool = Profile.anim_enabled
-		for k in ["anim_spin", "anim_slow", "anim_match"]:
-			var b: Button = toggles[k]
-			b.disabled = not on
-			b.modulate.a = 1.0 if on else 0.4
-	dim_subs.call()
-	var m: Button = toggles["anim_enabled"]
-	m.pressed.connect(dim_subs)
-	return p
-
-
 func _stats_panel() -> Control:
 	var panel := PanelContainer.new()
 	panel.name = "YourRecord"
@@ -800,94 +724,6 @@ func _resume_duel() -> void:
 	}
 	Sfx.play("tap")
 	start_duel.emit(cfg)
-
-
-func _cosmetics_panel() -> Control:
-	var p := PanelContainer.new()
-	p.name = "TableSettings"
-	p.add_theme_stylebox_override("panel", UI.fantasy_style("panel", 10, 8))
-	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 4)
-	p.add_child(v)
-	var h := HBoxContainer.new()
-	v.add_child(h)
-	h.add_child(UI.label("YOUR TABLE", 18, UI.GOLD))
-	var sp := Control.new()
-	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	h.add_child(sp)
-
-
-	# card backs
-	var back_row := HBoxContainer.new()
-	back_row.add_theme_constant_override("separation", 10)
-	v.add_child(back_row)
-	var back_label := UI.label("Back", 20, UI.TEXT)
-	back_label.custom_minimum_size.x = 70
-	back_row.add_child(back_label)
-	var back_group := ButtonGroup.new()
-	for i in range(3):
-		var b := Button.new()
-		b.focus_mode = Control.FOCUS_NONE
-		b.custom_minimum_size = Vector2(46, 62)
-		b.toggle_mode = true
-		b.button_group = back_group
-		b.button_pressed = i == Profile.card_back
-		b.set_meta("card_back", i)
-		b.tooltip_text = "Card back %d" % (i + 1)
-		b.add_theme_stylebox_override("normal", UI.flat(Color(0, 0, 0, 0), 8))
-		b.add_theme_stylebox_override("hover", UI.flat(Color(1, 1, 1, 0.06), 8))
-		b.add_theme_stylebox_override("pressed", UI.flat(Color(0, 0, 0, 0), 8, UI.GOLD, 2))
-		b.add_theme_stylebox_override("focus", UI.flat(Color(0, 0, 0, 0), 8))
-		var cv := CardView.new()
-		cv.setup(-1, false, 42, 58)
-		cv.back_style = i
-		# CardView._ready defaults to STOP for playable cards; this preview is
-		# added before its parent enters the tree, so override after _ready runs.
-		cv.ready.connect(func(): cv.mouse_filter = Control.MOUSE_FILTER_IGNORE)
-		b.add_child(cv)
-		cv.position = Vector2(2, 2)
-		var idx := i
-		b.pressed.connect(func():
-			Profile.card_back = idx
-			Profile.save_profile()
-			Sfx.play("select", -12.0))
-		back_row.add_child(b)
-	var sp2 := Control.new()
-	sp2.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	back_row.add_child(sp2)
-
-	# board themes
-	var board_row := HBoxContainer.new()
-	board_row.add_theme_constant_override("separation", 6)
-	v.add_child(board_row)
-	var board_label := UI.label("Board", 20, UI.TEXT)
-	board_label.custom_minimum_size.x = 70
-	board_row.add_child(board_label)
-	var themes := [Color("1b2a24"), Color("1a2230"), Color("2a1c22"), Color("241f2e")]
-	var board_group := ButtonGroup.new()
-	for i in range(themes.size()):
-		var b2 := Button.new()
-		b2.focus_mode = Control.FOCUS_NONE
-		b2.custom_minimum_size = Vector2(36, 44)
-		b2.toggle_mode = true
-		b2.button_group = board_group
-		b2.button_pressed = i == Profile.board_theme
-		b2.set_meta("board_theme", i)
-		b2.tooltip_text = "Board theme %d" % (i + 1)
-		b2.add_theme_stylebox_override("normal", UI.flat(themes[i], 8, Color("4a3f5e"), 1))
-		b2.add_theme_stylebox_override("hover", UI.flat(themes[i].lightened(0.12), 8, UI.GOLD, 2))
-		b2.add_theme_stylebox_override("pressed", UI.flat(themes[i], 8, UI.GOLD, 2))
-		b2.add_theme_stylebox_override("focus", UI.flat(Color(0, 0, 0, 0), 8))
-		var idx2 := i
-		b2.pressed.connect(func():
-			Profile.board_theme = idx2
-			Profile.save_profile()
-			Sfx.play("select", -12.0))
-		board_row.add_child(b2)
-	var sp3 := Control.new()
-	sp3.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	board_row.add_child(sp3)
-	return p
 
 
 func _open_ranked() -> void:
@@ -1072,7 +908,6 @@ func _codex_close() -> void:
 			part.queue_free()
 	_sheet_panel = null
 	_codex = null
-	_classic_toggle = null
 
 
 func _open_codex() -> void:

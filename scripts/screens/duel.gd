@@ -5,6 +5,7 @@ const LANDSCAPE_LOGO := preload("res://assets/branding/four_realms_logo.png")
 ## scoring sheet and the campaign puzzle goals.  Portrait-first, one-handed.
 
 const UI := preload("res://scripts/ui/ui.gd")
+const SettingsPanel := preload("res://scripts/ui/settings_panel.gd")
 const FX := preload("res://scripts/ui/fx.gd")
 const CardView := preload("res://scripts/ui/card_view.gd")
 const EffectAtlas := preload("res://scripts/ui/effect_atlas.gd")
@@ -53,6 +54,8 @@ var _quest_list: VBoxContainer
 var _banner_meter: Control
 var _toast_box: VBoxContainer
 var _overlay: Control
+var _menu_paused := false
+var _pause_before_menu := false
 var _deck_chip: PanelContainer
 var _pile_chip: PanelContainer
 var _goal_chip: PanelContainer
@@ -61,6 +64,7 @@ var _portrait_root: VBoxContainer
 var _landscape_root: HBoxContainer
 var _landscape_side: VBoxContainer
 var _landscape_table: VBoxContainer
+var _landscape_bottom: HBoxContainer
 var _landscape_player: VBoxContainer
 var _layout_mode := "portrait"
 var _layout_parts := {}
@@ -174,7 +178,7 @@ func _build_duel() -> void:
 	add_child(_landscape_root)
 	_landscape_side = VBoxContainer.new()
 	_landscape_side.name = "DuelSidebar"
-	_landscape_side.custom_minimum_size = Vector2(400, 0)
+	_landscape_side.custom_minimum_size = Vector2(380, 0)
 	_landscape_side.add_theme_constant_override("separation", 8)
 	_landscape_root.add_child(_landscape_side)
 	var side_logo := TextureRect.new()
@@ -198,23 +202,16 @@ func _build_duel() -> void:
 	_landscape_table.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_landscape_table.add_theme_constant_override("separation", 6)
 	_landscape_root.add_child(_landscape_table)
+	_landscape_bottom = HBoxContainer.new()
+	_landscape_bottom.name = "PlayerBottomRow"
+	_landscape_bottom.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_landscape_bottom.add_theme_constant_override("separation", 16)
+	_landscape_table.add_child(_landscape_bottom)
 	_landscape_player = VBoxContainer.new()
-	_landscape_player.name = "PlayerPanel"
-	_landscape_player.custom_minimum_size = Vector2(450, 0)
-	_landscape_player.add_theme_constant_override("separation", 10)
-	_landscape_root.add_child(_landscape_player)
-	_landscape_player.hide()
-	var player_spacer := Control.new()
-	player_spacer.name = "PlayerTopSpacer"
-	player_spacer.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	_landscape_player.add_child(player_spacer)
-	var player_heading := UI.label("BATTLE", 18, UI.GOLD, true)
-	player_heading.name = "PlayerHeading"
-	_landscape_player.add_child(player_heading)
-	var player_bottom := Control.new()
-	player_bottom.name = "PlayerBottomSpacer"
-	player_bottom.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_landscape_player.add_child(player_bottom)
+	_landscape_player.name = "PlayerActions"
+	_landscape_player.custom_minimum_size = Vector2(320, 0)
+	_landscape_player.size_flags_vertical = Control.SIZE_SHRINK_END
+	_landscape_bottom.add_child(_landscape_player)
 	_layout_ready = true
 	_apply_orientation_layout()
 	_table_grid.resized.connect(_schedule_layout_refresh)
@@ -256,6 +253,7 @@ func _build_top() -> Control:
 
 	# row 1: opponent
 	var r1 := HBoxContainer.new()
+	r1.name = "OpponentRow"
 	r1.add_theme_constant_override("separation", 10)
 	v.add_child(r1)
 
@@ -266,16 +264,22 @@ func _build_top() -> Control:
 	nv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	nv.add_theme_constant_override("separation", 0)
 	r1.add_child(nv)
-	_top_name = UI.label("", 20, UI.TEXT, true)
+	_top_name = UI.label("", 20, UI.TEXT, true, true)
 	_top_name.add_theme_font_size_override("font_size", 19)
 	nv.add_child(_top_name)
-	_top_meta = UI.label("", 14, UI.TEXT_DIM)
+	_top_meta = UI.label("", 14, UI.TEXT_DIM, false, true)
 	nv.add_child(_top_meta)
 
 	_top_favor = UI.chip("FAVOR 0", Color("3a2f22"), UI.GOLD, 15)
 	r1.add_child(_top_favor)
 	_top_scoopa = UI.chip("SWEEPS 0", Color("2b2338"), UI.TEXT_DIM, 15)
 	r1.add_child(_top_scoopa)
+
+	var counters := HBoxContainer.new()
+	counters.name = "HUDCounters"
+	counters.add_theme_constant_override("separation", 8)
+	counters.hide()
+	v.add_child(counters)
 
 	# row 2: renown bar
 	var r2 := HBoxContainer.new()
@@ -313,7 +317,8 @@ func _avatar_pip(f: int) -> Control:
 func _build_mid() -> Control:
 	var p := PanelContainer.new()
 	p.add_theme_stylebox_override("panel", UI.panel(UI.BG2, 14, Color("332b47")))
-	var h := HBoxContainer.new()
+	var h := BoxContainer.new()
+	h.name = "TurnContents"
 	h.add_theme_constant_override("separation", 10)
 	p.add_child(h)
 
@@ -335,6 +340,11 @@ func _build_mid() -> Control:
 	h.add_child(_goal_chip)
 	_score_chip = UI.chip("", Color("2b2338"), UI.TEXT_DIM, 14)
 	h.add_child(_score_chip)
+	var counters := HBoxContainer.new()
+	counters.name = "TurnCounters"
+	counters.add_theme_constant_override("separation", 6)
+	counters.hide()
+	h.add_child(counters)
 	return p
 
 
@@ -363,6 +373,7 @@ func _notification(what: int) -> void:
 		return
 	_apply_orientation_layout()
 	_schedule_layout_refresh()
+	_layout_game_dialogs()
 
 
 ## Reparent existing controls rather than rebuilding the duel: a rotation must
@@ -371,8 +382,7 @@ func _apply_orientation_layout() -> void:
 	if not _layout_ready:
 		return
 	var wide := size.x > size.y * 1.12
-	# At true phone-landscape widths a separate player panel avoids squeezing
-	# everything into a portrait stack. Near-square layouts use two columns.
+	# Landscape shares the bottom row between the hand and its action controls.
 	var mode := "full" if wide and size.x >= 1450.0 else ("compact" if wide else "portrait")
 	_portrait_root.get_node("PortraitDuelLogo").visible = not wide and size.y >= 850.0
 	if mode == _layout_mode:
@@ -380,36 +390,69 @@ func _apply_orientation_layout() -> void:
 	_layout_mode = mode
 	_landscape = wide
 	if wide:
-		for key in ["HUD", "TurnBar"]:
+		for key in ["HUD", "TurnBar", "BotHand", "Quests"]:
 			_layout_parts[key].reparent(_landscape_side, false)
-		if mode == "full":
-			_layout_parts.BotHand.reparent(_landscape_side, false)
-			for key in ["Table", "Hand"]:
-				_layout_parts[key].reparent(_landscape_table, false)
-			for key in ["Quests", "Actions"]:
-				_layout_parts[key].reparent(_landscape_player, false)
-			_layout_parts.Actions.vertical = true
-			_landscape_player.move_child(_layout_parts.Quests, 2)
-			_landscape_player.move_child(_layout_parts.Actions, 3)
-			_landscape_player.show()
-		else:
-			_landscape_player.hide()
-			_layout_parts.Quests.reparent(_landscape_side, false)
-			for key in ["BotHand", "Table", "Hand", "Actions"]:
-				_layout_parts[key].reparent(_landscape_table, false)
-			_layout_parts.Actions.vertical = false
+		_layout_parts.Table.reparent(_landscape_table, false)
+		_landscape_table.move_child(_layout_parts.Table, 0)
+		_layout_parts.Hand.reparent(_landscape_bottom, false)
+		_landscape_bottom.move_child(_layout_parts.Hand, 0)
+		_layout_parts.Hand.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		_layout_parts.Actions.reparent(_landscape_player, false)
+		_layout_parts.Actions.vertical = true
+		_landscape_player.show()
 		_landscape_side.move_child(_landscape_side.get_node("LandscapeStatusLogo"), 0)
 		_landscape_side.move_child(_landscape_side.get_node("LandscapeStatusSpacer"), _landscape_side.get_child_count() - 1)
 		_portrait_root.hide()
 		_landscape_root.show()
 	else:
-		_landscape_player.hide()
 		for key in ["HUD", "TurnBar", "BotHand", "Table", "Quests", "Hand", "Actions"]:
 			_layout_parts[key].reparent(_portrait_root, false)
 		_layout_parts.Actions.vertical = false
 		_landscape_root.hide()
 		_portrait_root.show()
+	var opponent_row: HBoxContainer = _layout_parts.HUD.find_child("OpponentRow", true, false)
+	var hud_counters: HBoxContainer = _layout_parts.HUD.find_child("HUDCounters", true, false)
+	for counter in [_top_favor, _top_scoopa]:
+		counter.reparent(hud_counters if wide else opponent_row, false)
+	hud_counters.visible = wide
+	var turn_contents: BoxContainer = _layout_parts.TurnBar.find_child("TurnContents", true, false)
+	var turn_counters: HBoxContainer = _layout_parts.TurnBar.find_child("TurnCounters", true, false)
+	turn_contents.vertical = wide
+	for counter in [_deck_chip, _goal_chip, _score_chip]:
+		counter.reparent(turn_counters if wide else turn_contents, false)
+	turn_counters.visible = wide
+	_layout_parts.Actions.get_child(3).text = "Menu" if wide else "☰"
+	_table_grid.offset_bottom = -70 if wide else -26
+	_table_sub.offset_top = -68 if wide else -24
+	_table_sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART if wide else TextServer.AUTOWRAP_OFF
+	_hand_row.offset_top = 48 if wide else 28
+	_favor_strip.offset_bottom = 42 if wide else 22
+	_favor_strip.custom_minimum_size.y = 42 if wide else 22
+	_apply_duel_typography()
 	_schedule_layout_refresh()
+
+
+func _apply_duel_typography() -> void:
+	for section in _layout_parts.values():
+		var controls: Array[Node] = [section]
+		while not controls.is_empty():
+			var control := controls.pop_back() as Node
+			controls.append_array(control.get_children())
+			if control is Label or control is Button:
+				if not control.has_meta("portrait_font_size"):
+					control.set_meta("portrait_font_size", control.get_theme_font_size("font_size"))
+					control.set_meta("portrait_font", control.get_theme_font("font"))
+				var original: int = control.get_meta("portrait_font_size")
+				control.add_theme_font_size_override("font_size", maxi(28, int(original * 1.4)) if _landscape else original)
+				control.add_theme_font_override("font", ThemeDB.fallback_font if _landscape else control.get_meta("portrait_font"))
+			if control is Button:
+				if not control.has_meta("portrait_minimum"):
+					control.set_meta("portrait_minimum", control.custom_minimum_size)
+				var minimum: Vector2 = control.get_meta("portrait_minimum")
+				if _landscape:
+					minimum.y = maxf(minimum.y, 80.0)
+				control.custom_minimum_size = minimum
+
 
 
 func _schedule_layout_refresh() -> void:
@@ -427,7 +470,7 @@ func _refresh_after_layout() -> void:
 		return
 	var hand_width: float = _hand_box.size.x
 	var hw: float = _hand_card_width(hand_width)
-	_hand_box.custom_minimum_size = Vector2(0, int(hw * 1.404) + 36)
+	_hand_box.custom_minimum_size = Vector2(0, int(hw * 1.404) + (56 if _landscape else 36))
 	_refresh_table()
 	_refresh_hand()
 	_refresh_bot_hand()
@@ -627,21 +670,27 @@ func _draw_favor_pips() -> void:
 	if fav_node == null:
 		return
 	var n: int = duel.favor[0]
-	var x := 96.0
-	fav_node.draw_string(UI.font_bold(), Vector2(4, 16), "FAVOR", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, UI.TEXT_DIM)
+	var font := ThemeDB.fallback_font if _landscape else UI.font_bold()
+	var font_size := 28 if _landscape else 12
+	var baseline := 30.0 if _landscape else 16.0
+	var x := 124.0 if _landscape else 96.0
+	var gap := 26.0 if _landscape else 20.0
+	var center_y := 20.0 if _landscape else 10.0
+	var diameter := 22.0 if _landscape else 16.0
+	fav_node.draw_string(font, Vector2(4, baseline), "FAVOR", HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, UI.TEXT_DIM)
 	for i in range(Duel.MAX_FAVOR):
-		var c := Vector2(x + i * 20, 10)
+		var center := Vector2(x + i * gap, center_y)
 		var icon := EffectAtlas.FAVOR_FILLED if i < n else EffectAtlas.FAVOR_EMPTY
-		var pip_rect := Rect2(c - Vector2(8, 8), Vector2(16, 16))
+		var pip_rect := Rect2(center - Vector2.ONE * diameter * 0.5, Vector2.ONE * diameter)
 		if not UI.LOW_SPEC or not EffectAtlas.draw_sprite(fav_node, pip_rect, icon):
 			if i < n:
-				fav_node.draw_circle(c, 6.0, UI.GOLD)
-				fav_node.draw_circle(c, 3.0, Color("fff6dd"))
+				fav_node.draw_circle(center, diameter * 0.375, UI.GOLD)
+				fav_node.draw_circle(center, diameter * 0.1875, Color("fff6dd"))
 			else:
-				fav_node.draw_arc(c, 6.0, 0, TAU, 18, Color("4a3f5e"), 1.4, true)
+				fav_node.draw_arc(center, diameter * 0.375, 0, TAU, 18, Color("4a3f5e"), 1.4, true)
 	if duel.oath_used[0]:
-		fav_node.draw_string(UI.font_bold(), Vector2(96 + Duel.MAX_FAVOR * 20 + 12, 16),
-			"Oath spent", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, UI.TEXT_DIM)
+		fav_node.draw_string(font, Vector2(x + Duel.MAX_FAVOR * gap + 12, baseline),
+			"Oath spent", HORIZONTAL_ALIGNMENT_LEFT, -1, 24 if _landscape else 12, UI.TEXT_DIM)
 
 
 const BOARD_THEMES := [
@@ -735,6 +784,7 @@ func _refresh_all() -> void:
 	_refresh_actions()
 	if _favor_strip != null:
 		_favor_strip.queue_redraw()
+	_apply_duel_typography()
 
 
 func _hand_card_width(available: float) -> float:
@@ -874,11 +924,11 @@ func _refresh_table() -> void:
 		if groups.size() > 1:
 			_table_sub.text = "Tap a glowing card to choose a capture"
 		elif groups.size() == 1:
-			_table_sub.text = "Tap the glowing card to capture"
+			_table_sub.text = "Tap your card again or a glowing card to capture" if Profile.confirm_card_play else "Tap the glowing card to capture"
 		elif duel.blocked_by_quindici(_selection):
 			_table_sub.text = "Fifteen Duel: matching a value never captures — only cards totalling 15"
 		else:
-			_table_sub.text = "No capture — this card will lie on the table"
+			_table_sub.text = "No capture. Tap your card again to play." if Profile.confirm_card_play else "No capture — this card will lie on the table"
 
 
 func _refresh_quests() -> void:
@@ -886,7 +936,7 @@ func _refresh_quests() -> void:
 		c.get_parent().remove_child(c)
 		c.queue_free()
 	if duel.quests.is_empty():
-		_quest_list.add_child(UI.label("Classic rules · no quests in puzzles", 15, UI.TEXT_DIM))
+		_quest_list.add_child(UI.label("Classic rules · no quests in puzzles", 15, UI.TEXT_DIM, false, true))
 		return
 	for i in range(duel.quests.size()):
 		var q: Dictionary = duel.quests[i]
@@ -895,18 +945,26 @@ func _refresh_quests() -> void:
 		h.add_theme_constant_override("separation", 8)
 		var mark := UI.label("✦" if done else "◇", 15, UI.GOLD if done else Color("5a4f70"))
 		h.add_child(mark)
-		var txt := UI.label(q.name, 16, UI.TEXT if done else UI.TEXT, true)
+		var txt := UI.label(q.name, 16, UI.TEXT, true, _landscape)
 		txt.add_theme_font_size_override("font_size", 16)
 		if done:
 			txt.add_theme_color_override("font_color", UI.GOOD)
 		h.add_child(txt)
-		var d := UI.label("· " + q.desc, 14, UI.TEXT_DIM)
+		var d := UI.label(q.desc if _landscape else "· " + q.desc, 14, UI.TEXT_DIM, false, _landscape)
 		d.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		d.clip_text = true
-		d.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		h.add_child(d)
+		d.clip_text = not _landscape
+		d.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING if _landscape else TextServer.OVERRUN_TRIM_ELLIPSIS
 		h.add_child(UI.label("+%d" % q.reward, 15, UI.GOOD if done else UI.GOLD))
-		_quest_list.add_child(h)
+		if _landscape:
+			var quest := VBoxContainer.new()
+			quest.add_theme_constant_override("separation", 2)
+			quest.add_child(h)
+			quest.add_child(d)
+			_quest_list.add_child(quest)
+		else:
+			h.add_child(d)
+			h.move_child(d, 2)
+			_quest_list.add_child(h)
 
 
 func _refresh_actions() -> void:
@@ -938,6 +996,10 @@ func _refresh_actions() -> void:
 func _on_hand_card(c: int) -> void:
 	if not duel.is_my_turn(0) or _busy:
 		return
+	if not Profile.confirm_card_play:
+		_selection = c
+		_confirm_play(c)
+		return
 	if _selection == c:
 		# second tap on the same card confirms the play
 		_confirm_play(c)
@@ -966,7 +1028,8 @@ func _on_table_card(c: int) -> void:
 
 func _show_capture_options(table_card: int, groups: Array, matches: Array[int]) -> void:
 	var card := _selection
-	var panel := _oath_sheet("CHOOSE A CAPTURE", "Each option includes %s." % C.short(table_card))
+	var prompt := "Choose the cards to capture." if table_card < 0 else "Each option includes %s." % C.short(table_card)
+	var panel := _oath_sheet("CHOOSE A CAPTURE", prompt)
 	var body: VBoxContainer = panel.get_meta("body")
 	for index in matches:
 		var names := PackedStringArray()
@@ -982,7 +1045,19 @@ func _show_capture_options(table_card: int, groups: Array, matches: Array[int]) 
 
 
 func _confirm_play(c: int) -> void:
-	_play_card(c, 0)
+	if _busy or not duel.is_my_turn(0) or not duel.hands[0].has(c):
+		return
+	var groups: Array = duel.groups_for_player(0, c)
+	if groups.size() > 1:
+		_selection = c
+		_refresh_table()
+		_refresh_hand()
+		var choices: Array[int] = []
+		for i in range(groups.size()):
+			choices.append(i)
+		_show_capture_options(-1, groups, choices)
+	else:
+		_play_card(c, 0)
 
 
 func _play_card(card: int, group_idx: int) -> void:
@@ -1014,11 +1089,11 @@ func _play_card(card: int, group_idx: int) -> void:
 		var ch: float = clampf(maxf(_table_box.size.y, 260.0) * 0.40, 148.0, 208.0)
 		var cw: float = ch / 1.404
 		_fly_card_in(card, from_center, landing, int(cw), int(ch))
-		await get_tree().create_timer(_beat(0.26, 0.10)).timeout
+		await get_tree().create_timer(_beat(0.26, 0.10), false).timeout
 		# 2. whatever it matched lights up, so the pairing is legible
 		if not matched.is_empty() and anim_on("match"):
 			_mark_match(matched)
-			await get_tree().create_timer(_beat(0.34, 0.08)).timeout
+			await get_tree().create_timer(_beat(0.34, 0.08), false).timeout
 
 	_commit_play(0, card, group_idx)
 	_refresh_all()
@@ -1033,7 +1108,7 @@ func _play_card(card: int, group_idx: int) -> void:
 
 	# a scopa holds the beat so the celebration lands before the next turn
 	var hold: float = _beat(1.9, 0.9) if _scopa_held else _beat(0.62, 0.24)
-	await get_tree().create_timer(hold).timeout
+	await get_tree().create_timer(hold, false).timeout
 	_scopa_held = false
 	_busy = false
 	_refresh_all()
@@ -1073,7 +1148,7 @@ func _run_bot() -> void:
 	var token := _ai_token
 	_busy = true
 	_refresh_all()
-	await get_tree().create_timer(_beat(0.45, 0.3)).timeout
+	await get_tree().create_timer(_beat(0.45, 0.3), false).timeout
 	if token != _ai_token or duel.hand_over:
 		_busy = false
 		return
@@ -1092,7 +1167,7 @@ func _run_bot() -> void:
 				duel.use_diplomacy(1, oath_action.hand, oath_action.table)
 		_handle_events()
 		_refresh_all()
-		await get_tree().create_timer(0.6).timeout
+		await get_tree().create_timer(0.6, false).timeout
 		if token != _ai_token:
 			return
 
@@ -1133,10 +1208,10 @@ func _run_bot() -> void:
 			var leaving := _bot_row.get_child(backs - 1)
 			if leaving != null:
 				leaving.queue_free()
-		await get_tree().create_timer(_beat(0.30, 0.10)).timeout
+		await get_tree().create_timer(_beat(0.30, 0.10), false).timeout
 		if not matched.is_empty() and anim_on("match"):
 			_mark_match(matched)
-			await get_tree().create_timer(_beat(0.32, 0.08)).timeout
+			await get_tree().create_timer(_beat(0.32, 0.08), false).timeout
 		if token != _ai_token:
 			_busy = false
 			return
@@ -1148,7 +1223,7 @@ func _run_bot() -> void:
 	else:
 		Sfx.play("deal", -16.0, 0.9)
 	_refresh_all()
-	await get_tree().create_timer(_beat(0.36, 0.22)).timeout
+	await get_tree().create_timer(_beat(0.36, 0.22), false).timeout
 	_busy = false
 	if duel.hand_over:
 		_show_hand_summary()
@@ -1587,15 +1662,21 @@ func _toast(title: String, sub: String, col: Color = UI.GOLD) -> void:
 	v.add_theme_constant_override("separation", 0)
 	p.add_child(v)
 	var l := UI.label(title, 18, col, true)
-	l.add_theme_font_size_override("font_size", 17)
+	l.add_theme_font_size_override("font_size", 28 if _landscape else 17)
+	if _landscape:
+		l.add_theme_font_override("font", ThemeDB.fallback_font)
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(l)
 	if sub != "":
-		var s := UI.label(sub, 14, UI.TEXT_DIM)
+		var s := UI.label(sub, 26 if _landscape else 14, UI.TEXT_DIM)
+		if _landscape:
+			s.add_theme_font_override("font", ThemeDB.fallback_font)
 		s.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		s.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		v.add_child(s)
 	p.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	if _landscape:
+		p.custom_minimum_size.x = minf(640, size.x * 0.5)
 	_toast_box.add_child(p)
 	p.modulate.a = 0.0
 	var t := create_tween()
@@ -1637,7 +1718,7 @@ func _on_hint() -> void:
 	_refresh_actions()
 
 
-func _show_rules() -> void:
+func _show_rules(paused: bool = false) -> void:
 	var panel := _oath_sheet("RULES & SCORING", "")
 	var body: VBoxContainer = panel.get_meta("body")
 	var capture_line := "Play a card whose rank matches a table card, or whose rank equals the sum of several table cards. A 10 can only take a 10."
@@ -1665,6 +1746,9 @@ func _show_rules() -> void:
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		h.add_child(b)
 
+	if paused:
+		_pause_for_menu(panel)
+
 
 func _show_pile() -> void:
 	Sfx.play("tap")
@@ -1673,14 +1757,14 @@ func _show_pile() -> void:
 	var body: VBoxContainer = panel.get_meta("body")
 	for who in f:
 		var title := "You · %s" % T.FACTIONS[duel.player_faction].people if who == 0 else "%s · %s" % [T.FACTIONS[duel.bot_faction].people, T.FACTIONS[duel.bot_faction].name]
-		var head := HBoxContainer.new()
+		var head := VBoxContainer.new()
 		head.add_theme_constant_override("separation", 8)
 		body.add_child(head)
-		head.add_child(UI.label(title, 18, UI.GOLD, true))
+		head.add_child(UI.label(title, 18, UI.GOLD, true, true))
 		head.add_child(UI.label("%d cards · Forge %d · Banner %d" % [
 			duel.captured[who].size(),
 			_CountFaction(duel.captured[who], T.FORGE),
-			duel.primiera_total(duel.captured[who])], 14, UI.TEXT_DIM))
+			duel.primiera_total(duel.captured[who])], 14, UI.TEXT_DIM, false, true))
 		var wrap := HFlowContainer.new()
 		wrap.add_theme_constant_override("h_separation", 5)
 		wrap.add_theme_constant_override("v_separation", 5)
@@ -1724,9 +1808,10 @@ func _oath_sheet(title: String, sub: String, dismissible: bool = true) -> PanelC
 	p.add_theme_stylebox_override("panel", UI.panel(UI.BG2, 20, UI.GOLD, 2))
 	p.z_index = 101
 	add_child(p)
+	p.set_meta("dialog_width", 900.0)
 	p.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	p.anchor_left = 0.05
-	p.anchor_right = 0.95
+	p.anchor_left = 0.5
+	p.anchor_right = 0.5
 	p.anchor_top = 0.18
 	p.anchor_bottom = 0.82
 	p.offset_left = 0
@@ -1756,10 +1841,58 @@ func _oath_sheet(title: String, sub: String, dismissible: bool = true) -> PanelC
 		close.pressed.connect(_close_overlay)
 		body.add_child(close)
 	p.set_meta("body", body)
+	body.minimum_size_changed.connect(_layout_game_dialogs, CONNECT_DEFERRED)
+	_layout_game_dialogs.call_deferred()
 	return p
 
 
+
+func _layout_game_dialogs() -> void:
+	for panel in get_children():
+		if not (panel is PanelContainer) or panel.z_index != 101 or not panel.has_meta("body"):
+			continue
+		if panel.has_meta("settings_grid"):
+			SettingsPanel.layout(panel, size, _landscape, 1040.0)
+			continue
+		var width := minf(size.x * 0.92, float(panel.get_meta("dialog_width", 900.0)))
+		panel.anchor_left = 0.5
+		panel.anchor_right = 0.5
+		panel.offset_left = -width * 0.5
+		panel.offset_right = width * 0.5
+		var controls: Array[Node] = [panel]
+		while not controls.is_empty():
+			var control := controls.pop_back() as Node
+			controls.append_array(control.get_children())
+			if control is Label or control is Button:
+				if not control.has_meta("dialog_font_size"):
+					control.set_meta("dialog_font_size", control.get_theme_font_size("font_size"))
+				var original: int = control.get_meta("dialog_font_size")
+				control.add_theme_font_override("font", ThemeDB.fallback_font)
+				control.add_theme_font_size_override("font_size", maxi(26, original) if _landscape else maxi(18, original))
+				if control is Label:
+					control.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+					control.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			if control is Button:
+				control.custom_minimum_size.y = maxf(control.custom_minimum_size.y, 80 if _landscape else 48)
+
+
+func _pause_for_menu(panel: PanelContainer) -> void:
+	_pause_before_menu = get_tree().paused
+	_menu_paused = true
+	panel.process_mode = Node.PROCESS_MODE_ALWAYS
+	_overlay.process_mode = Node.PROCESS_MODE_ALWAYS
+	get_tree().paused = true
+
+
+func _exit_tree() -> void:
+	if _menu_paused:
+		get_tree().paused = _pause_before_menu
+
+
 func _close_overlay() -> void:
+	if _menu_paused:
+		get_tree().paused = _pause_before_menu
+		_menu_paused = false
 	# Remove from the tree FIRST, then free. queue_free() alone is deferred, so a
 	# closing oath/score sheet left its full-screen dim panel (MOUSE_FILTER_STOP,
 	# z_index 100) in front of the table for the rest of the frame - and it sits
@@ -1792,10 +1925,11 @@ func _remove_now(n: Node) -> void:
 # ---------------------------------------------------------------------------
 func _show_hand_summary() -> void:
 	_busy = true
-	await get_tree().create_timer(0.5).timeout
+	await get_tree().create_timer(0.5, false).timeout
 	var score: Dictionary = duel.score_hand()
 	var final := duel.match_over
 	var panel := _oath_sheet("RESULTS", "", false)
+	panel.set_meta("dialog_width", 1100.0)
 	panel.anchor_top = 0.06
 	panel.anchor_bottom = 0.94
 	var body: VBoxContainer = panel.get_meta("body")
@@ -2036,16 +2170,18 @@ func _open_menu() -> void:
 	if duel.hand_over:
 		return
 	Sfx.play("tap")
-	var panel := _oath_sheet("PAUSED", "Four Realms")
+	_refresh_all()
+	_table_box.queue_redraw()
+	var panel := _oath_sheet("PAUSED", "", false)
+	panel.set_meta("dialog_width", 720.0)
 	var body: VBoxContainer = panel.get_meta("body")
-	var info: Dictionary = T.FACTIONS[duel.player_faction]
-	body.add_child(UI.label("%s · %s" % [info.people, info.oath], 18, info.color, true))
-	var d := UI.label(info.oath_long, 15, UI.TEXT_DIM)
-	d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	body.add_child(d)
 	var resume := UI.button("Resume", "primary")
 	resume.pressed.connect(_close_overlay)
 	body.add_child(resume)
+	var settings := UI.button("Settings", "secondary", 24)
+	settings.name = "GameSettings"
+	settings.pressed.connect(_open_game_settings)
+	body.add_child(settings)
 	var quit := UI.button("Concede & return to menu", "ghost", 17)
 	quit.pressed.connect(func():
 		_close_overlay()
@@ -2053,14 +2189,34 @@ func _open_menu() -> void:
 		exit_to_menu.emit())
 	body.add_child(quit)
 	var rules := UI.button("Rules & scoring", "ghost", 17)
-	rules.pressed.connect(_close_overlay)
-	rules.pressed.connect(_show_rules)
+	rules.pressed.connect(func(): _show_rules(true))
 	body.add_child(rules)
 	var restart := UI.button("Restart duel", "ghost", 17)
 	restart.pressed.connect(func():
 		_close_overlay()
 		play_again.emit(_fresh_config()))
 	body.add_child(restart)
+	body.move_child(quit, body.get_child_count() - 1)
+	_pause_for_menu(panel)
+	_layout_game_dialogs()
+
+
+func _open_game_settings() -> void:
+	var panel := _oath_sheet("SETTINGS", "", false)
+	var body: VBoxContainer = panel.get_meta("body")
+	var scroll := body.get_parent() as ScrollContainer
+	panel.remove_child(scroll)
+	var outer := VBoxContainer.new()
+	outer.add_theme_constant_override("separation", 10)
+	panel.add_child(outer)
+	var heading := body.get_child(0)
+	body.remove_child(heading)
+	outer.add_child(heading)
+	outer.add_child(scroll)
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	SettingsPanel.populate(panel, _open_menu, _layout_game_dialogs, true)
+	_pause_for_menu(panel)
+	_layout_game_dialogs()
 
 
 # ---------------------------------------------------------------------------
@@ -2071,14 +2227,14 @@ func _boot_sequence() -> void:
 	_refresh_all()
 	if duel.puzzle.size() > 0:
 		_toast("Daily Puzzle · " + duel.puzzle.name, duel.puzzle.desc)
-		await get_tree().create_timer(0.4).timeout
+		await get_tree().create_timer(0.4, false).timeout
 		_busy = false
 		_refresh_all()
 		return
-	await get_tree().create_timer(0.15).timeout
+	await get_tree().create_timer(0.15, false).timeout
 	Sfx.play("deal", -12.0)
 	_toast("The table is set", "Deal 3 each. Play a card: match a rank or a sum.")
-	await get_tree().create_timer(0.55).timeout
+	await get_tree().create_timer(0.55, false).timeout
 	_busy = false
 	_refresh_all()
 	# teaching nudges: glow the first card you can capture with

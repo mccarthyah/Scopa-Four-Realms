@@ -42,9 +42,9 @@ four presets; you supply the export templates and SDK paths in *Project → Expo
 
 | Action | Touch / Mouse |
 |---|---|
-| Select a card | tap it (cards you can capture with glow gold) |
-| Confirm / capture | tap the same card again, or tap a glowing table card |
-| Choose among several capture sets | tap a table card, then choose a set if that card belongs to several |
+| Play a card | tap it once by default |
+| Optional confirmation | enable Settings → Two-tap play, then tap a card to select it and tap it again or tap a highlighted capture |
+| Choose among several capture sets | choose the complete group in the capture picker |
 | Spend Favor on your Oath | tap the Oath button above your hand |
 | Hint · Pile · Menu | the buttons beside your hand |
 
@@ -88,9 +88,11 @@ menu entries; swiping across an entry cancels its tap. Handheld layouts account
 for display safe areas.
 
 The portrait duel uses a compact logo above the status and playfield on taller
-screens. The landscape duel places status and its logo on the left, table and
-hand in the centre, and quests and actions on the right. Less-wide windows use
-a compact two-column version. The same match, faction selection and open sheet
+screens. The landscape duel puts status, quests and the opponent hand on the
+left. The wider playfield sits above a bottom row containing the player hand
+and action buttons. Landscape text uses larger, readable sizes. New Game shows
+a short faction-power summary in a fixed-size panel. The same match, faction
+selection and open sheet
 survive a window resize or device rotation.
 
 In **Settings → Orientation**, choose **Auto**, **Landscape Left**, **Landscape

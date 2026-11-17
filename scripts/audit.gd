@@ -93,6 +93,7 @@ func run(m: Control) -> void:
 	_test_overlay_dismiss()
 	_test_quindici()
 	_test_animation_settings()
+	_test_hand_dimming()
 	_test_spin()
 	await _test_bot_hand_scale()
 	await _test_card_corners()
@@ -109,12 +110,14 @@ func run(m: Control) -> void:
 	await _test_settings_layout()
 	await _test_landscape_reflow()
 	await _test_landscape_title()
+	await _test_title_intro()
 	await _test_menu_sheets()
 	await _test_menu_pointer_input()
 	await _test_tap_play()
 	await _test_capture_choice()
 	await _test_raid_picker()
 	await _test_other_oath_picker_signals()
+	await _test_game_settings()
 	await _audit_screens()
 	await _test_result_labels()
 	print("=== AUDIT COMPLETE · failures=%d ===" % failures)
@@ -182,9 +185,18 @@ func _tap_first_card(screen) -> bool:
 		return false
 	var before: int = hand.size()
 	screen.duel.turn = 0
-	screen._on_hand_card(hand[0])
-	# second tap confirms the selected play
-	screen._confirm_play(hand[0]) if screen._selection == hand[0] else screen._on_hand_card(hand[0])
+	var card: int = hand[0]
+	screen._on_hand_card(card)
+	if not screen._busy and screen._selection == card:
+		screen._confirm_play(card)
+		if screen._overlay != null:
+			for panel in screen.get_children():
+				if panel is PanelContainer and panel.z_index == 101:
+					var body: VBoxContainer = panel.get_meta("body")
+					for option in body.get_children():
+						if option is Button and option.text != "Close":
+							option.pressed.emit()
+							return true
 	return screen.duel.hands[0].size() < before or screen._busy
 
 
@@ -245,11 +257,12 @@ func _test_settings_dialog() -> void:
 	var title = main.current
 	title._codex_close()
 	await get_tree().process_frame
-	var keys := ["classic_mode", "card_back", "board_theme", "anim_enabled", "anim_spin", "anim_slow", "anim_match"]
+	var keys := ["classic_mode", "confirm_card_play", "card_back", "board_theme", "anim_enabled", "anim_spin", "anim_slow", "anim_match"]
 	var saved := {}
 	for key in keys:
 		saved[key] = Profile.get(key)
 	Profile.classic_mode = false
+	Profile.confirm_card_play = false
 	Profile.card_back = 0
 	Profile.board_theme = 0
 	Profile.anim_enabled = true
@@ -280,10 +293,10 @@ func _test_settings_dialog() -> void:
 				if n is Button and n.has_meta("setting_key"): controls[n.get_meta("setting_key")] = n
 				if n is Button and n.has_meta("card_back"): backs[int(n.get_meta("card_back"))] = n
 				if n is Button and n.has_meta("board_theme"): boards[int(n.get_meta("board_theme"))] = n
-			if controls.size() != 5 or backs.size() != 3 or boards.size() != 4:
+			if controls.size() != 6 or backs.size() != 3 or boards.size() != 4:
 				fail("settings: missing controls: toggles=%s backs=%s boards=%s" % [str(controls.keys()), str(backs.keys()), str(boards.keys())])
 			else:
-				for key in ["classic_mode", "anim_spin", "anim_slow", "anim_match"]:
+				for key in ["classic_mode", "confirm_card_play", "anim_spin", "anim_slow", "anim_match"]:
 					var b: Button = controls[key]
 					scroll.ensure_control_visible(b)
 					for i in range(3): await get_tree().process_frame
@@ -304,7 +317,7 @@ func _test_settings_dialog() -> void:
 				var disabled := true
 				for key in ["anim_spin", "anim_slow", "anim_match"]:
 					disabled = disabled and controls[key].disabled
-				if Profile.classic_mode and Profile.card_back == 2 and Profile.board_theme == 3 and not Profile.anim_enabled and not Profile.anim_spin and not Profile.anim_slow and not Profile.anim_match and disabled and back.button_pressed and board.button_pressed:
+				if Profile.classic_mode and Profile.confirm_card_play and Profile.card_back == 2 and Profile.board_theme == 3 and not Profile.anim_enabled and not Profile.anim_spin and not Profile.anim_slow and not Profile.anim_match and disabled and back.button_pressed and board.button_pressed:
 					ok("settings controls respond to clicks, show cosmetic selections and master disables sub-switches")
 				else:
 					fail("settings: click state classic=%s back=%s board=%s anim=%s,%s,%s,%s disabled=%s selected=%s,%s" % [Profile.classic_mode,Profile.card_back,Profile.board_theme,Profile.anim_enabled,Profile.anim_spin,Profile.anim_slow,Profile.anim_match,disabled,back.button_pressed,board.button_pressed])
@@ -321,8 +334,9 @@ func _test_settings_dialog() -> void:
 				Profile.anim_spin = true
 				Profile.anim_slow = true
 				Profile.anim_match = true
+				Profile.confirm_card_play = false
 				Profile.load_profile()
-				if Profile.classic_mode and Profile.card_back == 2 and Profile.board_theme == 3 and Profile.anim_enabled and not Profile.anim_spin and not Profile.anim_slow and not Profile.anim_match:
+				if Profile.classic_mode and Profile.confirm_card_play and Profile.card_back == 2 and Profile.board_theme == 3 and Profile.anim_enabled and not Profile.anim_spin and not Profile.anim_slow and not Profile.anim_match:
 					ok("all settings persist through profile reload")
 				else: fail("settings: profile reload did not restore choices")
 				var done: Button = panel.find_child("SettingsDone", true, false)
@@ -345,7 +359,7 @@ func _test_settings_dialog() -> void:
 						if n is Button and n.text == "✕": close = n
 						if n is Button and n.has_meta("card_back") and n.get_meta("card_back") == 2: reopened["back"] = n.button_pressed
 						if n is Button and n.has_meta("board_theme") and n.get_meta("board_theme") == 3: reopened["board"] = n.button_pressed
-				if reopened.get("classic_mode", false) and reopened.get("anim_enabled", false) and not reopened.get("anim_spin", true) and not reopened.get("anim_slow", true) and not reopened.get("anim_match", true) and reopened.get("back", false) and reopened.get("board", false):
+				if reopened.get("classic_mode", false) and reopened.get("confirm_card_play", false) and reopened.get("anim_enabled", false) and not reopened.get("anim_spin", true) and not reopened.get("anim_slow", true) and not reopened.get("anim_match", true) and reopened.get("back", false) and reopened.get("board", false):
 					ok("reopened settings reflects saved rules, cosmetics and animations")
 				else: fail("settings: reopening does not reflect saved choices")
 				if close != null:
@@ -434,6 +448,8 @@ func _test_landscape_reflow() -> void:
 	var old_size := win.size
 	var old_scale := win.content_scale_size
 	var old_anim: bool = Profile.anim_enabled
+	var old_confirmation: bool = Profile.confirm_card_play
+	Profile.confirm_card_play = true
 	var saved_duel: Dictionary = Profile.saved_duel.duplicate(true)
 	Profile.anim_enabled = false
 	win.content_scale_size = Vector2i(1706, 960)
@@ -454,7 +470,9 @@ func _test_landscape_reflow() -> void:
 	var side_logo: TextureRect = d._landscape_side.get_node_or_null("LandscapeStatusLogo")
 	if side_logo == null or side_logo.texture == null or not side_logo.visible or side_logo.size.y <= 0:
 		good = false
-	if d._layout_parts.Hand.get_parent() != d._landscape_table or d._layout_parts.Quests.get_parent() != d._landscape_player or not d._layout_parts.Actions.vertical or d._layout_parts.BotHand.get_parent() != d._landscape_side:
+	if d._layout_parts.Hand.get_parent() != d._landscape_bottom or d._layout_parts.Quests.get_parent() != d._landscape_side or d._layout_parts.Actions.get_parent() != d._landscape_player or not d._layout_parts.Actions.vertical or d._layout_parts.BotHand.get_parent() != d._landscape_side:
+		good = false
+	if d._landscape_player.get_parent() != d._landscape_bottom or d._table_box.size.x < d.size.x * 0.65:
 		good = false
 	var four: Dictionary = d._table_layout(4, d._table_grid.size)
 	if four.cols < 3: good = false
@@ -550,6 +568,7 @@ func _test_landscape_reflow() -> void:
 	else: fail("landscape duel reflow, bounds, hit testing or state preservation failed")
 	host.queue_free()
 	Profile.anim_enabled = old_anim
+	Profile.confirm_card_play = old_confirmation
 	if saved_duel.is_empty(): Profile.clear_duel()
 	else: Profile.store_duel(saved_duel)
 	win.content_scale_size = old_scale
@@ -585,7 +604,7 @@ func _test_landscape_title() -> void:
 	var sheet: Control = title._sheet_panel
 	host.size = Vector2(540, 960)
 	for i in range(8): await get_tree().process_frame
-	if title.faction != T.HORDE or title._sheet_panel != sheet:
+	if title.faction != T.HORDE or title._sheet_panel != sheet or title._faction_power_text.text != T.FACTIONS[T.HORDE].oath_short:
 		good = false
 	if good:
 		ok("six home actions and the complete record fit without scrolling across both orientations")
@@ -695,6 +714,17 @@ func _test_menu_pointer_input() -> void:
 	_send_mouse_click(last_faction.get_global_rect().get_center())
 	if title.faction != T.CROWN:
 		fail("New Game faction picker did not select Crown")
+	var power_panel: Control = title._sheet_panel.find_child("FactionPower", true, false)
+	var power_size := power_panel.size
+	for selected in range(4):
+		var button: Button = title._faction_buttons[selected]
+		button.pressed.emit()
+		for i in range(4): await get_tree().process_frame
+		if title._faction_power_text.text != T.FACTIONS[selected].oath_short or not title._faction_power_title.text.contains(T.FACTIONS[selected].oath):
+			fail("faction selection did not update its power description")
+		if power_panel.size.distance_to(power_size) > 0.5:
+			fail("faction summary changed the panel size")
+	last_faction.pressed.emit()
 	var campaign: Control = title._sheet_panel.find_child("CampaignEntry", true, false)
 	_touch_menu_row(campaign)
 	for i in range(6): await get_tree().process_frame
@@ -825,11 +855,10 @@ func _test_logo_layout() -> void:
 		host.size = dims
 		for i in range(6): await get_tree().process_frame
 		var mast: TextureRect = title.find_child("Masthead", true, false)
-		var wide: bool = dims.x > dims.y * 1.12
 		if mast == null or mast.texture == null or mast.stretch_mode != TextureRect.STRETCH_KEEP_ASPECT_CENTERED:
 			passed = false
 			continue
-		var expected := "four_realms_logo.png" if wide else "four_realms_scenic.png"
+		var expected := "four_realms_logo.png"
 		if not mast.texture.resource_path.ends_with(expected) or mast.size.x <= 0 or mast.size.y <= 0:
 			passed = false
 		var r := mast.get_global_rect()
@@ -837,9 +866,9 @@ func _test_logo_layout() -> void:
 		if r.position.x < p.position.x - 1 or r.end.x > p.end.x + 1:
 			passed = false
 	if passed:
-		ok("artwork switches with orientation and fits narrow and landscape mastheads")
+		ok("transparent logo fits narrow, portrait and landscape mastheads")
 	else:
-		fail("branding artwork is missing, clipped or does not follow orientation")
+		fail("transparent branding artwork is missing or clipped")
 	host.queue_free()
 	await get_tree().process_frame
 
@@ -1446,45 +1475,48 @@ func _test_deal() -> void:
 ## with "Method expected 1 argument(s), but called with 2" and silently did
 ## nothing. Nothing caught it because no test ever simulated a tap.
 func _test_tap_play() -> void:
-	var d = load("res://scripts/screens/duel.gd").new()
-	d.config = {"mode": 0}
-	main.add_child(d)
-	for i in range(150):
+	var saved_confirmation: bool = Profile.confirm_card_play
+	var saved_animation: bool = Profile.anim_enabled
+	Profile.anim_enabled = false
+	for confirm in [false, true]:
+		Profile.confirm_card_play = confirm
+		var screen = load("res://scripts/screens/duel.gd").new()
+		screen.config = {"mode": T.Mode.QUICK, "seed": 42}
+		main.add_child(screen)
+		await get_tree().create_timer(0.9).timeout
+		var card := C.make(6, T.GROVE)
+		screen.duel.table = [C.make(6, T.FORGE)]
+		screen.duel.hands[0] = [card, C.make(3, T.HORDE)]
+		screen.duel.turn = 0
+		screen._busy = false
+		screen._refresh_all()
+		for i in range(4): await get_tree().process_frame
+		var card_view: Control = screen._hand_card_node(card)
+		_touch_menu_row(card_view)
 		await get_tree().process_frame
-	var row = d._hand_row
-	if row == null or row.get_child_count() == 0:
-		fail("tap test: no hand cards were laid out")
-		d.queue_free()
-		return
-	var before: Array = []
-	for i in range(row.get_child_count()):
-		before.append(row.get_child(i).card_id)
-	var center: Vector2 = row.get_child(0).get_global_rect().get_center()
-	# select, then confirm
-	for _pass in range(2):
-		for pressed in [true, false]:
-			var ev := InputEventMouseButton.new()
-			ev.button_index = MOUSE_BUTTON_LEFT
-			ev.pressed = pressed
-			ev.position = center
-			ev.global_position = center
-			main.get_viewport().push_input(ev)
+		if confirm:
+			if not screen.duel.hands[0].has(card) or screen._selection != card:
+				fail("two-tap mode played on its first tap")
+			var emulated := InputEventMouseButton.new()
+			emulated.device = InputEvent.DEVICE_ID_EMULATION
+			emulated.button_index = MOUSE_BUTTON_LEFT
+			emulated.pressed = true
+			card_view.gui_input.emit(emulated)
+			if not screen.duel.hands[0].has(card):
+				fail("an emulated mouse event confirmed the first touch")
+			_touch_menu_row(card_view)
 			await get_tree().process_frame
-		# a play is animated now, so wait until it has resolved rather than for a
-		# fixed number of frames - but never hang the audit if it does not
-		var guard := 0
-		while d._busy and guard < 240:
-			await get_tree().process_frame
-			guard += 1
-	var after: Array = []
-	for i in range(d._hand_row.get_child_count()):
-		after.append(d._hand_row.get_child(i).card_id)
-	if after.size() < before.size() or after != before:
-		ok("tapping a hand card actually plays it (%s -> %s)" % [before, after])
-	else:
-		fail("tapping a hand card did nothing (hand still %s)" % [before])
-	d.queue_free()
-	await get_tree().process_frame
+		if screen.duel.hands[0].has(card) or not screen.duel.captured[0].has(card):
+			fail("card did not play after the required taps")
+		await get_tree().create_timer(0.9).timeout
+		main.remove_child(screen)
+		screen.queue_free()
+		await get_tree().process_frame
+	Profile.confirm_card_play = saved_confirmation
+	Profile.anim_enabled = saved_animation
+	ok("single-tap and two-tap play work with native touch; emulation never confirms a tap")
+
+
 
 
 ## Exercise actual pointer hits on the Raid button and a non-first picker card.
@@ -2043,6 +2075,110 @@ func _test_capture_choice() -> void:
 	Profile.clear_duel()
 
 
+func _test_hand_dimming() -> void:
+	var card = load("res://scripts/ui/card_view.gd").new()
+	card._fig = 1.0
+	card.dim = true
+	var dimmed: bool = is_equal_approx(card.modulate.a, 0.6)
+	card.dim = false
+	if dimmed and is_equal_approx(card.modulate.a, 1.0):
+		ok("hand card opacity updates immediately when its turn changes")
+	else:
+		fail("hand card opacity remained stale after changing turns")
+	card.free()
+
+
+func _test_game_settings() -> void:
+	var window := get_window()
+	var old_scale := window.content_scale_size
+	var old_size := window.size
+	var old_confirm: bool = Profile.confirm_card_play
+	var old_classic: bool = Profile.classic_mode
+	var saved_duel: Dictionary = Profile.saved_duel.duplicate(true)
+	window.content_scale_size = Vector2i(1706, 960)
+	window.size = Vector2i(1280, 720)
+	for i in range(6): await get_tree().process_frame
+	var screen = load("res://scripts/screens/duel.gd").new()
+	screen.config = {"mode": T.Mode.QUICK, "seed": 42}
+	main.add_child(screen)
+	await get_tree().create_timer(0.9).timeout
+	screen._turn_time = 12.0
+	var state: Dictionary = screen.duel.to_dict().duplicate(true)
+	screen._open_menu()
+	for i in range(6): await get_tree().process_frame
+	var menu: PanelContainer
+	for child in screen.get_children():
+		if child is PanelContainer and child.z_index == 101:
+			menu = child
+	var good := get_tree().paused and menu != null and menu.size.x <= 721.0
+	var settings: Button = menu.find_child("GameSettings", true, false)
+	if settings == null:
+		good = false
+	else:
+		_send_mouse_click(settings.get_global_rect().get_center())
+		for i in range(6): await get_tree().process_frame
+		var panel: PanelContainer
+		for child in screen.get_children():
+			if child is PanelContainer and child.z_index == 101:
+				panel = child
+		if panel == null or not panel.has_meta("settings_grid") or panel.size.x > 1041:
+			good = false
+		else:
+			var confirmation: Button = panel.find_child("ConfirmCardPlay", true, false)
+			_send_mouse_click(confirmation.get_global_rect().get_center())
+			await get_tree().create_timer(0.25).timeout
+			if Profile.confirm_card_play == old_confirm or not is_equal_approx(screen._turn_time, 12.0) or screen.duel.to_dict() != state:
+				good = false
+			window.content_scale_size = Vector2i(540, 960)
+			window.size = Vector2i(540, 960)
+			for i in range(12): await get_tree().process_frame
+			if not screen.get_global_rect().encloses(panel.get_global_rect()) or screen.duel.to_dict() != state:
+				good = false
+			var back: Button = panel.find_child("SettingsDone", true, false)
+			_send_mouse_click(back.get_global_rect().get_center())
+			for i in range(6): await get_tree().process_frame
+			if not get_tree().paused:
+				good = false
+			for child in screen.get_children():
+				if child is PanelContainer and child.z_index == 101:
+					for control in _walk_controls(child):
+						if control is Button and control.text == "Resume":
+							control.pressed.emit()
+							break
+			for i in range(3): await get_tree().process_frame
+			if get_tree().paused:
+				good = false
+	screen._close_overlay()
+	screen.duel.turn = 1
+	screen._run_bot()
+	var bot_state: Dictionary = screen.duel.to_dict().duplicate(true)
+	screen._open_menu()
+	await get_tree().create_timer(1.3).timeout
+	if screen.duel.to_dict() != bot_state:
+		good = false
+	screen._close_overlay()
+	await get_tree().create_timer(2.0).timeout
+	screen._show_pile()
+	for i in range(6): await get_tree().process_frame
+	for child in screen.get_children():
+		if child is PanelContainer and child.z_index == 101 and child.size.x > 901:
+			good = false
+	screen._close_overlay()
+	screen.queue_free()
+	await get_tree().process_frame
+	Profile.confirm_card_play = old_confirm
+	Profile.classic_mode = old_classic
+	Profile.save_profile()
+	if saved_duel.is_empty(): Profile.clear_duel()
+	else: Profile.store_duel(saved_duel)
+	window.content_scale_size = old_scale
+	window.size = old_size
+	if good:
+		ok("pause Settings shares saved preferences, freezes play, survives rotation and resumes the same match")
+	else:
+		fail("in-game Settings failed its pause, sizing, preference or resume checks")
+
+
 func _test_result_labels() -> void:
 	for sample in [[[8, 3], "YOU WIN!"], [[2, 7], "OPPONENT WINS"], [[4, 4], "MATCH DRAW"]]:
 		var screen = load("res://scripts/screens/duel.gd").new()
@@ -2537,3 +2673,54 @@ func _report_tree(node: Node, label: String, depth: int = 0) -> void:
 			var r: Rect2 = c.get_global_rect()
 			print("      %-10s %-14s pos=(%4.0f,%4.0f) size=(%4.0f,%4.0f) bottom=%4.0f" % [
 				label, c.name if c.name != "" else c.get_class(), r.position.x, r.position.y, r.size.x, r.size.y, r.end.y])
+
+
+## Publisher precedes the game logo; both track orientation through startup.
+func _test_title_intro() -> void:
+	var old_seen: bool = Profile.seen_intro
+	var old_anim: bool = Profile.anim_enabled
+	Profile.seen_intro = true
+	Profile.anim_enabled = true
+	var host := Control.new()
+	host.size = Vector2(540, 960)
+	main.add_child(host)
+	var title = load("res://scripts/screens/title.gd").new()
+	host.add_child(title)
+	for i in range(5): await get_tree().process_frame
+	title.play_intro()
+	var publisher: TextureRect = title._intro_layer.get_node("PublisherLogo")
+	var flying: TextureRect = title._intro_layer.get_node("MovingLogo")
+	var good: bool = title._intro_phase == "veloce" and publisher.modulate.a == 1.0 and flying.modulate.a == 0.0
+	good = good and publisher.texture.resource_path.ends_with("veloce_logo_transparent.png")
+	for dims in [Vector2(1706, 960), Vector2(540, 960)]:
+		host.size = dims
+		for i in range(4): await get_tree().process_frame
+		good = good and title.get_global_rect().encloses(publisher.get_global_rect())
+	await get_tree().create_timer(1.0).timeout
+	good = good and flying.modulate.a > 0.0 and publisher.modulate.a < 1.0
+	await get_tree().create_timer(1.0).timeout
+	good = good and title._intro_phase == "four_realms" and title._intro_progress > 0.0 and title._intro_progress < 1.0
+	host.size = Vector2(1706, 960)
+	for i in range(5): await get_tree().process_frame
+	good = good and title.get_global_rect().encloses(flying.get_global_rect())
+	await get_tree().create_timer(2.2).timeout
+	good = good and not is_instance_valid(title._intro_layer) and title._title_parts[0].modulate.a == 1.0 and title._title_margin.modulate.a == 1.0
+	Profile.anim_enabled = false
+	title.play_intro()
+	good = good and title._intro_phase == "veloce"
+	await get_tree().create_timer(1.1).timeout
+	good = good and title._intro_phase == "four_realms"
+	await get_tree().create_timer(0.6).timeout
+	good = good and not is_instance_valid(title._intro_layer)
+	var screen = load("res://scripts/screens/title.gd").new()
+	main.add_child(screen)
+	main._layout_stage(screen)
+	good = good and screen.get_global_rect().is_equal_approx(main.get_global_rect())
+	screen.queue_free()
+	good = good and not ProjectSettings.get_setting("application/boot_splash/show_image", true)
+	if good: ok("Veloce fades into Four Realms before its 2.2-second menu slide; rotation and disabled animation work without engine branding")
+	else: fail("publisher sequence, splash orientation, animation preference or engine branding failed")
+	host.queue_free()
+	Profile.seen_intro = old_seen
+	Profile.anim_enabled = old_anim
+	await get_tree().process_frame
