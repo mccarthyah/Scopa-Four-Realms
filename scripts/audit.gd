@@ -114,6 +114,7 @@ func run(m: Control) -> void:
 	await _test_title_intro()
 	await _test_menu_sheets()
 	await _test_menu_pointer_input()
+	await _test_mobile_home_targets()
 	await _test_tap_play()
 	await _test_capture_choice()
 	await _test_raid_picker()
@@ -2741,7 +2742,17 @@ func _test_title_intro() -> void:
 	title.play_intro()
 	var publisher: TextureRect = title._intro_layer.get_node("PublisherLogo")
 	var flying: TextureRect = title._intro_layer.get_node("MovingLogo")
-	var good: bool = title._intro_phase == "veloce" and publisher.modulate.a == 1.0 and flying.modulate.a == 0.0
+	var good: bool = title._intro_phase == "settling" and publisher.modulate.a == 0.0 and flying.modulate.a == 0.0
+	host.size = Vector2(1706, 960)
+	for i in range(2): await get_tree().process_frame
+	good = good and publisher.modulate.a == 0.0
+	host.size = Vector2(540, 960)
+	await get_tree().create_timer(0.4).timeout
+	good = good and title._intro_phase == "veloce" and publisher.modulate.a == 1.0
+	var first_visible_rect := publisher.get_rect()
+	for i in range(3):
+		await get_tree().process_frame
+		good = good and publisher.get_rect().is_equal_approx(first_visible_rect)
 	good = good and publisher.texture.resource_path.ends_with("veloce_logo_transparent.png")
 	for dims in [Vector2(1706, 960), Vector2(540, 960)]:
 		host.size = dims
@@ -2758,6 +2769,7 @@ func _test_title_intro() -> void:
 	good = good and not is_instance_valid(title._intro_layer) and title._title_parts[0].modulate.a == 1.0 and title._title_margin.modulate.a == 1.0
 	Profile.anim_enabled = false
 	title.play_intro()
+	await get_tree().create_timer(0.4).timeout
 	good = good and title._intro_phase == "veloce"
 	await get_tree().create_timer(1.1).timeout
 	good = good and title._intro_phase == "four_realms"
@@ -2775,3 +2787,62 @@ func _test_title_intro() -> void:
 	Profile.seen_intro = old_seen
 	Profile.anim_enabled = old_anim
 	await get_tree().process_frame
+
+
+## Native touch must hit the whole tile without relying on synthetic mouse events.
+func _test_mobile_home_targets() -> void:
+	var win := get_window()
+	var old_size := win.size
+	var old_scale := win.content_scale_size
+	var old_seen: bool = Profile.seen_intro
+	var old_saved: Dictionary = Profile.saved_duel.duplicate(true)
+	var old_emulation := Input.emulate_mouse_from_touch
+	Profile.seen_intro = true
+	Input.emulate_mouse_from_touch = false
+	var saved := {"state": DuelScript.new({"seed": 42}).to_dict()}
+	Profile.store_duel(saved)
+	var title = load("res://scripts/screens/title.gd").new()
+	main.add_child(title)
+	main._layout_stage(title)
+	var launched: Array = []
+	title.start_duel.connect(func(config): launched.append(config))
+	var good := true
+	for dims in [Vector2i(960, 540), Vector2i(844, 390), Vector2i(540, 960), Vector2i(960, 540)]:
+		win.content_scale_size = Vector2i(540, 960)
+		win.size = dims
+		main._layout_stage(title)
+		for i in range(8): await get_tree().process_frame
+		for name in ["Continue", "NewGame"]:
+			for spot in ["body", "text", "arrow"]:
+				var row: Control = title._mode_list.get_node(name + "Entry")
+				var point := row.get_global_rect().get_center()
+				if spot == "text":
+					point = row.get_child(1).get_child(1).get_child(0).get_global_rect().get_center()
+				elif spot == "arrow":
+					point = row.get_meta("action").get_global_rect().get_center() if row.get_meta("action").visible else row.get_global_rect().position + Vector2(row.size.x - 12, row.size.y * 0.5)
+				var before := launched.size()
+				for down in [true, false]:
+					var touch := InputEventScreenTouch.new()
+					touch.position = point
+					touch.pressed = down
+					get_viewport().push_input(touch, true)
+				for i in range(3): await get_tree().process_frame
+				if name == "Continue":
+					if launched.size() != before + 1 or launched[-1].get("resume", {}) != saved.state:
+						good = false
+						fail("Continue native touch missed %s at %s" % [spot, str(dims)])
+				else:
+					if not is_instance_valid(title._sheet_panel):
+						good = false
+						fail("New Game native touch missed %s at %s" % [spot, str(dims)])
+					title._codex_close()
+					await get_tree().process_frame
+	if good: ok("Continue and New Game accept native taps on tile, text and arrow in mobile landscape and portrait after rotation")
+	title.queue_free()
+	Input.emulate_mouse_from_touch = old_emulation
+	Profile.seen_intro = old_seen
+	if old_saved.is_empty(): Profile.clear_duel()
+	else: Profile.store_duel(old_saved)
+	win.content_scale_size = old_scale
+	win.size = old_size
+	for i in range(5): await get_tree().process_frame

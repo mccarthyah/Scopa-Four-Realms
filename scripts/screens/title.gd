@@ -192,7 +192,7 @@ func play_intro() -> void:
 	if is_instance_valid(_intro_layer):
 		return
 	_intro_progress = 0.0
-	_intro_phase = "veloce"
+	_intro_phase = "settling"
 	_intro_layer = Control.new()
 	_intro_layer.name = "SplashTransition"
 	_intro_layer.z_index = 200
@@ -210,6 +210,7 @@ func play_intro() -> void:
 	publisher.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	publisher.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	publisher.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	publisher.modulate.a = 0.0
 	_intro_layer.add_child(publisher)
 	publisher.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	publisher.anchor_left = 0.08
@@ -229,7 +230,31 @@ func play_intro() -> void:
 	mast.modulate.a = 0.0
 	_title_margin.modulate.a = 0.0
 	_place_intro_logo(0.0)
+	# Mobile startup can report a provisional viewport before the OS applies
+	# orientation and safe areas. Keep branding hidden until that has settled.
+	var last_size := Vector2.ZERO
+	var last_viewport_size := Vector2.ZERO
+	var stable_frames := 0
+	var started := Time.get_ticks_msec()
+	while Time.get_ticks_msec() - started < 1200:
+		await get_tree().process_frame
+		var viewport_size := get_viewport_rect().size
+		var matches_setting := Profile.orientation == "auto" or (viewport_size.x < viewport_size.y if Profile.orientation == "portrait" else viewport_size.x > viewport_size.y)
+		if viewport_size.is_equal_approx(last_viewport_size) and size.is_equal_approx(last_size) and matches_setting:
+			stable_frames += 1
+		else:
+			stable_frames = 0
+		last_size = size
+		last_viewport_size = viewport_size
+		if stable_frames >= 3 and Time.get_ticks_msec() - started >= 150:
+			break
+	_place_intro_logo(0.0)
+	_intro_phase = "veloce"
 	var tween := create_tween()
+	if Profile.anim_enabled:
+		tween.tween_property(publisher, "modulate:a", 1.0, 0.16)
+	else:
+		publisher.modulate.a = 1.0
 	tween.tween_interval(1.0)
 	if Profile.anim_enabled:
 		tween.tween_callback(func(): _intro_phase = "fade")
@@ -545,6 +570,7 @@ func _mode_row(title: String, sub: String, badge: String, cb: Callable, accent: 
 	var h := HBoxContainer.new()
 	h.add_theme_constant_override("separation", 6)
 	p.add_child(h)
+	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	var emblem := PanelContainer.new()
 	emblem.custom_minimum_size = Vector2(34, 38)
@@ -573,6 +599,9 @@ func _mode_row(title: String, sub: String, badge: String, cb: Callable, accent: 
 	subtitle.max_lines_visible = 2
 	subtitle.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	v.add_child(subtitle)
+	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	t.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	subtitle.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	# Two-column portrait tiles use compact typography, while a wide row keeps
 	# the larger display size. Full strings remain available and wrap naturally.
 	var apply_type := func():
@@ -589,6 +618,7 @@ func _mode_row(title: String, sub: String, badge: String, cb: Callable, accent: 
 	go.add_theme_font_size_override("font_size", 30)
 	go.add_theme_color_override("font_color", accent)
 	go.pressed.connect(cb)
+	go.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	p.set_meta("action", go)
 	h.add_child(go)
 
@@ -618,7 +648,10 @@ func _mode_row(title: String, sub: String, badge: String, cb: Callable, accent: 
 
 	# A swipe beginning over a row must scroll rather than immediately launch a
 	# duel. Activate on release only if the pointer stayed inside the row.
-	var pointer := {"down": false, "start": Vector2.ZERO, "scroll": 0}
+	var activate := func():
+		if not go.disabled:
+			go.pressed.emit()
+	var pointer := {"down": false, "start": Vector2.ZERO, "scroll": 0, "finger": -1}
 	p.gui_input.connect(func(e):
 		if e is InputEventMouseButton and e.device != InputEvent.DEVICE_ID_EMULATION and e.button_index == MOUSE_BUTTON_LEFT:
 			if e.pressed:
@@ -630,24 +663,25 @@ func _mode_row(title: String, sub: String, badge: String, cb: Callable, accent: 
 					and abs(_scroll.scroll_vertical - int(pointer.scroll)) < 4 \
 					and p.get_global_rect().has_point(e.global_position)
 				pointer.down = false
-				if tap: cb.call()
+				if tap: activate.call()
 		elif e is InputEventMouseMotion and pointer.down and e.global_position.distance_to(pointer.start) >= 12.0:
 			pointer.down = false
 		elif e is InputEventScreenTouch and e.device != InputEvent.DEVICE_ID_EMULATION:
-			if e.pressed:
+			if e.pressed and not e.canceled:
 				pointer.down = true
+				pointer.finger = e.index
 				pointer.start = e.position
 				pointer.scroll = _scroll.scroll_vertical
 			else:
 				var tap: bool = (
-					pointer.down
+					pointer.down and not e.canceled and e.index == pointer.finger
 					and e.position.distance_to(pointer.start) < 12.0
 					and abs(_scroll.scroll_vertical - int(pointer.scroll)) < 4
 					and Rect2(Vector2.ZERO, p.size).has_point(e.position)
 				)
 				pointer.down = false
 				if tap:
-					cb.call()
+					activate.call()
 			p.accept_event()
 		elif e is InputEventScreenDrag and e.device != InputEvent.DEVICE_ID_EMULATION and pointer.down and e.position.distance_to(pointer.start) >= 12.0:
 			pointer.down = false)
