@@ -85,6 +85,7 @@ func run(m: Control) -> void:
 	_test_ai_games()
 	_test_quests()
 	_test_save_resume()
+	_test_puzzle_limits_and_legacy_saves()
 	_test_completed_hand_resume()
 	_test_veiled_capture()
 	_test_ai_speed()
@@ -2003,6 +2004,56 @@ func _test_save_resume() -> void:
 			fail("restored duel rejected a legal move")
 		else:
 			ok("restored duel continues cleanly")
+
+
+func _test_puzzle_limits_and_legacy_saves() -> void:
+	# The Runestone challenge allows two moves, despite having three hand cards.
+	var pz: Dictionary = T.PUZZLES[1]
+	var d = DuelScript.new({"mode": T.Mode.PUZZLE, "puzzle": pz, "seed": 31})
+	var runestone := C.make(7, T.RUNESTONE_SUIT)
+	var first := C.make(10, T.FORGE)
+	var second := C.make(2, T.FORGE)
+	d.play(0, first, 0)
+	d.play(0, second, 0)
+	if not d.hand_over or d.turn_count != 2 or not d.table.has(runestone) or d.captured[0].has(runestone) or not d.play(0, C.make(7, T.GROVE), 0).is_empty():
+		fail("puzzle did not enforce the move limit or improperly awarded table cards")
+	else:
+		ok("puzzle ends at its move limit without awarding uncaptured table cards")
+	var finished: Dictionary = JSON.parse_string(JSON.stringify({"state": d.to_dict()}))
+	if not DuelScript.valid_save(finished):
+		fail("completed limited-move puzzle save was rejected")
+	else:
+		ok("completed limited-move puzzle remains resumable")
+	for entry in T.PUZZLES:
+		var p = DuelScript.new({"mode": T.Mode.PUZZLE, "puzzle": entry, "seed": 9})
+		var puzzle_save: Dictionary = JSON.parse_string(JSON.stringify({"state": p.to_dict()}))
+		if not DuelScript.valid_save(puzzle_save):
+			fail("puzzle save rejected: " + str(entry.name))
+		else:
+			ok("puzzle save validates: " + str(entry.name))
+	# Recreate the previous release's unversioned save shape after JSON parsing.
+	var a = DuelScript.new({"mode": T.Mode.QUICK, "seed": 77})
+	var old_state: Dictionary = a.to_dict().duplicate(true)
+	for key in ["version", "match_id", "player_sweeps", "player_glory", "rng_state"]:
+		old_state.erase(key)
+	old_state.rng_seed = int(old_state.rng_seed)
+	var old_save: Dictionary = JSON.parse_string(JSON.stringify({"mode": a.mode, "player_faction": a.player_faction, "campaign": {}, "puzzle": {}, "state": old_state}))
+	if not DuelScript.valid_save(old_save):
+		fail("previous-release unversioned duel save rejected")
+	else:
+		var b = DuelScript.new({"mode": T.Mode.QUICK, "seed": 3})
+		b.from_dict(old_save.state)
+		if b.deck != a.deck or b.hands != a.hands or b.table != a.table:
+			fail("previous-release duel save restored incorrectly")
+		else:
+			ok("previous-release unversioned duel save validates and restores")
+	var modern: Dictionary = JSON.parse_string(JSON.stringify({"state": a.to_dict()}))
+	var restored = DuelScript.new({"mode": T.Mode.QUICK, "seed": 3})
+	restored.from_dict(modern.state)
+	if a.rng.randi() != restored.rng.randi():
+		fail("random generator state changed across save/resume")
+	else:
+		ok("random generator state survives save/resume")
 
 
 func _test_capture_choice() -> void:
