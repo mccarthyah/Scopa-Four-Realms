@@ -448,6 +448,9 @@ func _test_landscape_reflow() -> void:
 	d._refresh_all()
 	for i in range(6): await get_tree().process_frame
 	var good: bool = d._landscape and d._layout_mode == "full" and d._landscape_root.visible and not d._portrait_root.visible
+	var side_logo: TextureRect = d._landscape_side.get_node_or_null("LandscapeStatusLogo")
+	if side_logo == null or side_logo.texture == null or not side_logo.visible or side_logo.size.y <= 0:
+		good = false
 	if d._layout_parts.Hand.get_parent() != d._landscape_player or d._layout_parts.BotHand.get_parent() != d._landscape_side:
 		good = false
 	var four: Dictionary = d._table_layout(4, d._table_grid.size)
@@ -612,10 +615,15 @@ func _test_landscape_title() -> void:
 	title._scroll.scroll_vertical = 0
 	for i in range(3): await get_tree().process_frame
 	var first_row: Control = title._mode_list.get_child(0)
+	# The scenic masthead is taller, so reveal the mode row before sending
+	# a real wheel event over it on short portrait windows.
+	title._scroll.ensure_control_visible(first_row)
+	for i in range(4): await get_tree().process_frame
+	var before_wheel: int = title._scroll.scroll_vertical
 	var wheel_at: Vector2 = first_row.get_global_rect().position + Vector2(35, first_row.size.y * 0.5)
 	_send_mouse_button(wheel_at, MOUSE_BUTTON_WHEEL_DOWN)
 	for i in range(3): await get_tree().process_frame
-	if title._scroll.scroll_vertical <= 0: good = false
+	if title._scroll.scroll_vertical <= before_wheel: good = false
 	title._scroll.ensure_control_visible(title._title_parts[9])
 	for i in range(5): await get_tree().process_frame
 	if title._scroll.scroll_vertical <= 0: good = false
@@ -916,8 +924,7 @@ func _test_display_scaling() -> void:
 	await get_tree().process_frame
 
 
-## A centred Label can still look skewed if its wide-anchor right offset keeps
-## its old minimum width. Test the actual geometry at narrow and desktop widths.
+## Branding must follow orientation and remain inside its masthead at narrow sizes.
 func _test_logo_layout() -> void:
 	var old_seen: bool = Profile.seen_intro
 	Profile.seen_intro = true
@@ -928,34 +935,25 @@ func _test_logo_layout() -> void:
 	host.add_child(title)
 	Profile.seen_intro = old_seen
 	var passed := true
-	for width in [320.0, 540.0, 720.0]:
-		host.size = Vector2(width, 960)
-		for i in range(5):
-			await get_tree().process_frame
-		var mast: Control = title.find_child("Masthead", true, false)
-		if mast == null:
+	for dims in [Vector2(320, 960), Vector2(540, 960), Vector2(720, 960), Vector2(1706, 960), Vector2(540, 960)]:
+		host.size = dims
+		for i in range(6): await get_tree().process_frame
+		var mast: TextureRect = title.find_child("Masthead", true, false)
+		var wide: bool = dims.x > dims.y * 1.12
+		if mast == null or mast.texture == null or mast.stretch_mode != TextureRect.STRETCH_KEEP_ASPECT_CENTERED:
 			passed = false
-			break
-		for node_name in ["LogoTitle", "LogoSubtitle", "LogoTagline"]:
-			var label: Label = mast.get_node_or_null(node_name)
-			if label == null:
-				passed = false
-				continue
-			var mr := mast.get_global_rect()
-			var lr := label.get_global_rect()
-			var font: Font = label.get_theme_font("font")
-			var fs: int = label.get_theme_font_size("font_size")
-			var text_width: float = font.get_string_size(label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-			if absf(lr.get_center().x - mr.get_center().x) > 0.5 or lr.size.x + 0.5 < text_width:
-				passed = false
-		var half_text: float = UI.font_title().get_string_size("REALMS", HORIZONTAL_ALIGNMENT_LEFT, -1, 32).x * 0.5
-		var span: Vector2 = title._logo_flourish_span(mast.size.x)
-		if span.y > span.x and (span.x - 7.2 <= half_text or span.y > mast.size.x * 0.5):
+			continue
+		var expected := "four_realms_logo.png" if wide else "four_realms_scenic.png"
+		if not mast.texture.resource_path.ends_with(expected) or mast.size.x <= 0 or mast.size.y <= 0:
+			passed = false
+		var r := mast.get_global_rect()
+		var p := mast.get_parent_control().get_global_rect()
+		if r.position.x < p.position.x - 1 or r.end.x > p.end.x + 1:
 			passed = false
 	if passed:
-		ok("logo text stays centred, unclipped and clear of flourishes at narrow, phone and desktop widths")
+		ok("artwork switches with orientation and fits narrow and landscape mastheads")
 	else:
-		fail("logo is off-centre, clipped, or crossed by its flourishes")
+		fail("branding artwork is missing, clipped or does not follow orientation")
 	host.queue_free()
 	await get_tree().process_frame
 

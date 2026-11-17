@@ -80,7 +80,7 @@ Everything in the brief, playable end to end:
 
 ### Window sizes and orientation
 
-Portrait keeps a scrollable single-column title and vertical table. In landscape,
+Portrait keeps a scrollable single-column title with the supplied scenic logo and a vertical table. The supplied transparent logo appears during the Godot startup splash, in the landscape title identity column, and in the landscape duel status sidebar when space permits. In landscape,
 the title reflows into faction/record and mode columns. The duel uses an opponent
 and quest sidebar, a central playfield, and a separate hand/actions panel; less
 wide windows use a compact two-column version. Scroll indicators are hidden while

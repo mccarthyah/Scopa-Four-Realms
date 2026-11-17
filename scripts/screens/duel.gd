@@ -1,4 +1,6 @@
 extends Control
+
+const LANDSCAPE_LOGO := preload("res://assets/branding/four_realms_logo.png")
 ## The duel table: HUD, opponent, table cards, your hand, Oath controls,
 ## scoring sheet and the campaign puzzle goals.  Portrait-first, one-handed.
 
@@ -166,6 +168,15 @@ func _build_duel() -> void:
 	_landscape_side.custom_minimum_size = Vector2(400, 0)
 	_landscape_side.add_theme_constant_override("separation", 8)
 	_landscape_root.add_child(_landscape_side)
+	var side_logo := TextureRect.new()
+	side_logo.name = "LandscapeStatusLogo"
+	side_logo.texture = LANDSCAPE_LOGO
+	side_logo.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	side_logo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	side_logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	side_logo.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	side_logo.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_landscape_side.add_child(side_logo)
 	_landscape_table = VBoxContainer.new()
 	_landscape_table.name = "DuelPlayfield"
 	_landscape_table.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -367,6 +378,8 @@ func _apply_orientation_layout() -> void:
 			_landscape_player.hide()
 			for key in ["BotHand", "Table", "Hand", "Actions"]:
 				_layout_parts[key].reparent(_landscape_table, false)
+		# The logo takes only spare sidebar space and never crowds status or cards.
+		_landscape_side.move_child(_landscape_side.get_node("LandscapeStatusLogo"), _landscape_side.get_child_count() - 1)
 		_portrait_root.hide()
 		_landscape_root.show()
 	else:

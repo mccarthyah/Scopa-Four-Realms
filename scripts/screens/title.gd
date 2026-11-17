@@ -4,6 +4,8 @@ extends Control
 const UI := preload("res://scripts/ui/ui.gd")
 const CardView := preload("res://scripts/ui/card_view.gd")
 const RealmBackground := preload("res://scripts/ui/background.gd")
+const LOGO_TRANSPARENT := preload("res://assets/branding/four_realms_logo.png")
+const LOGO_SCENIC := preload("res://assets/branding/four_realms_scenic.png")
 
 signal start_duel(config: Dictionary)
 
@@ -82,43 +84,17 @@ func _build() -> void:
 	_title_right.hide()
 	var col := _title_left
 
-	# ---- masthead -------------------------------------------------------
-	var mast := Control.new()
-	mast.custom_minimum_size = Vector2(0, 178)
-	# Clip the logo to the column on narrow windows. Child labels get explicit
-	# zero horizontal offsets: TOP_WIDE alone preserves their old minimum width
-	# as a right offset and shifts centred text well past the page centre.
+	# Portrait uses the supplied scenic artwork; the landscape identity column
+	# uses its transparent counterpart. Both preserve their full aspect ratio.
+	var mast := TextureRect.new()
 	mast.name = "Masthead"
-	mast.clip_contents = true
+	mast.texture = LOGO_SCENIC
+	mast.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	mast.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	mast.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	mast.custom_minimum_size = Vector2(0, 330)
+	mast.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	col.add_child(mast)
-
-	var emblem := Control.new()
-	emblem.name = "LogoDecoration"
-	emblem.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	emblem.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	emblem.draw.connect(_draw_masthead.bind(emblem))
-	mast.add_child(emblem)
-
-	var title := UI.label("FOUR", 62, UI.PARCHMENT, true)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	if not UI.LOW_SPEC:
-		title.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.7))
-	title.add_theme_constant_override("shadow_offset_y", 4)
-	title.name = "LogoTitle"
-	mast.add_child(title)
-	_place_logo_line(title, 34)
-
-	var sub := UI.label("REALMS", 32, UI.GOLD, true)
-	sub.name = "LogoSubtitle"
-	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	mast.add_child(sub)
-	_place_logo_line(sub, 104)
-
-	var tag := UI.label("Capture. Sweep. Rule the table.", 19, UI.TEXT_DIM)
-	tag.name = "LogoTagline"
-	tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	mast.add_child(tag)
-	_place_logo_line(tag, 140)
 
 	# ---- faction picker ------------------------------------------------
 	var oath_heading := _section_header("CHOOSE YOUR OATH", "Change faction and the Oath you can spend Favor on.")
@@ -180,6 +156,9 @@ func _update_title_layout() -> void:
 	if wide == _title_landscape:
 		return
 	_title_landscape = wide
+	var mast: TextureRect = _title_parts[0]
+	mast.texture = LOGO_TRANSPARENT if wide else LOGO_SCENIC
+	mast.custom_minimum_size.y = 270.0 if wide else 330.0
 	_title_left.alignment = BoxContainer.ALIGNMENT_CENTER if wide else BoxContainer.ALIGNMENT_BEGIN
 	_title_right.alignment = BoxContainer.ALIGNMENT_CENTER if wide else BoxContainer.ALIGNMENT_BEGIN
 	if wide:
@@ -225,38 +204,6 @@ func _section_header(title: String, sub: String) -> Control:
 	if sub != "":
 		v.add_child(UI.label(sub, 16, UI.TEXT_DIM, false, true))
 	return v
-
-
-## Anchor labels to the actual masthead width, not width + their initial minimum.
-func _place_logo_line(label: Label, top: float) -> void:
-	label.clip_text = true
-	label.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
-	label.offset_left = 0
-	label.offset_right = 0
-	label.offset_top = top
-	label.offset_bottom = top + label.get_combined_minimum_size().y
-
-
-## Return the inner and outer distances from centre for decorative lines. Their
-## start follows the measured text width, so no font fallback can cross a glyph.
-func _logo_flourish_span(width: float) -> Vector2:
-	var half_text := UI.font_title().get_string_size("REALMS", HORIZONTAL_ALIGNMENT_LEFT, -1, 32).x * 0.5
-	var inner := half_text + 16.0
-	var outer := minf(inner + 42.0, width * 0.5 - 8.0)
-	return Vector2(inner, outer)
-
-
-func _draw_masthead(node: Control) -> void:
-	var w := node.size.x
-	var span := _logo_flourish_span(w)
-	if span.y <= span.x:
-		return
-	var y := 120.0
-	for sgn in [-1.0, 1.0]:
-		var s: float = sgn
-		var center := w * 0.5
-		node.draw_line(Vector2(center + s * span.x, y), Vector2(center + s * span.y, y), Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, 0.5), 1.5)
-		node.draw_circle(Vector2(center + s * (span.x - 5.0), y), 2.2, Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, 0.8))
 
 
 func _faction_card(f: int) -> Button:
