@@ -6,19 +6,19 @@ class_name UI
 const T := preload("res://scripts/tables.gd")
 
 # --- palette -----------------------------------------------------------------
-const INK := Color("0e0b13")
-const BG := Color("171320")
-const BG2 := Color("1e1929")
-const PANEL := Color("241e31")
-const PANEL_HI := Color("302740")
-const GOLD := Color("dcb673")
-const GOLD_DEEP := Color("8c6a2b")
+const INK := Color("070e19")
+const BG := Color("091321")
+const BG2 := Color("0c1c2c")
+const PANEL := Color("101e30")
+const PANEL_HI := Color("193147")
+const GOLD := Color("e6c679")
+const GOLD_DEEP := Color("927037")
 const PARCHMENT := Color("f5ecd8")
 const PARCHMENT_HI := Color("fffaf0")
 const PARCHMENT_LO := Color("e0d0ae")
 const TEXT := Color("efe6d3")
-const TEXT_DIM := Color("a89b88")
-const GOOD := Color("6ec07a")
+const TEXT_DIM := Color("b9c1c1")
+const GOOD := Color("86db53")
 const BAD := Color("c85b52")
 
 # Fonts are imported assets, so a bare checkout (before Godot's first import
@@ -171,7 +171,7 @@ class _BoxPainter extends Control:
 			draw_style_box(box, Rect2(Vector2.ZERO, size))
 
 
-static func panel(col: Color = PANEL, radius: int = 18, border: Color = Color("40355266"), bw: int = 2) -> StyleBoxFlat:
+static func panel(col: Color = PANEL, radius: int = 18, border: Color = Color("8f754c"), bw: int = 2) -> StyleBoxFlat:
 	var s := flat(col, radius, border, bw)
 	s.content_margin_left = 16
 	s.content_margin_right = 16
@@ -223,7 +223,7 @@ static func button(txt: String, kind: String = "primary", size: int = 24) -> But
 			col = PANEL_HI
 			txt_col = TEXT
 		"ghost":
-			b.add_theme_stylebox_override("normal", flat(Color(0, 0, 0, 0), 12, Color("4a3f5e"), 2))
+			b.add_theme_stylebox_override("normal", flat(Color(0, 0, 0, 0), 12, Color("8c7448"), 2))
 			b.add_theme_stylebox_override("hover", flat(Color(1, 1, 1, 0.06), 12, GOLD, 2))
 			b.add_theme_stylebox_override("pressed", flat(GOLD, 12, GOLD, 2))
 			b.add_theme_color_override("font_color", TEXT)

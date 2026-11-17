@@ -175,8 +175,15 @@ func _build_duel() -> void:
 	side_logo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	side_logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	side_logo.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	side_logo.size_flags_stretch_ratio = 0.65
 	side_logo.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_landscape_side.add_child(side_logo)
+	var side_spacer := Control.new()
+	side_spacer.name = "LandscapeStatusSpacer"
+	side_spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	side_spacer.size_flags_stretch_ratio = 0.35
+	side_spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_landscape_side.add_child(side_spacer)
 	_landscape_table = VBoxContainer.new()
 	_landscape_table.name = "DuelPlayfield"
 	_landscape_table.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -234,7 +241,7 @@ func _resumed_boot() -> void:
 
 func _build_top() -> Control:
 	var p := PanelContainer.new()
-	p.add_theme_stylebox_override("panel", UI.panel(UI.PANEL, 16, Color("3b3153"), 1))
+	p.add_theme_stylebox_override("panel", UI.panel(UI.PANEL, 16, Color("826b40"), 1))
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 4)
 	p.add_child(v)
@@ -378,8 +385,10 @@ func _apply_orientation_layout() -> void:
 			_landscape_player.hide()
 			for key in ["BotHand", "Table", "Hand", "Actions"]:
 				_layout_parts[key].reparent(_landscape_table, false)
-		# The logo takes only spare sidebar space and never crowds status or cards.
-		_landscape_side.move_child(_landscape_side.get_node("LandscapeStatusLogo"), _landscape_side.get_child_count() - 1)
+		# The logo occupies only spare sidebar space, above the live status;
+		# it never steals the minimum height needed by status or cards.
+		_landscape_side.move_child(_landscape_side.get_node("LandscapeStatusLogo"), 0)
+		_landscape_side.move_child(_landscape_side.get_node("LandscapeStatusSpacer"), _landscape_side.get_child_count() - 1)
 		_portrait_root.hide()
 		_landscape_root.show()
 	else:
@@ -470,7 +479,7 @@ func _build_table() -> Control:
 func _build_quests() -> Control:
 	var p := PanelContainer.new()
 	p.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	p.add_theme_stylebox_override("panel", UI.panel(UI.PANEL, 14, Color("3b3153")))
+	p.add_theme_stylebox_override("panel", UI.panel(UI.PANEL, 14, Color("826b40")))
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 3)
 	p.add_child(v)
@@ -637,11 +646,28 @@ func _draw_table_felt() -> void:
 	# offset block reads the same at this size.
 	var sb := UI.flat(Color(0, 0, 0, 0.30), 20)
 	_table_box.draw_style_box(sb, Rect2(r.position + Vector2(0, 4), r.size))
-	var sb2 := UI.flat(theme[0], 20, theme[1], 2)
+	var sb2 := UI.flat(theme[0], 20, Color("aa8746"), 3)
 	_table_box.draw_style_box(sb2, r)
-	# radial felt light: one soft quad instead of six overlapping circles
-	var c := r.size * Vector2(0.5, 0.45)
-	_table_box.draw_circle(c, r.size.x * 0.55, Color(1, 1, 1, 0.05))
+	# A restrained double gold frame and corner ticks echo the supplied mockup
+	# without adding input layers or changing the card placement area.
+	var inner := r.grow(-8.0)
+	if inner.size.x > 0 and inner.size.y > 0:
+		_table_box.draw_rect(inner, Color(0.85, 0.69, 0.32, 0.40), false, 1.5)
+	for sx in [0.0, 1.0]:
+		for sy in [0.0, 1.0]:
+			var point := Vector2(13.0 if sx == 0 else r.size.x - 13.0, 13.0 if sy == 0 else r.size.y - 13.0)
+			var dx := 18.0 if sx == 0 else -18.0
+			var dy := 18.0 if sy == 0 else -18.0
+			_table_box.draw_line(point, point + Vector2(dx, 0), Color(0.92, 0.74, 0.34, 0.7), 2.0)
+			_table_box.draw_line(point, point + Vector2(0, dy), Color(0.92, 0.74, 0.34, 0.7), 2.0)
+	# A subtle contained rune is decorative only and never extends past the felt.
+	var c := r.size * Vector2(0.5, 0.48)
+	var radius := minf(r.size.x, r.size.y) * 0.30
+	for factor in [1.0, 0.78]:
+		_table_box.draw_arc(c, radius * factor, 0, TAU, 48, Color(0.78, 0.72, 0.42, 0.12), 1.5, true)
+	var mark := radius * 0.48
+	var points := PackedVector2Array([c + Vector2(0, -mark), c + Vector2(mark, 0), c + Vector2(0, mark), c + Vector2(-mark, 0), c + Vector2(0, -mark)])
+	_table_box.draw_polyline(points, Color(0.78, 0.72, 0.42, 0.12), 1.5, true)
 	# corner sigils
 	for sx in [0.0, 1.0]:
 		for sy in [0.0, 1.0]:

@@ -81,7 +81,7 @@ Everything in the brief, playable end to end:
 ### Window sizes and orientation
 
 Portrait keeps a scrollable single-column title with the supplied scenic logo and a vertical table. The supplied transparent logo appears during the Godot startup splash, in the landscape title identity column, and in the landscape duel status sidebar when space permits. In landscape,
-the title reflows into faction/record and mode columns. The duel uses an opponent
+the title reflows into faction/record and mode columns, with a two-by-two faction picker and, when wide enough, a two-column mode grid. The duel uses an opponent
 and quest sidebar, a central playfield, and a separate hand/actions panel; less
 wide windows use a compact two-column version. Scroll indicators are hidden while
 scrolling remains enabled. The same match, selection, and open sheet survive a
@@ -278,7 +278,7 @@ scripts/
     ui.gd                palette, fonts, widget factories
     card_view.gd         card interactions; shared image atlas, vector fallback
     card_art.gd          card atlas mapping and vector fallback
-    background.gd        painted sky, motes, vignette
+    background.gd        single-quad fantasy landscape, aspect-cover cropped
     fx.gd                bursts, floating text, shake, flashes
   screens/
     title.gd             masthead, faction picker, modes, cosmetics, codex, resume
@@ -290,6 +290,8 @@ tools/                   offline atlas generators and original card sheets
 audio/                   generated WAVs: deal, capture, scopa, favor, oath, win, lose, tick…
 fonts/                   Cinzel (display) and Alegreya Sans (text), both OFL
 ```
+
+The menu and duel use a static AI-generated fantasy landscape inspired by the supplied layout references; faction icons are cropped from the supplied card atlas. No currencies or progression shown in the reference mockups were added as fake controls.
 
 The 40 supplied faces and three existing backs share one imported static atlas
 on **all** renderers. The source sheets are retained under `tools/card_sources/`,

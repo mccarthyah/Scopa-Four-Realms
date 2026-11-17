@@ -566,7 +566,7 @@ func _test_landscape_title() -> void:
 	host.add_child(title)
 	for i in range(12): await get_tree().process_frame
 	var good: bool = title._title_landscape and title._title_right.visible
-	if title._mode_list.get_parent() != title._title_right: good = false
+	if title._mode_list.get_parent() != title._title_right or title._mode_list.columns != 2 or title._faction_grid.columns != 2: good = false
 	if title._title_left.get_global_rect().end.x > title._title_right.get_global_rect().position.x: good = false
 	if title._scroll.vertical_scroll_mode != ScrollContainer.SCROLL_MODE_SHOW_NEVER or title._scroll.get_v_scroll_bar().visible: good = false
 	# Row activation happens on a stationary release, not when a swipe starts.
@@ -606,7 +606,7 @@ func _test_landscape_title() -> void:
 		if modal_scroll.vertical_scroll_mode != ScrollContainer.SCROLL_MODE_SHOW_NEVER: good = false
 	host.size = Vector2(540, 600)
 	for i in range(12): await get_tree().process_frame
-	if title._title_landscape or title._mode_list.get_parent() != title._title_left or title.faction != 2 or title._sheet_panel != sheet: good = false
+	if title._title_landscape or title._mode_list.get_parent() != title._title_left or title._mode_list.columns != 1 or title._faction_grid.columns != 4 or title.faction != 2 or title._sheet_panel != sheet: good = false
 	if sheet != null and (sheet.get_global_rect().position.x < host.get_global_rect().position.x - 1.0 or sheet.get_global_rect().end.x > host.get_global_rect().end.x + 1.0): good = false
 	title._codex_close()
 	for i in range(5): await get_tree().process_frame

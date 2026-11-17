@@ -3,6 +3,7 @@ extends Control
 
 const UI := preload("res://scripts/ui/ui.gd")
 const CardView := preload("res://scripts/ui/card_view.gd")
+const CardArt := preload("res://scripts/ui/card_art.gd")
 const RealmBackground := preload("res://scripts/ui/background.gd")
 const LOGO_TRANSPARENT := preload("res://assets/branding/four_realms_logo.png")
 const LOGO_SCENIC := preload("res://assets/branding/four_realms_scenic.png")
@@ -14,7 +15,8 @@ const C := preload("res://scripts/game/cards.gd")
 
 var faction := T.FORGE
 var _faction_buttons: Array = []
-var _mode_list: VBoxContainer
+var _mode_list: GridContainer
+var _faction_grid: GridContainer
 var _classic_toggle: Button
 var _codex: Control
 var _sheet_panel: PanelContainer
@@ -106,8 +108,11 @@ func _build() -> void:
 	settings.tooltip_text = "Classic mode, table appearance and animations"
 	settings.pressed.connect(_open_settings)
 	heading_row.add_child(settings)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
+	var row := GridContainer.new()
+	_faction_grid = row
+	row.columns = 4
+	row.add_theme_constant_override("h_separation", 8)
+	row.add_theme_constant_override("v_separation", 8)
 	col.add_child(row)
 	for f in range(4):
 		var b := _faction_card(f)
@@ -120,8 +125,11 @@ func _build() -> void:
 	col.add_child(mode_gap)
 	var mode_heading := _section_header("DUEL TYPES", "")
 	col.add_child(mode_heading)
-	_mode_list = VBoxContainer.new()
-	_mode_list.add_theme_constant_override("separation", 10)
+	_mode_list = GridContainer.new()
+	_mode_list.columns = 1
+	_mode_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_mode_list.add_theme_constant_override("h_separation", 10)
+	_mode_list.add_theme_constant_override("v_separation", 10)
 	col.add_child(_mode_list)
 	_build_modes()
 
@@ -153,6 +161,8 @@ func _update_title_layout() -> void:
 	if _title_parts.is_empty():
 		return
 	var wide := size.x > size.y * 1.12
+	_faction_grid.columns = 2 if wide else 4
+	_mode_list.columns = 2 if wide and size.x >= 1500.0 else 1
 	if wide == _title_landscape:
 		return
 	_title_landscape = wide
@@ -192,11 +202,12 @@ func _section_header(title: String, sub: String) -> Control:
 	var h := HBoxContainer.new()
 	h.add_theme_constant_override("separation", 10)
 	v.add_child(h)
-	var l := UI.label(title, 18, UI.GOLD)
-	l.add_theme_font_override("font", UI.font_bold())
+	var l := UI.label(title, 19, UI.PARCHMENT, true)
+	# Preserve room for the Settings action in very narrow portrait windows.
+	v.resized.connect(func(): l.add_theme_font_size_override("font_size", 15 if v.size.x < 330 else 19))
 	h.add_child(l)
 	var rule := ColorRect.new()
-	rule.color = Color(UI.GOLD.r, UI.GOLD.g, UI.GOLD.b, 0.22)
+	rule.color = Color(0.55, 0.84, 0.35, 0.58)
 	rule.custom_minimum_size = Vector2(0, 1)
 	rule.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	rule.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -213,7 +224,7 @@ func _faction_card(f: int) -> Button:
 	b.custom_minimum_size = Vector2(0, 132)
 	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	b.toggle_mode = true
-	b.add_theme_stylebox_override("normal", UI.flat(UI.PANEL, 14, Color("3a3050"), 1))
+	b.add_theme_stylebox_override("normal", UI.flat(UI.PANEL, 14, Color("806a40"), 1))
 	b.add_theme_stylebox_override("hover", UI.flat(UI.PANEL_HI, 14, info.color, 2))
 	b.add_theme_stylebox_override("pressed", UI.flat(UI.PANEL_HI, 14, info.color, 2))
 	b.add_theme_stylebox_override("focus", UI.flat(Color(0, 0, 0, 0), 14))
@@ -229,10 +240,26 @@ func _faction_card(f: int) -> Button:
 	v.alignment = BoxContainer.ALIGNMENT_CENTER
 	b.add_child(v)
 
-	var glyph := UI.label(T.SUIT_GLYPH[f], 26, info.color)
-	glyph.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	glyph.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	v.add_child(glyph)
+	# Crop the emblem from the supplied card atlas, rather than introducing
+	# replacement faction art. The buttons remain ordinary accessible controls.
+	var icon := TextureRect.new()
+	icon.custom_minimum_size = Vector2(0, 62)
+	icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var source := CardArt.atlas_texture()
+	if source != null:
+		var atlas := AtlasTexture.new()
+		atlas.atlas = source
+		atlas.region = Rect2(f * 208 + 30, 70, 148, 140)
+		icon.texture = atlas
+		v.add_child(icon)
+	else:
+		var fallback := UI.label(T.SUIT_GLYPH[f], 42, info.color)
+		fallback.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		fallback.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		v.add_child(fallback)
 
 	var nm := UI.label(info.name, 19, UI.TEXT, true)
 	nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -253,11 +280,11 @@ func _faction_card(f: int) -> Button:
 func _refresh_factions() -> void:
 	for i in range(_faction_buttons.size()):
 		var b: Button = _faction_buttons[i]
-		var info: Dictionary = T.FACTIONS[i]
 		var on: bool = i == faction
 		b.set_pressed_no_signal(on)
-		b.add_theme_stylebox_override("normal", UI.flat(UI.PANEL_HI if on else UI.PANEL, 14,
-			info.color if on else Color("3a3050"), 2 if on else 1))
+		var border := Color("95e659") if on else Color("987a43")
+		b.add_theme_stylebox_override("normal", UI.flat(Color("18352b") if on else UI.PANEL, 14, border, 3 if on else 1))
+		b.add_theme_stylebox_override("pressed", UI.flat(Color("18352b"), 14, Color("95e659"), 3))
 
 
 func _toggle(on: bool) -> Button:
@@ -304,10 +331,24 @@ func _build_modes() -> void:
 
 func _mode_row(title: String, sub: String, badge: String, cb: Callable, accent: Color) -> Control:
 	var p := PanelContainer.new()
-	p.add_theme_stylebox_override("panel", UI.panel())
+	p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	p.add_theme_stylebox_override("panel", UI.panel(UI.PANEL, 14, Color("927845"), 1))
 	var h := HBoxContainer.new()
-	h.add_theme_constant_override("separation", 14)
+	h.add_theme_constant_override("separation", 10)
 	p.add_child(h)
+
+	var emblem := PanelContainer.new()
+	emblem.custom_minimum_size = Vector2(46, 46)
+	emblem.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	emblem.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	emblem.add_theme_stylebox_override("panel", UI.flat(Color("183526"), 22, Color("78c85e"), 2))
+	var glyphs := {"RESUME": "▶", "QUICK": "✦", "XV": "XV", "RANKED": "★", "CAMPAIGN": "⚑", "PUZZLE": "✧", "LEARN": "i"}
+	var emblem_label := UI.label(str(glyphs.get(badge, "✦")), 20, Color("a7ec80"), true)
+	emblem_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	emblem_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	emblem_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	emblem.add_child(emblem_label)
+	h.add_child(emblem)
 
 	var v := VBoxContainer.new()
 	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -319,7 +360,7 @@ func _mode_row(title: String, sub: String, badge: String, cb: Callable, accent: 
 	v.add_child(UI.label(sub, 16, UI.TEXT_DIM, false, true))
 
 	var go := UI.button("", "ghost", 18)
-	go.custom_minimum_size = Vector2(52, 44)
+	go.custom_minimum_size = Vector2(42, 44)
 	go.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	go.text = "›"
 	go.add_theme_font_size_override("font_size", 30)
@@ -365,7 +406,7 @@ func _open_settings() -> void:
 func _orientation_panel() -> Control:
 	var panel := PanelContainer.new()
 	panel.name = "OrientationSettings"
-	panel.add_theme_stylebox_override("panel", UI.panel(UI.PANEL, 16, Color("3a3050")))
+	panel.add_theme_stylebox_override("panel", UI.panel(UI.PANEL, 16, Color("806a40")))
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 8)
 	panel.add_child(col)
@@ -429,7 +470,7 @@ func _classic_panel() -> Control:
 func _animation_panel() -> Control:
 	var p := PanelContainer.new()
 	p.name = "AnimationSettings"
-	p.add_theme_stylebox_override("panel", UI.panel(UI.PANEL, 16, Color("3a3050")))
+	p.add_theme_stylebox_override("panel", UI.panel(UI.PANEL, 16, Color("806a40")))
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 8)
 	p.add_child(v)
@@ -483,7 +524,7 @@ func _animation_panel() -> Control:
 
 func _stats_panel() -> Control:
 	var p := PanelContainer.new()
-	p.add_theme_stylebox_override("panel", UI.panel(UI.PANEL, 16, Color("3a3050")))
+	p.add_theme_stylebox_override("panel", UI.panel(UI.PANEL, 16, Color("806a40")))
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 8)
 	p.add_child(v)
@@ -563,7 +604,7 @@ func _resume_duel() -> void:
 func _cosmetics_panel() -> Control:
 	var p := PanelContainer.new()
 	p.name = "TableSettings"
-	p.add_theme_stylebox_override("panel", UI.panel(UI.PANEL, 16, Color("3a3050")))
+	p.add_theme_stylebox_override("panel", UI.panel(UI.PANEL, 16, Color("806a40")))
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 8)
 	p.add_child(v)
