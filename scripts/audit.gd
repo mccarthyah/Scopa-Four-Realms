@@ -1072,9 +1072,11 @@ func _test_software_draw_policy() -> void:
 		if node is ColorRect and node.z_index < 0:
 			redundant = true
 	var clear: Color = RenderingServer.get_default_clear_color()
-	if not redundant and clear.is_equal_approx(Color("171320")):
-		ok("screen clear supplies dark margins without a redundant fullscreen backdrop draw")
-	else: fail("software path: redundant backdrop or incorrect clear colour")
+	var boot_clear: Color = ProjectSettings.get_setting("application/boot_splash/bg_color")
+	var initial_clear: Color = ProjectSettings.get_setting("rendering/environment/defaults/default_clear_color")
+	if not redundant and clear.is_equal_approx(boot_clear) and initial_clear.is_equal_approx(boot_clear):
+		ok("launch and screen clear colours match without a redundant fullscreen backdrop draw")
+	else: fail("software path: redundant backdrop or mismatched launch clear colours")
 
 
 ## Verify the actual offline artwork remains transparent at its corners, has a

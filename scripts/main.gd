@@ -48,7 +48,7 @@ func _ready() -> void:
 	# colour for the margins and first frame instead of drawing a second full-
 	# window ColorRect beneath the screen's own opaque background. This avoids
 	# a redundant full-screen pass on software renderers without changing it.
-	RenderingServer.set_default_clear_color(Color("171320"))
+	RenderingServer.set_default_clear_color(ProjectSettings.get_setting("application/boot_splash/bg_color"))
 	_detect_low_spec()
 	_report_environment()
 	show_title(true)

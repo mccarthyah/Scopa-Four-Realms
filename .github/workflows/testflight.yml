@@ -115,6 +115,7 @@ jobs:
           "$GODOT" --headless --editor --path "$GITHUB_WORKSPACE" --import
           "$GODOT" --headless --path "$GITHUB_WORKSPACE" --export-release iOS build/ios/ScopaFourRealms.ipa
           test -d build/ios/ScopaFourRealms.xcodeproj
+          python3 tools/ci/check_ios_launch.py build/ios
       - name: Install signing certificate and validate provisioning profile
         if: inputs.signing == 'manual'
         shell: bash
