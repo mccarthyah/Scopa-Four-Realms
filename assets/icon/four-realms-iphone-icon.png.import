@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://ddguxqsb1pmjb"
-path="res://.godot/imported/ios_app_icon.png-ceaf8046e1180e53cfa7bdd7debaf987.ctex"
+uid="uid://b45lryknugt6t"
+path="res://.godot/imported/four-realms-iphone-icon.png-b99b6d6d1f3112b57e11e85ed2513f65.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/ios_app_icon.png"
-dest_files=["res://.godot/imported/ios_app_icon.png-ceaf8046e1180e53cfa7bdd7debaf987.ctex"]
+source_file="res://assets/icon/four-realms-iphone-icon.png"
+dest_files=["res://.godot/imported/four-realms-iphone-icon.png-b99b6d6d1f3112b57e11e85ed2513f65.ctex"]
 
 [params]
 
