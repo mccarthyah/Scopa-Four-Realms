@@ -122,7 +122,10 @@ func apply_orientation() -> void:
 	# are not a reliable way to lock a browser or a mobile web page.
 	if OS.has_feature("web"):
 		return
-	if DisplayServer.has_feature(DisplayServer.FEATURE_ORIENTATION):
+	# Desktop must resize its own window, even if a driver advertises screen
+	# orientation. Never ask Windows to rotate the user's entire display.
+	var mobile := OS.get_name() in ["Android", "iOS"]
+	if mobile and DisplayServer.has_feature(DisplayServer.FEATURE_ORIENTATION):
 		var mode := DisplayServer.SCREEN_SENSOR
 		match orientation:
 			"portrait": mode = DisplayServer.SCREEN_PORTRAIT
@@ -130,7 +133,19 @@ func apply_orientation() -> void:
 			"landscape_right": mode = DisplayServer.SCREEN_REVERSE_LANDSCAPE
 		DisplayServer.screen_set_orientation(mode)
 		return
-	if DisplayServer.get_name() == "headless" or orientation == "auto":
+	if mobile or DisplayServer.get_name() == "headless" or orientation == "auto":
+		return
+	# Godot embeds the running game inside its editor by default on some
+	# versions. The OS forbids resizing that child window; the Settings UI
+	# explains how to run it detached instead of silently doing nothing.
+	if Engine.is_embedded_in_editor():
+		print("[four-realms] Orientation: embedded editor window cannot be resized; disable Embed Game and restart.")
+		return
+	_resize_desktop_window.call_deferred(orientation)
+
+
+func _resize_desktop_window(requested: String) -> void:
+	if orientation != requested or orientation == "auto" or Engine.is_embedded_in_editor():
 		return
 	# A maximized/fullscreen window cannot be resized until windowed. Centre the
 	# new shape inside the monitor's usable area, with room for window chrome.
@@ -139,6 +154,11 @@ func apply_orientation() -> void:
 		return
 	if window.mode != Window.MODE_WINDOWED:
 		window.mode = Window.MODE_WINDOWED
+		# Let the OS complete the restore before attempting to resize.
+		await get_tree().process_frame
+		await get_tree().process_frame
+		if orientation != requested or not is_instance_valid(window):
+			return
 	var screen: int = DisplayServer.window_get_current_screen()
 	var usable: Rect2i = DisplayServer.screen_get_usable_rect(screen)
 	var bounds := Vector2i(maxi(usable.size.x - 32, 320), maxi(usable.size.y - 80, 240))
@@ -148,12 +168,13 @@ func apply_orientation() -> void:
 	var target := Vector2i(desired * scale_factor)
 	window.size = target
 	window.position = usable.position + (usable.size - target) / 2
+	print("[four-realms] Orientation ", requested, ": requested window ", target, "; actual ", window.size)
 
 
 ## On desktop keep a forced shape even if the user drags the window past square.
 ## Auto never interferes with manual resizing. Mobile is controlled by the OS.
 func _on_window_size_changed() -> void:
-	if _orientation_correction_queued or orientation == "auto" or OS.has_feature("web") or DisplayServer.get_name() == "headless" or DisplayServer.has_feature(DisplayServer.FEATURE_ORIENTATION):
+	if _orientation_correction_queued or orientation == "auto" or OS.has_feature("web") or DisplayServer.get_name() == "headless" or OS.get_name() in ["Android", "iOS"] or Engine.is_embedded_in_editor():
 		return
 	_orientation_correction_queued = true
 	_correct_window_shape.call_deferred()
@@ -162,7 +183,7 @@ func _on_window_size_changed() -> void:
 func _correct_window_shape() -> void:
 	_orientation_correction_queued = false
 	# The preference or window mode may have changed since the resize event.
-	if orientation == "auto" or DisplayServer.has_feature(DisplayServer.FEATURE_ORIENTATION):
+	if orientation == "auto" or OS.get_name() in ["Android", "iOS"] or Engine.is_embedded_in_editor():
 		return
 	var window := get_window()
 	if window == null or window.mode != Window.MODE_WINDOWED:

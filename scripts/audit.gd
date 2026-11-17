@@ -451,7 +451,7 @@ func _test_landscape_reflow() -> void:
 	var side_logo: TextureRect = d._landscape_side.get_node_or_null("LandscapeStatusLogo")
 	if side_logo == null or side_logo.texture == null or not side_logo.visible or side_logo.size.y <= 0:
 		good = false
-	if d._layout_parts.Hand.get_parent() != d._landscape_player or d._layout_parts.BotHand.get_parent() != d._landscape_side:
+	if d._layout_parts.Hand.get_parent() != d._landscape_table or d._layout_parts.Quests.get_parent() != d._landscape_player or not d._layout_parts.Actions.vertical or d._layout_parts.BotHand.get_parent() != d._landscape_side:
 		good = false
 	var four: Dictionary = d._table_layout(4, d._table_grid.size)
 	if four.cols < 3: good = false
@@ -606,7 +606,7 @@ func _test_landscape_title() -> void:
 		if modal_scroll.vertical_scroll_mode != ScrollContainer.SCROLL_MODE_SHOW_NEVER: good = false
 	host.size = Vector2(540, 600)
 	for i in range(12): await get_tree().process_frame
-	if title._title_landscape or title._mode_list.get_parent() != title._title_left or title._mode_list.columns != 1 or title._faction_grid.columns != 4 or title.faction != 2 or title._sheet_panel != sheet: good = false
+	if title._title_landscape or title._mode_list.get_parent() != title._title_left or title._mode_list.columns != 2 or title._faction_grid.columns != 4 or title.faction != 2 or title._sheet_panel != sheet: good = false
 	if sheet != null and (sheet.get_global_rect().position.x < host.get_global_rect().position.x - 1.0 or sheet.get_global_rect().end.x > host.get_global_rect().end.x + 1.0): good = false
 	title._codex_close()
 	for i in range(5): await get_tree().process_frame

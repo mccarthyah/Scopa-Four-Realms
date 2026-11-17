@@ -7,6 +7,8 @@ const CardArt := preload("res://scripts/ui/card_art.gd")
 const RealmBackground := preload("res://scripts/ui/background.gd")
 const LOGO_TRANSPARENT := preload("res://assets/branding/four_realms_logo.png")
 const LOGO_SCENIC := preload("res://assets/branding/four_realms_scenic.png")
+const TILE_ART := [preload("res://assets/branding/forge_tile.png"), preload("res://assets/branding/grove_tile.png"), preload("res://assets/branding/horde_tile.png"), preload("res://assets/branding/crown_tile.png")]
+const MODE_ART := preload("res://assets/branding/panel_landscape.png")
 
 signal start_duel(config: Dictionary)
 
@@ -162,7 +164,7 @@ func _update_title_layout() -> void:
 		return
 	var wide := size.x > size.y * 1.12
 	_faction_grid.columns = 2 if wide else 4
-	_mode_list.columns = 2 if wide and size.x >= 1500.0 else 1
+	_mode_list.columns = 2 if (wide and size.x >= 1500.0) or (not wide and size.x >= 460.0) else 1
 	if wide == _title_landscape:
 		return
 	_title_landscape = wide
@@ -233,33 +235,36 @@ func _faction_card(f: int) -> Button:
 		_refresh_factions()
 		Sfx.play("tap"))
 
+	var art := TextureRect.new()
+	art.name = "FactionArtwork"
+	art.texture = TILE_ART[f]
+	art.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	art.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	art.offset_left = 4
+	art.offset_top = 4
+	art.offset_right = -4
+	art.offset_bottom = -4
+	b.add_child(art)
+	var caption := ColorRect.new()
+	caption.color = Color(0.015, 0.035, 0.06, 0.82)
+	caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	caption.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
+	caption.offset_left = 4
+	caption.offset_right = -4
+	caption.offset_top = -45
+	caption.offset_bottom = -4
+	b.add_child(caption)
+
 	var v := VBoxContainer.new()
 	v.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	v.add_theme_constant_override("separation", 2)
-	v.alignment = BoxContainer.ALIGNMENT_CENTER
+	v.add_theme_constant_override("separation", 0)
+	v.alignment = BoxContainer.ALIGNMENT_END
+	v.offset_bottom = -6
 	b.add_child(v)
-
-	# Crop the emblem from the supplied card atlas, rather than introducing
-	# replacement faction art. The buttons remain ordinary accessible controls.
-	var icon := TextureRect.new()
-	icon.custom_minimum_size = Vector2(0, 62)
-	icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
-	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var source := CardArt.atlas_texture()
-	if source != null:
-		var atlas := AtlasTexture.new()
-		atlas.atlas = source
-		atlas.region = Rect2(f * 208 + 30, 70, 148, 140)
-		icon.texture = atlas
-		v.add_child(icon)
-	else:
-		var fallback := UI.label(T.SUIT_GLYPH[f], 42, info.color)
-		fallback.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		fallback.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		v.add_child(fallback)
 
 	var nm := UI.label(info.name, 19, UI.TEXT, true)
 	nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -271,6 +276,7 @@ func _faction_card(f: int) -> Button:
 
 	var pp := UI.label(info.people, 14, UI.TEXT_DIM)
 	pp.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	pp.add_theme_color_override("font_color", Color("eee9d5"))
 	pp.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	v.add_child(pp)
 
@@ -333,12 +339,20 @@ func _mode_row(title: String, sub: String, badge: String, cb: Callable, accent: 
 	var p := PanelContainer.new()
 	p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	p.add_theme_stylebox_override("panel", UI.panel(UI.PANEL, 14, Color("927845"), 1))
+	var backdrop := TextureRect.new()
+	backdrop.texture = MODE_ART
+	backdrop.modulate = Color(0.48, 0.53, 0.58, 1.0)
+	backdrop.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	backdrop.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	backdrop.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	p.add_child(backdrop)
 	var h := HBoxContainer.new()
-	h.add_theme_constant_override("separation", 10)
+	h.add_theme_constant_override("separation", 6)
 	p.add_child(h)
 
 	var emblem := PanelContainer.new()
-	emblem.custom_minimum_size = Vector2(46, 46)
+	emblem.custom_minimum_size = Vector2(34, 38)
 	emblem.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	emblem.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	emblem.add_theme_stylebox_override("panel", UI.flat(Color("183526"), 22, Color("78c85e"), 2))
@@ -355,12 +369,18 @@ func _mode_row(title: String, sub: String, badge: String, cb: Callable, accent: 
 	v.add_theme_constant_override("separation", 1)
 	h.add_child(v)
 	var t := UI.label(title, 24, UI.TEXT, true, true)
-	t.add_theme_font_size_override("font_size", 22)
+	t.add_theme_font_size_override("font_size", 20)
 	v.add_child(t)
-	v.add_child(UI.label(sub, 16, UI.TEXT_DIM, false, true))
+	var subtitle := UI.label(sub, 15, UI.TEXT_DIM, false, true)
+	v.add_child(subtitle)
+	# Two-column portrait tiles use compact typography, while a wide row keeps
+	# the larger display size. Full strings remain available and wrap naturally.
+	p.resized.connect(func():
+		t.add_theme_font_size_override("font_size", 17 if p.size.x < 350 else 22)
+		subtitle.add_theme_font_size_override("font_size", 13 if p.size.x < 350 else 16))
 
 	var go := UI.button("", "ghost", 18)
-	go.custom_minimum_size = Vector2(42, 44)
+	go.custom_minimum_size = Vector2(34, 44)
 	go.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	go.text = "›"
 	go.add_theme_font_size_override("font_size", 30)
@@ -431,7 +451,10 @@ func _orientation_panel() -> Control:
 		Sfx.play("select", -14.0))
 	col.add_child(choice)
 	var note := "Auto follows the device. Forced directions use the phone orientation."
-	if OS.has_feature("web"):
+	if Engine.is_embedded_in_editor():
+		choice.disabled = true
+		note = "The embedded Game panel cannot resize. Stop the game, turn off Embed Game on Next Play in Godot's Game tab, then run again in a separate window."
+	elif OS.has_feature("web"):
 		choice.disabled = true
 		note = "The browser controls orientation; the layout follows the window."
 	elif not DisplayServer.has_feature(DisplayServer.FEATURE_ORIENTATION):

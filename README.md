@@ -80,12 +80,14 @@ Everything in the brief, playable end to end:
 
 ### Window sizes and orientation
 
-Portrait keeps a scrollable single-column title with the supplied scenic logo and a vertical table. The supplied transparent logo appears during the Godot startup splash, in the landscape title identity column, and in the landscape duel status sidebar when space permits. In landscape,
-the title reflows into faction/record and mode columns, with a two-by-two faction picker and, when wide enough, a two-column mode grid. The duel uses an opponent
-and quest sidebar, a central playfield, and a separate hand/actions panel; less
-wide windows use a compact two-column version. Scroll indicators are hidden while
-scrolling remains enabled. The same match, selection, and open sheet survive a
-window resize or device rotation.
+Portrait keeps a scrollable title with the supplied scenic logo, four illustrated
+faction tiles, and a two-column mode grid when space permits. The portrait duel
+uses a compact logo above the status and playfield on taller screens. In landscape,
+the title reflows into faction/record and mode columns. The duel places status
+and the transparent logo on the left, table and hand in the centre, and quests
+and actions on the right; less-wide windows use a compact two-column version.
+Scroll indicators are hidden while scrolling remains enabled. The same match,
+selection, and open sheet survive a window resize or device rotation.
 
 In **Settings → Orientation**, choose **Auto**, **Landscape Left**, **Landscape
 Right** or **Portrait**. The preference is saved. On supported Android and iOS
@@ -96,6 +98,10 @@ maintain a landscape- or portrait-shaped window while it is windowed. Left and
 Right have the same landscape shape on desktop; they do not rotate the operating system's display.
 Forcing a desktop orientation returns a maximized/full-screen window to windowed
 mode so it can be resized. Choosing Auto leaves the current window size alone.
+Godot's embedded Game panel is controlled by the editor and cannot be resized
+by the game. The orientation picker is disabled with a note in embedded mode;
+stop the game, open the Game tab's embedding options, turn off **Embed Game on
+Next Play**, and run again in a separate window to test forced desktop sizes.
 In the Web build, orientation is controlled by the browser, so the choice is
 disabled and the layout follows the browser window instead.
 
@@ -291,7 +297,10 @@ audio/                   generated WAVs: deal, capture, scopa, favor, oath, win,
 fonts/                   Cinzel (display) and Alegreya Sans (text), both OFL
 ```
 
-The menu and duel use a static AI-generated fantasy landscape inspired by the supplied layout references; faction icons are cropped from the supplied card atlas. No currencies or progression shown in the reference mockups were added as fake controls.
+The menu and duel use static AI-generated fantasy landscapes and faction-tile
+art inspired by the supplied layout references. The original supplied card
+atlas remains in use for every card. No currencies or progression shown in the
+reference mockups were added as fake controls.
 
 The 40 supplied faces and three existing backs share one imported static atlas
 on **all** renderers. The source sheets are retained under `tools/card_sources/`,

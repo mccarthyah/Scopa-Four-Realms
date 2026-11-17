@@ -130,6 +130,18 @@ func _build_duel() -> void:
 	root.add_theme_constant_override("separation", 6)
 	add_child(root)
 
+	# A compact portrait crest echoes the reference without consuming the
+	# interactive card area on shorter windows.
+	var portrait_logo := TextureRect.new()
+	portrait_logo.name = "PortraitDuelLogo"
+	portrait_logo.texture = LANDSCAPE_LOGO
+	portrait_logo.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	portrait_logo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	portrait_logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	portrait_logo.custom_minimum_size = Vector2(0, 100)
+	portrait_logo.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(portrait_logo)
+
 	var t := _build_top()
 	t.name = "HUD"
 	root.add_child(t)
@@ -197,9 +209,9 @@ func _build_duel() -> void:
 	_landscape_player.hide()
 	var player_spacer := Control.new()
 	player_spacer.name = "PlayerTopSpacer"
-	player_spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	player_spacer.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	_landscape_player.add_child(player_spacer)
-	var player_heading := UI.label("YOUR HAND", 18, UI.GOLD)
+	var player_heading := UI.label("BATTLE", 18, UI.GOLD, true)
 	player_heading.name = "PlayerHeading"
 	_landscape_player.add_child(player_heading)
 	var player_bottom := Control.new()
@@ -366,27 +378,30 @@ func _apply_orientation_layout() -> void:
 	# At true phone-landscape widths a separate player panel avoids squeezing
 	# everything into a portrait stack. Near-square layouts use two columns.
 	var mode := "full" if wide and size.x >= 1450.0 else ("compact" if wide else "portrait")
+	_portrait_root.get_node("PortraitDuelLogo").visible = not wide and size.y >= 850.0
 	if mode == _layout_mode:
 		return
 	_layout_mode = mode
 	_landscape = wide
 	if wide:
-		for key in ["HUD", "TurnBar", "Quests"]:
+		for key in ["HUD", "TurnBar"]:
 			_layout_parts[key].reparent(_landscape_side, false)
 		if mode == "full":
 			_layout_parts.BotHand.reparent(_landscape_side, false)
-			_layout_parts.Table.reparent(_landscape_table, false)
-			for key in ["Hand", "Actions"]:
+			for key in ["Table", "Hand"]:
+				_layout_parts[key].reparent(_landscape_table, false)
+			for key in ["Quests", "Actions"]:
 				_layout_parts[key].reparent(_landscape_player, false)
-			_landscape_player.move_child(_layout_parts.Hand, 2)
+			_layout_parts.Actions.vertical = true
+			_landscape_player.move_child(_layout_parts.Quests, 2)
 			_landscape_player.move_child(_layout_parts.Actions, 3)
 			_landscape_player.show()
 		else:
 			_landscape_player.hide()
+			_layout_parts.Quests.reparent(_landscape_side, false)
 			for key in ["BotHand", "Table", "Hand", "Actions"]:
 				_layout_parts[key].reparent(_landscape_table, false)
-		# The logo occupies only spare sidebar space, above the live status;
-		# it never steals the minimum height needed by status or cards.
+			_layout_parts.Actions.vertical = false
 		_landscape_side.move_child(_landscape_side.get_node("LandscapeStatusLogo"), 0)
 		_landscape_side.move_child(_landscape_side.get_node("LandscapeStatusSpacer"), _landscape_side.get_child_count() - 1)
 		_portrait_root.hide()
@@ -395,6 +410,7 @@ func _apply_orientation_layout() -> void:
 		_landscape_player.hide()
 		for key in ["HUD", "TurnBar", "BotHand", "Table", "Quests", "Hand", "Actions"]:
 			_layout_parts[key].reparent(_portrait_root, false)
+		_layout_parts.Actions.vertical = false
 		_landscape_root.hide()
 		_portrait_root.show()
 	_schedule_layout_refresh()
@@ -527,7 +543,8 @@ func _build_hand() -> Control:
 
 
 func _build_actions() -> Control:
-	var h := HBoxContainer.new()
+	var h := BoxContainer.new()
+	h.vertical = false
 	h.add_theme_constant_override("separation", 8)
 	var info: Dictionary = T.FACTIONS[duel.player_faction]
 
