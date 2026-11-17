@@ -36,11 +36,12 @@ concurrency:
 
 jobs:
   ios:
-    runs-on: macos-15
+    runs-on: macos-26
     environment: testflight
     timeout-minutes: 90
     env:
       GODOT_VERSION: 4.7.2
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
       APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
       IOS_BUNDLE_ID: ${{ vars.IOS_BUNDLE_ID }}
       IOS_VERSION: ${{ vars.IOS_VERSION }}
@@ -50,6 +51,9 @@ jobs:
       SIGNING_MODE: ${{ inputs.signing }}
     steps:
       - uses: actions/checkout@v4
+      - name: Verify Xcode version
+        shell: bash
+        run: xcodebuild -version
       - name: Validate settings and configure temporary export preset
         shell: bash
         run: |
