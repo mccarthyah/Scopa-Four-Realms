@@ -97,7 +97,7 @@ a distribution profile containing the matching certificate.
 
 Limit repository access and use environment protection rules as appropriate.
 The workflow deletes its temporary signing files and keychain at the end of the
-hosted run. It targets iOS 14 or later and downloads the official Godot 4.7.2 macOS editor and matching
+hosted run. It targets iOS 15 or later and downloads the official Godot 4.7.2 macOS editor and matching
 export templates with pinned SHA-256 checksums, and uses the Xcode installed on
 Xcode 26.6 on the GitHub `macos-26` runner. To upgrade Godot, update its version and both
 checksums together. Runner images and Apple's signing requirements can change;
