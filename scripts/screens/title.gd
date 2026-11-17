@@ -412,8 +412,8 @@ func _mode_row(title: String, sub: String, badge: String, cb: Callable, accent: 
 	# Two-column portrait tiles use compact typography, while a wide row keeps
 	# the larger display size. Full strings remain available and wrap naturally.
 	var apply_type := func():
-		t.add_theme_font_size_override("font_size", 31 if _title_landscape else (17 if p.size.x < 350 else 22))
-		subtitle.add_theme_font_size_override("font_size", 23 if _title_landscape else (13 if p.size.x < 350 else 16))
+		t.add_theme_font_size_override("font_size", (27 if p.size.x < 390 else 31) if _title_landscape else (17 if p.size.x < 350 else 22))
+		subtitle.add_theme_font_size_override("font_size", (21 if p.size.x < 390 else 23) if _title_landscape else (13 if p.size.x < 350 else 16))
 	p.resized.connect(apply_type)
 
 	var go := UI.button("", "ghost", 18)
@@ -426,28 +426,17 @@ func _mode_row(title: String, sub: String, badge: String, cb: Callable, accent: 
 	h.add_child(go)
 
 	var primary := badge in ["QUICK", "RESUME"]
-	var fill := Color("29231f") if primary else Color("101d2b")
-	var border := accent if primary else Color("48556a")
-	var landscape_style := UI.flat(fill, 12, border, 2 if primary else 1, true)
-	landscape_style.content_margin_left = 24.0
-	landscape_style.content_margin_right = 20.0
-	landscape_style.content_margin_top = 12.0
-	landscape_style.content_margin_bottom = 12.0
-	var transparent_arrow := StyleBoxEmpty.new()
-	var arrow_styles := {}
-	for state in ["normal", "hover", "pressed"]:
-		arrow_styles[state] = go.get_theme_stylebox(state)
+	var landscape_style := UI.fantasy_style("panel", 16, 14)
 	var apply_style := func(wide: bool):
 		p.add_theme_stylebox_override("panel", landscape_style if wide else portrait_style)
 		p.custom_minimum_size.y = 168.0 if wide else 0.0
-		backdrop.visible = not wide
-		h.add_theme_constant_override("separation", 14 if wide else 6)
-		emblem.visible = not wide
+		backdrop.modulate = Color(0.40, 0.46, 0.52) if wide else Color(0.48, 0.53, 0.58)
+		h.add_theme_constant_override("separation", 10 if wide else 6)
+		emblem.custom_minimum_size = Vector2(44, 52) if wide else Vector2(34, 38)
+		emblem_label.add_theme_font_size_override("font_size", 25 if wide else 20)
 		v.alignment = BoxContainer.ALIGNMENT_CENTER if wide else BoxContainer.ALIGNMENT_BEGIN
 		v.add_theme_constant_override("separation", 6 if wide else 1)
-		go.custom_minimum_size.x = 48.0 if wide else 34.0
-		for state in arrow_styles:
-			go.add_theme_stylebox_override(state, transparent_arrow if wide else arrow_styles[state])
+		go.custom_minimum_size = Vector2(44, 56) if wide else Vector2(34, 44)
 		t.add_theme_color_override("font_color", UI.GOLD if wide and primary else UI.TEXT)
 		subtitle.add_theme_color_override("font_color", Color("bec8d6") if wide else UI.TEXT_DIM)
 		apply_type.call()
