@@ -298,6 +298,16 @@ func _test_settings_dialog() -> void:
 			if controls.size() != 6 or backs.size() != 3 or boards.size() != 4:
 				fail("settings: missing controls: toggles=%s backs=%s boards=%s" % [str(controls.keys()), str(backs.keys()), str(boards.keys())])
 			else:
+				var rounded := true
+				for key in controls:
+					var toggle: Button = controls[key]
+					rounded = rounded and toggle.get_theme_stylebox("normal") is StyleBoxEmpty and toggle.custom_minimum_size.y >= 44.0
+				for path in ["res://assets/ui/switch_off.png", "res://assets/ui/switch_on.png"]:
+					var art: Texture2D = load(path)
+					var pixels: Image = art.get_image()
+					rounded = rounded and art.get_width() == 144 and art.get_height() == 76 and pixels.get_pixel(0, 0).a < 0.05 and pixels.get_pixel(72, 38).a > 0.9
+				if rounded: ok("settings switches use transparent rounded artwork with generous touch targets")
+				else: fail("settings switches lost their rounded artwork or touch target")
 				for key in ["classic_mode", "confirm_card_play", "anim_spin", "anim_slow", "anim_match"]:
 					var b: Button = controls[key]
 					scroll.ensure_control_visible(b)

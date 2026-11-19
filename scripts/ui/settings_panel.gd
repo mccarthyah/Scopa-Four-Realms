@@ -3,6 +3,8 @@ extends RefCounted
 
 const UI := preload("res://scripts/ui/ui.gd")
 const CardView := preload("res://scripts/ui/card_view.gd")
+const SWITCH_OFF := preload("res://assets/ui/switch_off.png")
+const SWITCH_ON := preload("res://assets/ui/switch_on.png")
 
 
 static func populate(sheet: PanelContainer, close: Callable, reflow: Callable, in_game: bool = false) -> void:
@@ -88,17 +90,19 @@ static func _toggle(on: bool) -> Button:
 	b.toggle_mode = true
 	b.button_pressed = on
 	b.focus_mode = Control.FOCUS_NONE
-	b.custom_minimum_size = Vector2(64, 36)
+	# Leave a generous touch target while the artwork stays a true capsule even
+	# when landscape settings increase the control height.
+	b.custom_minimum_size = Vector2(72, 44)
 	b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	b.add_theme_stylebox_override("normal", UI.flat(UI.PANEL, 18, Color("453a5c"), 2))
-	b.add_theme_stylebox_override("hover", UI.flat(UI.PANEL_HI, 18, UI.GOLD, 2))
-	b.add_theme_stylebox_override("pressed", UI.flat(UI.GOLD, 18))
-	b.add_theme_stylebox_override("focus", UI.flat(Color(0, 0, 0, 0), 18))
+	b.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	for state in ["normal", "hover", "pressed", "hover_pressed", "disabled", "focus"]:
+		b.add_theme_stylebox_override(state, StyleBoxEmpty.new())
 	b.draw.connect(func():
-		var r := Rect2(Vector2.ZERO, b.size)
-		var cx := r.size.x * (0.66 if b.button_pressed else 0.34)
-		# Dark on gold when enabled; the former gold-on-gold thumb was invisible.
-		b.draw_circle(Vector2(cx, r.size.y * 0.5), 13.0, UI.INK if b.button_pressed else UI.TEXT_DIM))
+		var texture: Texture2D = SWITCH_ON if b.button_pressed else SWITCH_OFF
+		var art_size := Vector2(texture.get_size())
+		art_size *= minf(b.size.x / art_size.x, b.size.y / art_size.y)
+		b.draw_texture_rect(texture, Rect2((b.size - art_size) * 0.5, art_size), false))
+	b.toggled.connect(func(_enabled: bool): b.queue_redraw())
 	return b
 
 
