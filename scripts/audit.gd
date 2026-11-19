@@ -321,6 +321,12 @@ func _test_settings_dialog() -> void:
 					for i in range(3): await get_tree().process_frame
 					_send_mouse_click(b.get_global_rect().get_center())
 					await get_tree().process_frame
+				var selected_theme: Label = panel.find_child("SelectedTableTheme", true, false)
+				var board_style: StyleBoxTexture = board.get_theme_stylebox("normal") as StyleBoxTexture
+				if selected_theme != null and selected_theme.text == "Plum" and board_style != null and board_style.texture == UI.FRAME_TEXTURES.felt_purple and back.button_pressed and not backs[0].button_pressed and board.button_pressed and not boards[0].button_pressed:
+					ok("table choices show the actual felt, update the name and retain a single selection")
+				else:
+					fail("table cosmetic choice, preview or selection indicator did not update")
 				var master: Button = controls["anim_enabled"]
 				scroll.ensure_control_visible(master)
 				for i in range(3): await get_tree().process_frame
@@ -666,6 +672,18 @@ func _test_settings_layout() -> void:
 			fail("settings layout: narrow modal should scroll")
 			all_ok = false
 		for i in range(5): await get_tree().process_frame
+		for row_name in ["CardBackChoices", "TableFeltChoices"]:
+			var choice_row: Control = panel.find_child(row_name, true, false)
+			if choice_row == null:
+				fail("settings layout: missing " + row_name)
+				all_ok = false
+				continue
+			var row_rect := choice_row.get_global_rect()
+			for choice in choice_row.get_children():
+				var option: Button = choice as Button
+				if option == null or option.size.x < 44.0 or option.size.y < 44.0 or option.get_global_rect().position.x < row_rect.position.x - 1.0 or option.get_global_rect().end.x > row_rect.end.x + 1.0 or option.get_global_rect().end.x > pr.end.x + 1.0:
+					fail("settings layout: table choice overflows or has a small touch target at %s" % str(dims))
+					all_ok = false
 		var dr := done.get_global_rect()
 		var viewport_rect := panel.get_global_rect()
 		if dr.position.x < viewport_rect.position.x - 0.5 or dr.end.x > viewport_rect.end.x + 0.5 or dr.position.y < viewport_rect.position.y - 0.5 or dr.end.y > viewport_rect.end.y + 0.5:

@@ -3,6 +3,7 @@ extends RefCounted
 
 const UI := preload("res://scripts/ui/ui.gd")
 const CardView := preload("res://scripts/ui/card_view.gd")
+const CardArt := preload("res://scripts/ui/card_art.gd")
 const SWITCH_OFF := preload("res://assets/ui/switch_off.png")
 const SWITCH_ON := preload("res://assets/ui/switch_on.png")
 
@@ -254,89 +255,101 @@ static func _animation_panel() -> Control:
 	return p
 
 
+## Shared compact selection badge: shape and position communicate the choice,
+## not just colour. The artwork remains clickable across the whole button.
+static func _draw_selected_mark(button: Button) -> void:
+	if not button.button_pressed:
+		return
+	var center := Vector2(button.size.x - 12.0, 12.0)
+	button.draw_circle(center, 8.0, Color("123a24"))
+	button.draw_circle(center, 6.5, UI.GOOD)
+	button.draw_line(center + Vector2(-3, 0), center + Vector2(-1, 2), UI.INK, 1.8, true)
+	button.draw_line(center + Vector2(-1, 2), center + Vector2(3, -3), UI.INK, 1.8, true)
+
+
 static func _cosmetics_panel() -> Control:
 	var p := PanelContainer.new()
 	p.name = "TableSettings"
-	p.add_theme_stylebox_override("panel", UI.fantasy_style("panel", 10, 8))
+	p.add_theme_stylebox_override("panel", UI.fantasy_style("panel", 14, 12))
 	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 4)
+	v.add_theme_constant_override("separation", 7)
 	p.add_child(v)
-	var h := HBoxContainer.new()
-	v.add_child(h)
-	h.add_child(UI.label("YOUR TABLE", 18, UI.GOLD))
-	var sp := Control.new()
-	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	h.add_child(sp)
+	v.add_child(UI.label("YOUR TABLE", 20, UI.GOLD))
 
-
-	# card backs
+	var back_heading := UI.label("Card backs", 20, UI.TEXT)
+	v.add_child(back_heading)
 	var back_row := HBoxContainer.new()
-	back_row.add_theme_constant_override("separation", 10)
+	back_row.name = "CardBackChoices"
+	back_row.add_theme_constant_override("separation", 8)
 	v.add_child(back_row)
-	var back_label := UI.label("Back", 20, UI.TEXT)
-	back_label.custom_minimum_size.x = 70
-	back_row.add_child(back_label)
 	var back_group := ButtonGroup.new()
 	for i in range(3):
 		var b := Button.new()
 		b.focus_mode = Control.FOCUS_NONE
-		b.custom_minimum_size = Vector2(46, 62)
+		b.custom_minimum_size = Vector2(48, 82)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		b.toggle_mode = true
 		b.button_group = back_group
 		b.button_pressed = i == Profile.card_back
 		b.set_meta("card_back", i)
 		b.tooltip_text = "Card back %d" % (i + 1)
-		b.add_theme_stylebox_override("normal", UI.flat(Color(0, 0, 0, 0), 8))
-		b.add_theme_stylebox_override("hover", UI.flat(Color(1, 1, 1, 0.06), 8))
-		b.add_theme_stylebox_override("pressed", UI.flat(Color(0, 0, 0, 0), 8, UI.GOLD, 2))
-		b.add_theme_stylebox_override("focus", UI.flat(Color(0, 0, 0, 0), 8))
-		var cv := CardView.new()
-		cv.setup(-1, false, 42, 58)
-		cv.back_style = i
-		# CardView._ready defaults to STOP for playable cards; this preview is
-		# added before its parent enters the tree, so override after _ready runs.
-		cv.ready.connect(func(): cv.mouse_filter = Control.MOUSE_FILTER_IGNORE)
-		b.add_child(cv)
-		cv.position = Vector2(2, 2)
+		b.add_theme_stylebox_override("normal", UI.fantasy_style("button", 0, 0))
+		b.add_theme_stylebox_override("hover", UI.fantasy_style("button_hover", 0, 0))
+		b.add_theme_stylebox_override("pressed", UI.fantasy_style("button_hover", 0, 0))
+		b.add_theme_stylebox_override("hover_pressed", UI.fantasy_style("button_hover", 0, 0))
+		b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 		var idx := i
+		b.draw.connect(func():
+			var h := minf(b.size.y - 14.0, (b.size.x - 18.0) * CardView.ASPECT)
+			var art_size := Vector2(h / CardView.ASPECT, h)
+			var art_rect := Rect2((b.size - art_size) * 0.5, art_size)
+			if not CardArt.draw_atlas_face(b, art_rect, -1, idx):
+				CardArt.draw_face(b, art_rect, -1, idx)
+			_draw_selected_mark(b))
+		b.toggled.connect(func(_selected: bool): b.queue_redraw())
 		b.pressed.connect(func():
 			Profile.card_back = idx
 			Profile.save_profile()
 			Sfx.play("select", -12.0))
 		back_row.add_child(b)
-	var sp2 := Control.new()
-	sp2.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	back_row.add_child(sp2)
 
-	# board themes
+	var board_heading := HBoxContainer.new()
+	board_heading.add_theme_constant_override("separation", 8)
+	v.add_child(board_heading)
+	board_heading.add_child(UI.label("Table felt", 20, UI.TEXT))
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	board_heading.add_child(spacer)
+	var theme_names := ["Forest", "Ocean", "Ember", "Plum"]
+	var current_theme := UI.label(theme_names[clampi(Profile.board_theme, 0, 3)], 18, UI.TEXT_DIM)
+	current_theme.name = "SelectedTableTheme"
+	board_heading.add_child(current_theme)
 	var board_row := HBoxContainer.new()
-	board_row.add_theme_constant_override("separation", 6)
+	board_row.name = "TableFeltChoices"
+	board_row.add_theme_constant_override("separation", 8)
 	v.add_child(board_row)
-	var board_label := UI.label("Board", 20, UI.TEXT)
-	board_label.custom_minimum_size.x = 70
-	board_row.add_child(board_label)
-	var themes := [Color("1b2a24"), Color("1a2230"), Color("2a1c22"), Color("241f2e")]
+	var themes := ["felt_green", "felt_blue", "felt_red", "felt_purple"]
 	var board_group := ButtonGroup.new()
 	for i in range(themes.size()):
 		var b2 := Button.new()
 		b2.focus_mode = Control.FOCUS_NONE
-		b2.custom_minimum_size = Vector2(36, 44)
+		b2.custom_minimum_size = Vector2(44, 52)
+		b2.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		b2.toggle_mode = true
 		b2.button_group = board_group
 		b2.button_pressed = i == Profile.board_theme
 		b2.set_meta("board_theme", i)
-		b2.tooltip_text = "Board theme %d" % (i + 1)
-		b2.add_theme_stylebox_override("normal", UI.flat(themes[i], 8, Color("4a3f5e"), 1))
-		b2.add_theme_stylebox_override("hover", UI.flat(themes[i].lightened(0.12), 8, UI.GOLD, 2))
-		b2.add_theme_stylebox_override("pressed", UI.flat(themes[i], 8, UI.GOLD, 2))
-		b2.add_theme_stylebox_override("focus", UI.flat(Color(0, 0, 0, 0), 8))
+		b2.tooltip_text = theme_names[i] + " table felt"
+		for state in ["normal", "hover", "pressed", "hover_pressed"]:
+			b2.add_theme_stylebox_override(state, UI.fantasy_style(themes[i], 0, 0))
+		b2.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+		b2.draw.connect(func(): _draw_selected_mark(b2))
+		b2.toggled.connect(func(_selected: bool): b2.queue_redraw())
 		var idx2 := i
 		b2.pressed.connect(func():
 			Profile.board_theme = idx2
+			current_theme.text = theme_names[idx2]
 			Profile.save_profile()
 			Sfx.play("select", -12.0))
 		board_row.add_child(b2)
-	var sp3 := Control.new()
-	sp3.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	board_row.add_child(sp3)
 	return p
