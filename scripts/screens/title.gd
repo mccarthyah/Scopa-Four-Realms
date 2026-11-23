@@ -130,6 +130,8 @@ func _build() -> void:
 	var stats := _stats_panel()
 	col.add_child(stats)
 	_title_parts = [mast, _mode_list, stats]
+	_mode_list.minimum_size_changed.connect(_fit_portrait_masthead)
+	stats.minimum_size_changed.connect(_fit_portrait_masthead)
 	_update_title_layout()
 
 
@@ -244,8 +246,22 @@ func _update_title_layout() -> void:
 		_title_left.move_child(_mode_list, _title_left.get_child_count() - 1)
 		_title_left.move_child(_title_parts[2], _title_left.get_child_count() - 1)
 		_title_right.hide()
+	_fit_portrait_masthead.call_deferred()
 	if rotated:
 		_scroll.scroll_vertical = 0
+
+
+func _fit_portrait_masthead() -> void:
+	if _title_landscape or _title_parts.is_empty():
+		return
+	var mast: TextureRect = _title_parts[0]
+	var record: Control = _title_parts[2]
+	var available := size.y - _title_margin.get_theme_constant("margin_top") \
+		- _title_margin.get_theme_constant("margin_bottom")
+	var needed := _mode_list.get_combined_minimum_size().y + record.get_combined_minimum_size().y \
+		+ 2 * _title_left.get_theme_constant("separation")
+	var preferred := clampf(size.y * 0.32, 100.0, 440.0)
+	mast.custom_minimum_size.y = clampf(available - needed, 100.0, preferred)
 
 
 ## The runtime splash follows the actual viewport after Profile applies the

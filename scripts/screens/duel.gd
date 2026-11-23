@@ -16,7 +16,6 @@ const FX := preload("res://scripts/ui/fx.gd")
 const CardView := preload("res://scripts/ui/card_view.gd")
 const EffectAtlas := preload("res://scripts/ui/effect_atlas.gd")
 const DuelAI := preload("res://scripts/game/ai.gd")
-const RealmBackground := preload("res://scripts/ui/background.gd")
 
 signal exit_to_menu
 signal play_again(config)
@@ -42,7 +41,6 @@ var config: Dictionary = {}
 var duel: Duel
 
 # --- widgets -----------------------------------------------------------------
-var _bg: Control
 var _top_name: Label
 var _top_meta: Label
 var _top_avatar: Control
@@ -131,11 +129,6 @@ func _build_duel() -> void:
 		"rule": config.get("rule", "classic"),
 		"seed": config.get("seed", randi()),
 	})
-
-	_bg = RealmBackground.new()
-	add_child(_bg)
-	_bg.set_accents(T.FACTIONS[pfac].color, T.FACTIONS[bfac].color)
-	_bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 
 	var root := VBoxContainer.new()
 	_portrait_root = root

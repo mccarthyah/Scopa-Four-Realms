@@ -10,11 +10,13 @@ extends Control
 
 const TitleScreen := preload("res://scripts/screens/title.gd")
 const DuelScreen := preload("res://scripts/screens/duel.gd")
+const RealmBackground := preload("res://scripts/ui/background.gd")
 # The audit is dev-only and excluded from exports (export_presets.cfg), so it is
 # loaded on demand rather than preloaded into every build.
 static var AuditScript := load("res://scripts/audit.gd")
 
 var current: Control = null
+var _duel_backdrop: Control
 ## Set on the instance that actually owns the audit run, so probe instances of
 ## this script built by the audit never start a second, nested suite.
 static var _audit_owner: Control = null
@@ -62,6 +64,10 @@ func _ready() -> void:
 	# window ColorRect beneath the screen's own opaque background. This avoids
 	# a redundant full-screen pass on software renderers without changing it.
 	RenderingServer.set_default_clear_color(ProjectSettings.get_setting("application/boot_splash/bg_color"))
+	_duel_backdrop = RealmBackground.new()
+	_duel_backdrop.name = "DuelBackdrop"
+	_duel_backdrop.hide()
+	add_child(_duel_backdrop)
 	_detect_low_spec()
 	_report_environment()
 	show_title(true)
@@ -89,6 +95,7 @@ const DESIGN_WIDTH := 540.0
 func _swap(screen: Control, fade: bool = true) -> void:
 	if current != null and is_instance_valid(current):
 		current.queue_free()
+	_duel_backdrop.visible = screen is DuelScreen
 	current = screen
 	add_child(screen)
 	_layout_stage(screen)
@@ -118,6 +125,7 @@ func _report_ios_duel_layout() -> void:
 	var window := get_window()
 	print("[scopa] duel layout: window=", window.size,
 		" viewport=", window.get_visible_rect().size, " stage=", current.get_rect(),
+		" backdrop=", _duel_backdrop.get_global_rect(),
 		" stretch=", window.content_scale_mode, "/", window.content_scale_aspect)
 
 

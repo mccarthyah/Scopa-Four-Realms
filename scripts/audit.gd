@@ -768,7 +768,13 @@ func _test_landscape_title() -> void:
 	for dims in [Vector2(1706, 960), Vector2(540, 960), Vector2(720, 1280), Vector2(1280, 960), Vector2(720, 960), Vector2(720, 940), Vector2(667, 960)]:
 		host.size = dims
 		for i in range(8): await get_tree().process_frame
-		var bounds := host.get_global_rect()
+		if dims == Vector2(720, 960):
+			# Simulate top and bottom safe insets within the full portrait canvas.
+			title._title_margin.add_theme_constant_override("margin_top", 32)
+			title._title_margin.add_theme_constant_override("margin_bottom", 40)
+			title._fit_portrait_masthead()
+			for i in range(8): await get_tree().process_frame
+		var bounds: Rect2 = title._scroll.get_global_rect()
 		for control in [title._mode_list, title.find_child("YourRecord", true, false)]:
 			if not bounds.encloses(control.get_global_rect()):
 				good = false
@@ -1063,6 +1069,19 @@ func _test_display_scaling() -> void:
 			fail("%s: felt %s does not fill canvas %s inside its gutters" % [label, felt, vp])
 		else:
 			ok("%s: duel and felt fill their available widths" % label)
+	# Force a landscape canvas wider than the stage cap and check the artwork
+	# still reaches both window edges.
+	win.size = Vector2i(1600, 800)
+	for frame in range(4):
+		await get_tree().process_frame
+	var viewport: Rect2 = probe.get_viewport_rect()
+	var backdrop: Control = probe.get_node("DuelBackdrop")
+	var duel_width: float = probe.current.get_global_rect().size.x
+	if duel_width >= viewport.size.x or not backdrop.is_visible_in_tree() \
+			or not backdrop.get_global_rect().is_equal_approx(viewport):
+		fail("duel backdrop does not fill the viewport beyond the capped stage")
+	else:
+		ok("duel artwork covers the full viewport beyond the capped stage")
 	probe.queue_free()
 	win.size = saved
 	await get_tree().process_frame
