@@ -1,4 +1,10 @@
 extends Control
+# gdlint: disable=class-definitions-order
+# Declarations here are grouped for readability (constants beside the tables
+# they describe, fields beside the build code that fills them) rather than
+# strictly consts-before-vars. Ordering is a style rule with no runtime effect;
+# see docs/ASSESSMENT.md.
+
 ## A single card, with pre-rendered artwork on software renderers.
 ## Live selection, highlights, lift and centre spin remain separate. The atlas
 ## is generated offline; missing assets fall back to the original vector art.

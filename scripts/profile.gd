@@ -1,4 +1,10 @@
 extends Node
+# gdlint: disable=class-definitions-order
+# Declarations here are grouped for readability (constants beside the tables
+# they describe, fields beside the build code that fills them) rather than
+# strictly consts-before-vars. Ordering is a style rule with no runtime effect;
+# see docs/ASSESSMENT.md.
+
 ## Local profile: stats, settings and the daily-puzzle rotation.  Saved to
 ## user://four_realms_profile.json so progress survives between sessions.
 

@@ -1,0 +1,103 @@
+name: verify
+
+# The project ships a headless audit that plays thousands of games and measures
+# the layout, plus a GDScript parser/linter (gdtoolkit). Until this workflow
+# existed, nothing ran either of them: every "audit green" claim in the README was
+# a statement about somebody's laptop, and a regression like the Veiled Warden's
+# veil returning could ship unnoticed.
+#
+# Both jobs are cheap. The audit is the load-bearing one - it fails the build on
+# rules, serialisation, layout or screen-construction regressions.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GODOT_VERSION: 4.4.1
+  # SHA-256 of Godot_v4.4.1-stable_linux.x86_64.zip.
+  #
+  # Deliberately blank. The iOS workflow pins its download by hash, and this one
+  # does the same the moment the real value is recorded - but a hash must never be
+  # guessed. Run the audit once on a machine with network access, copy the digest
+  # from the log line below, and paste it here; the step then verifies the archive
+  # instead of merely reporting its digest.
+  GODOT_SHA256: ""
+
+jobs:
+  lint:
+    name: GDScript parse + lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install gdtoolkit
+        run: pip install --disable-pip-version-check "gdtoolkit==4.*"
+      - name: Every script must parse
+        run: |
+          set -euo pipefail
+          mapfile -t files < <(find scripts tools -name '*.gd' | sort)
+          printf '%s\n' "${files[@]}"
+          gdparse "${files[@]}"
+      - name: Lint against the project's own limits
+        run: |
+          set -euo pipefail
+          mapfile -t files < <(find scripts tools -name '*.gd' | sort)
+          gdlint "${files[@]}"
+
+  audit:
+    name: Headless audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download and verify Godot
+        run: |
+          set -euo pipefail
+          base="https://github.com/godotengine/godot-builds/releases/download/${GODOT_VERSION}-stable"
+          curl --fail --location --retry 3 \
+            "$base/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip" -o "$RUNNER_TEMP/godot.zip"
+          actual=$(sha256sum "$RUNNER_TEMP/godot.zip" | cut -d' ' -f1)
+          echo "Godot ${GODOT_VERSION} archive sha256: $actual"
+          if [ -n "${GODOT_SHA256}" ]; then
+            echo "${GODOT_SHA256}  $RUNNER_TEMP/godot.zip" | sha256sum -c -
+          else
+            echo "::warning::GODOT_SHA256 is unset; the archive digest was printed but not verified. Record it in .github/workflows/verify.yml."
+          fi
+          unzip -q "$RUNNER_TEMP/godot.zip" -d "$RUNNER_TEMP/godot"
+          chmod +x "$RUNNER_TEMP/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64"
+          echo "GODOT=$RUNNER_TEMP/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64" >> "$GITHUB_ENV"
+      - name: Import assets (builds the .godot cache a bare checkout lacks)
+        run: "$GODOT --headless --path . --import"
+      - name: Run the audit
+        # --headless forces the dummy renderer, so this proves the rules, the
+        # serialisation and that every screen BUILDS - it proves nothing about
+        # rendering, which still needs a real device (see CRASH_REPORT.md).
+        run: |
+          set -o pipefail
+          "$GODOT" --headless --path . -- --audit 2>&1 | tee "$RUNNER_TEMP/audit.log"
+          ! grep -q '^FAIL:' "$RUNNER_TEMP/audit.log"
+          grep -q 'AUDIT COMPLETE' "$RUNNER_TEMP/audit.log"
+          grep -q 'failures=0' "$RUNNER_TEMP/audit.log"
+      - name: Upload the audit log and the game log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-log
+          path: |
+            ${{ runner.temp }}/audit.log
+            ~/.local/share/godot/app_userdata/**/logs/*.log
+          if-no-files-found: warn
+          retention-days: 14

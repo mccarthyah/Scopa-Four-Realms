@@ -1,9 +1,18 @@
 extends Control
+# gdlint: disable=class-definitions-order
+# Declarations here are grouped for readability (constants beside the tables
+# they describe, fields beside the build code that fills them) rather than
+# strictly consts-before-vars. Ordering is a style rule with no runtime effect;
+# see docs/ASSESSMENT.md.
+
 ## App shell / router.  Every screen is a Control built in code; this node owns
 ## the top-level navigation and the shared transition.
 
 const TitleScreen := preload("res://scripts/screens/title.gd")
 const DuelScreen := preload("res://scripts/screens/duel.gd")
+# The audit is dev-only and excluded from exports (export_presets.cfg), so it is
+# loaded on demand rather than preloaded into every build.
+static var AuditScript := load("res://scripts/audit.gd")
 
 var current: Control = null
 var _stage := "boot"
@@ -53,11 +62,11 @@ func _ready() -> void:
 	_report_environment()
 	show_title(true)
 	if OS.get_cmdline_user_args().has("--audit"):
-		var audit = load("res://scripts/audit.gd").new()
+		var audit = AuditScript.new()
 		add_child(audit)
 		audit.run(self)
 	elif OS.get_cmdline_user_args().has("--smoke"):
-		var smoke = load("res://scripts/audit.gd").new()
+		var smoke = AuditScript.new()
 		add_child(smoke)
 		smoke.smoke_test(self)
 

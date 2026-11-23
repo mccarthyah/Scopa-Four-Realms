@@ -1,4 +1,10 @@
 extends Control
+# gdlint: disable=class-definitions-order
+# Declarations here are grouped for readability (constants beside the tables
+# they describe, fields beside the build code that fills them) rather than
+# strictly consts-before-vars. Ordering is a style rule with no runtime effect;
+# see docs/ASSESSMENT.md.
+
 
 const LANDSCAPE_LOGO := preload("res://assets/branding/four_realms_logo.png")
 ## The duel table: HUD, opponent, table cards, your hand, Oath controls,
@@ -880,7 +886,7 @@ func _table_layout(n: int, avail: Vector2) -> Dictionary:
 	if n <= 0:
 		return out
 	const GAP := 6.0
-	var MAX_CH := 245.0 if _layout_mode == "full" else 208.0
+	var max_ch := 245.0 if _layout_mode == "full" else 208.0
 	const MIN_CW := 34.0    # small, but still a readable card
 	var w: float = maxf(avail.x, 80.0)
 	var h: float = maxf(avail.y, 80.0)
@@ -894,7 +900,7 @@ func _table_layout(n: int, avail: Vector2) -> Dictionary:
 		var cw_by_width: float = (w - GAP * float(cols - 1)) / float(cols)
 		var ch_by_height: float = (h - GAP * float(rows - 1)) / float(rows)
 		var cw_by_height: float = ch_by_height / CardView.ASPECT
-		var cw: float = minf(minf(cw_by_width, cw_by_height), MAX_CH / CardView.ASPECT)
+		var cw: float = minf(minf(cw_by_width, cw_by_height), max_ch / CardView.ASPECT)
 		# In a roomy landscape, equal-size cards should use the width rather
 		# than unnecessarily stacking into a tall portrait-shaped block.
 		if cw > best_cw + 0.01 or (_layout_mode == "full" and absf(cw - best_cw) <= 0.01 and cols > best_cols):
@@ -1619,7 +1625,7 @@ func _fly_card_in(c: int, from: Vector2, to: Vector2, w: int, h: int, delay: flo
 
 ## Flash a ring on every card involved in a capture, so it is obvious what was
 ## matched before the cards leave the table.
-func _mark_match(cards: Array, from_hand: int = -1) -> void:
+func _mark_match(cards: Array) -> void:
 	if not anim_on("match"):
 		return
 	for c in cards:
@@ -1805,7 +1811,7 @@ func _show_pile() -> void:
 		head.add_child(UI.label(title, 18, UI.GOLD, true, true))
 		head.add_child(UI.label("%d cards · Forge %d · Banner %d" % [
 			duel.captured[who].size(),
-			_CountFaction(duel.captured[who], T.FORGE),
+			_count_faction(duel.captured[who], T.FORGE),
 			duel.primiera_total(duel.captured[who])], 14, UI.TEXT_DIM, false, true))
 		var wrap := HFlowContainer.new()
 		wrap.add_theme_constant_override("h_separation", 5)
@@ -1821,7 +1827,7 @@ func _show_pile() -> void:
 		body.add_child(UI.spacer(6))
 
 
-func _CountFaction(arr: Array, f: int) -> int:
+func _count_faction(arr: Array, f: int) -> int:
 	var n := 0
 	for c in arr:
 		if C.faction(c) == f:

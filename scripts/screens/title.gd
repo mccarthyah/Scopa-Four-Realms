@@ -1,4 +1,10 @@
 extends Control
+# gdlint: disable=class-definitions-order
+# Declarations here are grouped for readability (constants beside the tables
+# they describe, fields beside the build code that fills them) rather than
+# strictly consts-before-vars. Ordering is a style rule with no runtime effect;
+# see docs/ASSESSMENT.md.
+
 ## Title + mode select.  Also hosts the faction picker and the codex.
 
 const UI := preload("res://scripts/ui/ui.gd")
@@ -8,7 +14,12 @@ const CardArt := preload("res://scripts/ui/card_art.gd")
 const RealmBackground := preload("res://scripts/ui/background.gd")
 const PUBLISHER_LOGO := preload("res://assets/branding/veloce_logo_transparent.png")
 const LOGO_TRANSPARENT := preload("res://assets/branding/four_realms_logo.png")
-const TILE_ART := [preload("res://assets/branding/forge_tile.png"), preload("res://assets/branding/grove_tile.png"), preload("res://assets/branding/horde_tile.png"), preload("res://assets/branding/crown_tile.png")]
+const TILE_ART := [
+	preload("res://assets/branding/forge_tile.png"),
+	preload("res://assets/branding/grove_tile.png"),
+	preload("res://assets/branding/horde_tile.png"),
+	preload("res://assets/branding/crown_tile.png"),
+]
 const MODE_ART := preload("res://assets/branding/panel_landscape.png")
 
 signal start_duel(config: Dictionary)
@@ -813,11 +824,11 @@ func _open_campaign() -> void:
 	var v: VBoxContainer = p.get_meta("body")
 	for i in range(T.CAMPAIGNS.size()):
 		var c: Dictionary = T.CAMPAIGNS[i]
-		var row := _campaign_row(c, i)
+		var row := _campaign_row(c)
 		v.add_child(row)
 
 
-func _campaign_row(c: Dictionary, idx: int) -> Control:
+func _campaign_row(c: Dictionary) -> Control:
 	var info: Dictionary = T.FACTIONS[c.faction]
 	var btn := Button.new()
 	btn.focus_mode = Control.FOCUS_NONE
@@ -993,9 +1004,18 @@ func _open_codex() -> void:
 	var v: VBoxContainer = p.get_meta("body")
 	v.add_child(UI.label("How Four Realms works", 26, UI.PARCHMENT, true))
 	v.add_child(_para("Four Realms is inspired by Scopa, a traditional Italian card game."))
-	v.add_child(_para("A 40-card deck, ranks 1–10 in four factions, replaces the suits: Forge (Coins), Grove (Cups), Horde (Swords) and Crown (Batons). Each player is dealt 3 cards; 4 lie face up on the table."))
-	v.add_child(_para("On your turn play one card. If its rank matches a table card you capture it. If a set of table cards adds up to your rank, you may capture that set instead — one card for a rank, or several whose sum equals it. Rank 10 can only take an exact 10."))
-	v.add_child(_para("Clear every card off the table with a capture to score a sweep. The final capture of a hand does not score a sweep. The last player to capture collects any remaining table cards at the end of the hand."))
+	v.add_child(_para(
+		"A 40-card deck, ranks 1–10 in four factions, replaces the suits: Forge (Coins), "
+		+ "Grove (Cups), Horde (Swords) and Crown (Batons). Each player is dealt 3 cards; "
+		+ "4 lie face up on the table."))
+	v.add_child(_para(
+		"On your turn play one card. If its rank matches a table card you capture it. "
+		+ "If a set of table cards adds up to your rank, you may capture that set instead "
+		+ "— one card for a rank, or several whose sum equals it. Rank 10 can only take an exact 10."))
+	v.add_child(_para(
+		"Clear every card off the table with a capture to score a sweep. The final "
+		+ "capture of a hand does not score a sweep. The last player to capture collects "
+		+ "any remaining table cards at the end of the hand."))
 	v.add_child(UI.label("Scoring, live", 26, UI.PARCHMENT, true))
 	for line in [
 		["Loot", "most captured cards"],
@@ -1011,7 +1031,10 @@ func _open_codex() -> void:
 		var info: Dictionary = T.FACTIONS[f]
 		v.add_child(_oath_line(f))
 	v.add_child(UI.label("Quests", 26, UI.PARCHMENT, true))
-	v.add_child(_para("Every duel shows two public quests. Complete a quest to earn its bonus Renown. They exist to teach strong card-play habits: hoard the 7s, deny the Runestone, keep the table clean."))
+	v.add_child(_para(
+		"Every duel shows two public quests. Complete a quest to earn its bonus Renown. "
+		+ "They exist to teach strong card-play habits: hoard the 7s, deny the Runestone, "
+		+ "keep the table clean."))
 	var close := UI.button("Understood", "primary")
 	close.pressed.connect(_codex_close)
 	v.add_child(close)

@@ -1,4 +1,10 @@
 extends RefCounted
+# gdlint: disable=class-definitions-order
+# Declarations here are grouped for readability (constants beside the tables
+# they describe, fields beside the build code that fills them) rather than
+# strictly consts-before-vars. Ordering is a style rule with no runtime effect;
+# see docs/ASSESSMENT.md.
+
 ## Card helpers.  Cards are plain integers, so decks, hands and the table are
 ## trivially serialisable (useful later for async duels / online play).
 ##

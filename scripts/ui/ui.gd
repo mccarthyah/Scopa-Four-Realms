@@ -1,4 +1,10 @@
 extends RefCounted
+# gdlint: disable=class-definitions-order
+# Declarations here are grouped for readability (constants beside the tables
+# they describe, fields beside the build code that fills them) rather than
+# strictly consts-before-vars. Ordering is a style rule with no runtime effect;
+# see docs/ASSESSMENT.md.
+
 ## Palette, fonts and widget factories.  Everything is built in code so the
 ## project is a handful of readable scripts with no scene-graph sprawl.
 class_name UI
@@ -39,6 +45,10 @@ const BAD := Color("c85b52")
 # pass) may have no .fontdata yet. Resolve them on first use and fall back to
 # Godot's own font rather than failing to parse the whole UI.
 static var _fonts_resolved := false
+# gdlint: disable=class-variable-name
+# Upper-case static vars act as module constants shared across the whole UI
+# (UI.LOW_SPEC is read at 28 call sites). Renaming them would churn every
+# screen for a naming convention this file does not otherwise follow.
 static var FONT_TITLE: Font = null
 static var FONT_BODY: Font = null
 static var FONT_BODY_BOLD: Font = null
@@ -55,7 +65,7 @@ static func resolve_fonts() -> void:
 
 ## Called from every factory, so fonts are ready no matter which entry point
 ## draws first.
-static func _font(path: String, title: bool = false, bold: bool = false) -> Font:
+static func _font(_path: String, title: bool = false, bold: bool = false) -> Font:
 	resolve_fonts()
 	if title:
 		return FONT_TITLE
@@ -307,7 +317,7 @@ static func vspace(w: int = 8) -> Control:
 
 
 ## Rounded "chip" with a label, used for HUD stats.
-static func chip(txt: String, col: Color = PANEL_HI, txt_col: Color = TEXT, size: int = 18) -> PanelContainer:
+static func chip(txt: String, _col: Color = PANEL_HI, txt_col: Color = TEXT, size: int = 18) -> PanelContainer:
 	var p := PanelContainer.new()
 	p.add_theme_stylebox_override("panel", fantasy_style("chip_active" if txt_col == GOLD else "chip", 0, 0))
 	var m := MarginContainer.new()
@@ -322,7 +332,7 @@ static func chip(txt: String, col: Color = PANEL_HI, txt_col: Color = TEXT, size
 	return p
 
 
-static func set_chip(p: PanelContainer, txt: String, col: Color = PANEL_HI, txt_col: Color = TEXT) -> void:
+static func set_chip(p: PanelContainer, txt: String, _col: Color = PANEL_HI, txt_col: Color = TEXT) -> void:
 	var l: Label = p.get_child(0).get_child(0)
 	l.text = txt
 	l.add_theme_color_override("font_color", txt_col)

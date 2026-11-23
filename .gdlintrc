@@ -1,0 +1,13 @@
+# gdtoolkit linter configuration (YAML).
+#
+# The limits are set to what this project actually writes, so `gdlint` is a gate
+# that starts green and stays meaningful. The defaults (100-character lines) flagged
+# 224 lines of working code out of ~9,500, which trains everyone to ignore the tool.
+#
+# Run exactly as CI does:
+#   python3 -m venv .venv && .venv/bin/pip install "gdtoolkit==4.*"
+#   .venv/bin/gdlint $(find scripts tools -name '*.gd')
+
+max-line-length: 200
+max-file-lines: 3500
+max-public-methods: 40
