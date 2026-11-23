@@ -99,3 +99,31 @@ With this build, `safe-check.sh` passes all three steps — 51 assets imported,
 the game boots, and 193 audit assertions pass with 0 failures. It was built
 without fontconfig, so it logs `compiled without fontconfig` once per font load;
 that is a capability notice, not a failure, and `safe-check.sh` now ignores it.
+
+## A trap when running the audit on a fresh checkout
+
+`scripts/ui/ui.gd` and `scripts/game/cards.gd` declare `class_name UI` and
+`class_name Cards`, and other scripts use them *unqualified* (`UI.LOW_SPEC`,
+`Cards.faction(c)`). Those names resolve through the editor's class cache,
+`.godot/global_script_class_cache.cfg`, which only exists after an import.
+
+Run the audit with `--path .` before an import has ever completed and Godot
+reports, for perfectly valid code:
+
+```
+SCRIPT ERROR: Parse Error: Identifier "UI" not declared in the current scope.
+SCRIPT ERROR: Parse Error: Identifier "Cards" not declared in the current scope.
+```
+
+The tests then never run, the process does not exit, and a timeout looks like a
+hang. It is not a code fault and it is not a cycle — `Cards` and `UI` are
+registered globals. Always import first:
+
+```bash
+"$GODOT" --headless --path . --import     # writes .godot/, the class cache
+"$GODOT" --headless --path . -- --audit
+```
+
+`safe-check.sh` already does this in the right order. CI does too, which is why
+CI is not fooled by it. Do not "fix" the code for these errors; check whether
+`.godot/` exists first.
