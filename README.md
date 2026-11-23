@@ -27,7 +27,7 @@ paths can hard-lock a virtualised or GPU-poor machine instead of failing, and a
 **Safe health check — no window, no GPU context, so it cannot freeze a VM:**
 
 ```bash
-GODOT=/path/to/godot ./safe-check.sh          # import + boot + 57 self-tests
+GODOT=/path/to/godot ./safe-check.sh          # import + boot + the full self-test audit
 GODOT=/path/to/godot ./safe-check.sh log      # the log from a frozen run
 ```
 

@@ -118,6 +118,7 @@ func run(m: Control) -> void:
 	await _test_display_scaling()
 	await _test_logo_layout()
 	await _test_settings_dialog()
+	await _test_export_hygiene()
 	await _test_orientation_setting()
 	await _test_settings_layout()
 	await _test_landscape_reflow()
@@ -444,6 +445,48 @@ func _test_settings_dialog() -> void:
 	Profile.save_profile()
 	main.show_title()
 	for i in range(4): await get_tree().process_frame
+
+
+## Every export preset must drop build tooling, docs and the unused scenic art.
+## A preset that ships tools/card_sources/ (8.6 MB of source art) or a 3.8 MB
+## image nothing references is bloat a player pays for on first install.
+func _test_export_hygiene() -> void:
+	var preset := ConfigFile.new()
+	if preset.load("res://export_presets.cfg") != OK:
+		fail("export: export_presets.cfg will not load")
+		return
+	var must_drop := ["tools/*", "screenshots/*", "docs/*", "README.md"]
+	var presets := 0
+	var problems: Array = []
+	for section in preset.get_sections():
+		# get_sections() also returns each "preset.N.options" subsection; only the
+		# bare "preset.N" sections carry the export filter.
+		if not section.begins_with("preset.") or not section.substr(7).is_valid_int():
+			continue
+		presets += 1
+		var filter: String = str(preset.get_value(section, "exclude_filter", ""))
+		var parts := filter.split(",", false)
+		for want in must_drop:
+			if not parts.has(want):
+				problems.append("%s lacks %s" % [section, want])
+	# The icons are the other half of release hygiene: an empty path means the
+	# platform shows Godot's default mark instead of the game's.
+	for key in ["launcher_icons/main_192x192",
+			"launcher_icons/adaptive_foreground_432x432",
+			"launcher_icons/adaptive_background_432x432"]:
+		var v: String = str(preset.get_value("preset.0.options", key, ""))
+		if v.is_empty() or not ResourceLoader.exists(v):
+			problems.append("android icon %s missing" % key)
+	for key in ["progressive_web_app/icon_144x144",
+			"progressive_web_app/icon_180x180",
+			"progressive_web_app/icon_512x512"]:
+		var v: String = str(preset.get_value("preset.1.options", key, ""))
+		if v.is_empty() or not ResourceLoader.exists(v):
+			problems.append("pwa icon %s missing" % key)
+	if problems.is_empty() and presets == 4:
+		ok("all 4 export presets drop build tooling and ship real launcher icons")
+	else:
+		fail("export hygiene: %s" % str(problems))
 
 
 ## The Settings choice persists all values and its callback applies a desktop
