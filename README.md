@@ -363,6 +363,9 @@ The audit checks, among other things:
 * the Veiled Warden's twist: 60 complete hidden-table deals are played move by move, asserting the
   veil is set at the deal, never hides a card the player can also see, and never returns once it has
   lifted (one veiled card per hand),
+* the toast queue stays capped instead of growing all match, the turn clock is held while a sheet is
+  open (reading the rules can no longer auto-play your turn), and an oversized frame delta is clamped
+  so a suspended app cannot skip a turn,
 * AI move choice stays under 8 ms (it measures ~30 µs).
 
 Latest run: 300 AI games (318 sweeps), layout clean, **failures=0** — including a real save/resume round-trip through the profile files

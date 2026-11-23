@@ -20,6 +20,13 @@ const C := preload("res://scripts/game/cards.gd")
 const Duel := preload("res://scripts/game/duel.gd")
 
 const TURN_SECONDS := 26.0
+## How many toasts may stack before the oldest is retired. Without a cap the box
+## accumulated one panel per event for the whole duel.
+const MAX_TOASTS := 3
+## Largest frame delta the turn clock will accept. A suspended app or a long hitch
+## can deliver a multi-second delta; without this clamp that landed as one frame
+## and auto-played the player's turn.
+const MAX_TURN_DELTA := 0.25
 
 var config: Dictionary = {}
 var duel: Duel
@@ -1684,9 +1691,13 @@ func _toast(title: String, sub: String, col: Color = UI.GOLD) -> void:
 	t.tween_property(p, "modulate:a", 1.0, 0.16)
 	t.chain().tween_property(p, "modulate:a", 0.0, 0.4).set_delay(1.9)
 	t.chain().tween_callback(p.queue_free)
-	while _toast_box.get_child_count() > 3:
-		_toast_box.get_child(0).queue_free()
-		break
+	# Trim the oldest toasts. This was a `while` containing a `break`, so it only
+	# ever retired one panel — and queue_free() is deferred, so the freed child was
+	# still counted by get_child_count() on the next pass. Every toast is a panel
+	# carrying its own tween, so the box grew for the whole duel. _remove_now()
+	# detaches first (which is what actually drops the count) and frees after.
+	while _toast_box.get_child_count() > MAX_TOASTS:
+		_remove_now(_toast_box.get_child(0))
 
 
 # ---------------------------------------------------------------------------
@@ -2268,8 +2279,13 @@ func _process(delta: float) -> void:
 		if fps < 30.0 and _bg != null and _bg.has_method("set_quiet"):
 			_bg.set_quiet()
 			print("[scopa] performance: ", fps, " fps — background animations paused")
-	if duel.is_my_turn(0) and not duel.hand_over and not _busy:
-		_turn_time -= delta
+	# Reading a sheet is not a move. Opening the rules, the pile view or an Oath
+	# picker does not set _busy or pause the tree, so the clock used to run down
+	# behind the panel and auto-play a card the player never chose. The clock is
+	# held while any sheet is open, and a suspended app cannot hand this a huge
+	# delta that skips the whole turn in one frame.
+	if duel.is_my_turn(0) and not duel.hand_over and not _busy and _overlay == null:
+		_turn_time -= minf(delta, MAX_TURN_DELTA)
 		if _turn_time <= 5.0 and _turn_time > 0.0:
 			var bucket := int(_turn_time)
 			if bucket != int(_last_tick):
@@ -2279,11 +2295,9 @@ func _process(delta: float) -> void:
 			_turn_time = 0.0
 			_auto_play()
 		_turn_meter.queue_redraw()
-	elif _turn_time != TURN_SECONDS and not _busy:
+	elif _turn_time != TURN_SECONDS and not _busy and _overlay == null:
 		_turn_time = TURN_SECONDS
 		_turn_meter.queue_redraw()
-	if _bg != null:
-		pass
 
 
 func _auto_play() -> void:

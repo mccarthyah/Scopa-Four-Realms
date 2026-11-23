@@ -92,6 +92,7 @@ func run(m: Control) -> void:
 	_test_profile_io()
 	_test_deal()
 	_test_overlay_dismiss()
+	await _test_toast_cap_and_turn_clock()
 	_test_quindici()
 	_test_animation_settings()
 	_test_hand_dimming()
@@ -1427,6 +1428,58 @@ func _test_overlay_dismiss() -> void:
 		fail("overlay test: %d dim overlay(s) still blocking after close" % after)
 	else:
 		ok("closing a sheet clears its input-blocking overlay in the same frame")
+	d.queue_free()
+	await get_tree().process_frame
+
+
+## Two regressions that only show up in a long duel:
+##   1. the toast box trimmed at most one panel per toast and counted children that
+##      were only queued for deletion, so it grew for the whole match;
+##   2. the turn clock kept running behind an open sheet, so reading the rules
+##      auto-played the player's turn.
+func _test_toast_cap_and_turn_clock() -> void:
+	var d = load("res://scripts/screens/duel.gd").new()
+	d.config = {"mode": T.Mode.QUICK, "seed": 12}
+	main.add_child(d)
+	for i in range(40):
+		await get_tree().process_frame
+	# 1. toasts: fire many, then let the deferred frees settle
+	for i in range(12):
+		d._toast("Toast %d" % i, "body")
+	for i in range(4):
+		await get_tree().process_frame
+	var toasts: int = d._toast_box.get_child_count()
+	if toasts > d.MAX_TOASTS:
+		fail("toast box kept %d panels (cap is %d)" % [toasts, d.MAX_TOASTS])
+	else:
+		ok("toast box stays capped at %d panels" % d.MAX_TOASTS)
+	# 2. the clock must not move while a sheet is open
+	d.duel.turn = 0
+	d._busy = false
+	d._overlay = null
+	d._show_rules()
+	await get_tree().process_frame
+	if d._overlay == null:
+		fail("rules sheet did not open, so the turn-clock test proved nothing")
+	else:
+		var held: float = d._turn_time
+		for i in range(8):
+			await get_tree().process_frame
+		if not is_equal_approx(d._turn_time, held):
+			fail("the turn clock ran down behind an open sheet (%.2f -> %.2f)" % [held, d._turn_time])
+		else:
+			ok("the turn clock is held while a sheet is open")
+		d._close_overlay()
+	# 3. a suspended app cannot skip a whole turn in one frame
+	d.duel.turn = 0
+	d._busy = false
+	d._overlay = null
+	d._turn_time = 10.0
+	d._process(30.0)
+	if d._turn_time > 9.9 or d._turn_time < 9.5:
+		fail("an oversized frame delta moved the turn clock by %.2fs" % (10.0 - d._turn_time))
+	else:
+		ok("an oversized frame delta is clamped to one frame of turn clock")
 	d.queue_free()
 	await get_tree().process_frame
 
