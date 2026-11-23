@@ -357,6 +357,10 @@ The project ships with a headless audit that plays the game thousands of times a
 godot --headless --path . -- --audit
 ```
 
+It ends with `=== AUDIT COMPLETE · <checks> checks · failures=<n> ===`, so the
+suite reports its own size rather than leaving a number in this file to drift.
+At the time of writing that is 49 test functions and 147 checks.
+
 The audit checks, among other things:
 
 * card conservation (40 unique cards across deck, table, hands and piles) at deal **and** after 300

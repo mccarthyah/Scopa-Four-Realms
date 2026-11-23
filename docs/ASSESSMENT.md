@@ -28,7 +28,7 @@ desktop, and the fact that none of the excellent verification work runs automati
 |---|---|---|
 | Rules engine (`game/`) | **A** | Pure, serialisable, RNG-state-accurate, validated round-trip |
 | Persistence | **A−** | Atomic writes, strict `valid_save`, legacy-save path; no profile version key |
-| Verification (`audit.gd`) | **A−** | 49 test functions; **now executed**, 193 assertions, 0 failures against a headless 4.7.2 build. Top grade withheld: the suite had a latent parse error for the whole audit, so it was never actually running (see *Execution*) |
+| Verification (`audit.gd`) | **A−** | 49 test functions; **now executed**, 147 assertions, 0 failures against a headless 4.7.2 build. Top grade withheld: the suite had a latent parse error for the whole audit, so it was never actually running (see *Execution*) |
 | UI / screens | **B−** | Correct and accessible, but still a 2,351-line file, positional lookups, dead hooks |
 | Platform (Android/iOS) | **A−** | Back gesture, pause-safe clock, mute, real Android icons; still no pause-on-background |
 | Release hygiene | **A** | LICENSE, OFL text, icons on all targets, dev files and dead art excluded |
@@ -70,9 +70,26 @@ Result after the fixes:
 $ GODOT=/tmp/gbin/godot ./safe-check.sh
 [1/3] Importing assets        ok — 51 assets, no errors
 [2/3] Booting the game        ok — main loop running, stage -> title
-[3/3] Running the self-test   ok — 193 checks passed, 0 failures
+[3/3] Running the self-test   ok — 147 checks passed, 0 failures
 ALL HEADLESS CHECKS PASSED.
 ```
+
+### One more thing running it found: the suite ran twice
+
+The tally itself was wrong at first, and the reason is worth recording. `run()`
+ended at 193 checks. It should have ended at 147, because **the whole suite was
+executing twice**.
+
+`_test_display_scaling()` builds a probe instance of `scripts/main.gd` to measure
+the landscape stage. `main._ready()` starts the audit, and it did so
+unconditionally — so that probe launched a *second* complete run from inside a
+test. Both runs appended to stdout, so the log looked like one long pass, while
+the counters had quietly restarted: the "193" was one run's 46 checks plus the
+other run's 147, and the number in `=== AUDIT COMPLETE ===` had always been
+just the last one.
+
+`_ready()` now takes an audit only when no other `Main` owns it. Fixed in the
+same pass that made the suite print its own count — the count is what exposed it.
 
 ### Confirmed independently in CI
 
@@ -112,7 +129,7 @@ Lint     0 findings (was 307 before the P2 lint pass)
 Assets   card atlas 1664×1752 ✔ matches 8×208 × 6×292
          effect atlas 1040×388 ✔ matches EffectAtlas.WIDTH/HEIGHT
          all 12 UI nine-slice frames 96×96 (switches 144×76) ✔
-Runtime  Godot 4.7.2 headless — import 51 assets, boot clean, 193 assertions, 0 failures
+Runtime  Godot 4.7.2 headless — import 51 assets, boot clean, 147 assertions, 0 failures
 ```
 
 Reproduce:

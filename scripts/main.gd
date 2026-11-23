@@ -15,6 +15,9 @@ const DuelScreen := preload("res://scripts/screens/duel.gd")
 static var AuditScript := load("res://scripts/audit.gd")
 
 var current: Control = null
+## Set on the instance that actually owns the audit run, so probe instances of
+## this script built by the audit never start a second, nested suite.
+static var _audit_owner: Control = null
 var _stage := "boot"
 # Cheap wall-clock frame intervals for diagnosing stutter. These include the
 # intentional FPS cap and OS scheduling; they are not GPU timing measurements.
@@ -61,11 +64,17 @@ func _ready() -> void:
 	_detect_low_spec()
 	_report_environment()
 	show_title(true)
-	if OS.get_cmdline_user_args().has("--audit"):
+	# Guarded: the audit builds probe instances of this same script to measure
+	# layout, and an unguarded _ready() made each probe re-run the whole suite
+	# from inside the test that spawned it. The suite ran twice, the second run
+	# restarted the counters, and the reported total was really one run's worth.
+	if OS.get_cmdline_user_args().has("--audit") and _audit_owner == null:
+		_audit_owner = self
 		var audit = AuditScript.new()
 		add_child(audit)
 		audit.run(self)
-	elif OS.get_cmdline_user_args().has("--smoke"):
+	elif OS.get_cmdline_user_args().has("--smoke") and _audit_owner == null:
+		_audit_owner = self
 		var smoke = AuditScript.new()
 		add_child(smoke)
 		smoke.smoke_test(self)
