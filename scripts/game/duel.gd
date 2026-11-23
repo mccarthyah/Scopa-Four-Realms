@@ -535,12 +535,10 @@ func _winner_of(a: int, b: int, tie_owner: int) -> int:
 	return 0 if a > b else 1
 
 
+## Delegates to the shared definition in Tables: the duel screen used to have
+## its own copy of this loop, so the pile view and the score sheet could drift.
 func _count_faction(arr: Array, f: int) -> int:
-	var n := 0
-	for c in arr:
-		if C.faction(c) == f:
-			n += 1
-	return n
+	return T.count_faction(arr, f)
 
 
 func primiera_total(arr: Array) -> int:

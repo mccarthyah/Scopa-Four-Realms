@@ -44,7 +44,6 @@ var _top_meta: Label
 var _top_avatar: Control
 var _top_favor: PanelContainer
 var _top_scoopa: PanelContainer
-var _top_pile: Label
 var _renown0: Label
 var _renown1: Label
 var _renown_bar: Control
@@ -61,7 +60,7 @@ var _hand_row: HBoxContainer
 var _btn_oath: Button
 var _btn_hint: Button
 var _btn_pile: Button
-var _favor_label: Label
+var _btn_menu: Button
 var _favor_strip: Control
 var _quest_list: VBoxContainer
 var _banner_meter: Control
@@ -73,7 +72,6 @@ var _overlay_blocks_back := false
 var _menu_paused := false
 var _pause_before_menu := false
 var _deck_chip: PanelContainer
-var _pile_chip: PanelContainer
 var _goal_chip: PanelContainer
 var _score_chip: PanelContainer
 var _portrait_root: VBoxContainer
@@ -94,7 +92,6 @@ var _selection := -1
 var _busy := false
 var _ai_token := 0
 var _hinted_once := false
-var _timeouts := 0
 var _match_recorded := false
 var _last_tick := -10.0
 var _scopa_held := false
@@ -465,7 +462,7 @@ func _apply_orientation_layout() -> void:
 	for counter in [_deck_chip, _goal_chip, _score_chip]:
 		counter.reparent(turn_counters if wide else turn_contents, false)
 	turn_counters.visible = wide
-	_layout_parts.Actions.get_child(3).text = "Menu" if wide else "☰"
+	_btn_menu.text = "Menu" if wide else "☰"
 	_table_grid.offset_bottom = -70 if wide else -26
 	_table_sub.offset_top = -68 if wide else -24
 	_table_sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART if wide else TextServer.AUTOWRAP_OFF
@@ -619,9 +616,6 @@ func _build_hand() -> Control:
 	fav.draw.connect(_draw_favor_pips)
 	_hand_box.add_child(fav)
 	_favor_strip = fav
-	_favor_label = UI.label("", 13, UI.GOLD)
-	_favor_label.position = Vector2(4, 2)
-	fav.add_child(_favor_label)
 	return _hand_box
 
 
@@ -647,10 +641,10 @@ func _build_actions() -> Control:
 	_btn_pile.pressed.connect(_show_pile)
 	h.add_child(_btn_pile)
 
-	var menu := UI.button("☰", "ghost", 18)
-	menu.custom_minimum_size = Vector2(52, 52)
-	menu.pressed.connect(_open_menu)
-	h.add_child(menu)
+	_btn_menu = UI.button("☰", "ghost", 18)
+	_btn_menu.custom_minimum_size = Vector2(52, 52)
+	_btn_menu.pressed.connect(_open_menu)
+	h.add_child(_btn_menu)
 	return h
 
 
@@ -1512,20 +1506,16 @@ func _handle_events() -> void:
 				else:
 					Sfx.play("oath", -12.0)
 			"quest":
-				var q := _quest_by_key(ev.quest)
+				var q := T.quest_by_key(ev.quest)
 				Sfx.play("favor", -8.0)
-				_toast("Quest complete · %s" % q.name, "+%d Renown" % ev.reward, UI.GOOD)
+				var qname: String = q.get("name", ev.quest)
+				_toast("Quest complete · %s" % qname, "+%d Renown" % ev.reward, UI.GOOD)
 			"reveal":
 				_toast("The veil lifts", "A hidden table card is revealed: %s." % C.label(ev.card))
 			"match_end":
 				pass
 
 
-func _quest_by_key(k: String) -> Dictionary:
-	for q in T.QUESTS:
-		if q.key == k:
-			return q
-	return {"name": k, "reward": 1}
 
 
 func _scopa_celebration(who: int, glory: int) -> void:
@@ -1811,7 +1801,7 @@ func _show_pile() -> void:
 		head.add_child(UI.label(title, 18, UI.GOLD, true, true))
 		head.add_child(UI.label("%d cards · Forge %d · Banner %d" % [
 			duel.captured[who].size(),
-			_count_faction(duel.captured[who], T.FORGE),
+			T.count_faction(duel.captured[who], T.FORGE),
 			duel.primiera_total(duel.captured[who])], 14, UI.TEXT_DIM, false, true))
 		var wrap := HFlowContainer.new()
 		wrap.add_theme_constant_override("h_separation", 5)
@@ -1827,12 +1817,6 @@ func _show_pile() -> void:
 		body.add_child(UI.spacer(6))
 
 
-func _count_faction(arr: Array, f: int) -> int:
-	var n := 0
-	for c in arr:
-		if C.faction(c) == f:
-			n += 1
-	return n
 
 
 # ---------------------------------------------------------------------------
@@ -2066,12 +2050,10 @@ func _show_hand_summary() -> void:
 		var tie_explanation := UI.label(" ".join(tie_notes), 24 if _landscape else 19, UI.TEXT_DIM, false, true)
 		tie_explanation.add_theme_font_override("font", ThemeDB.fallback_font)
 		body.add_child(tie_explanation)
-	var quests_title := UI.label("QUEST BONUSES · THIS MATCH", 24 if _landscape else 20, UI.GOLD)
-	quests_title.add_theme_font_override("font", ThemeDB.fallback_font)
 	if not duel.quests.is_empty():
+		var quests_title := UI.label("QUEST BONUSES · THIS MATCH", 24 if _landscape else 20, UI.GOLD)
+		quests_title.add_theme_font_override("font", ThemeDB.fallback_font)
 		body.add_child(quests_title)
-	else:
-		quests_title.free()
 	for i in range(duel.quests.size()):
 		var quest: Dictionary = duel.quests[i]
 		var bonus := "%s · You earned +%d points" % [quest.name, quest.reward] if duel.quest_done[i] else "%s · Not completed (+0)" % quest.name
@@ -2311,15 +2293,15 @@ var _perf_checked := false
 func _process(delta: float) -> void:
 	if duel == null:
 		return
-	# On a software rasteriser every full-screen animated layer competes with the
-	# cards for draw time. Check once, a few seconds in, and let the backdrop rest
-	# if this machine cannot hold 30fps.
+	# On a software rasteriser the full-screen backdrop competes with the cards
+	# for draw time. Check once, a few seconds in, and say so. There is nothing to
+	# switch off: this used to call a no-op RealmBackground.set_quiet() and print
+	# "background animations paused", a claim about work that never happened.
 	if not _perf_checked and Engine.get_process_frames() > 240:
 		_perf_checked = true
 		var fps := Engine.get_frames_per_second()
-		if fps < 30.0 and _bg != null and _bg.has_method("set_quiet"):
-			_bg.set_quiet()
-			print("[scopa] performance: ", fps, " fps — background animations paused")
+		if fps < 30.0:
+			print("[scopa] performance: ", fps, " fps on a software rasteriser")
 	# Reading a sheet is not a move. Opening the rules, the pile view or an Oath
 	# picker does not set _busy or pause the tree, so the clock used to run down
 	# behind the panel and auto-play a card the player never chose. The clock is
@@ -2342,7 +2324,6 @@ func _process(delta: float) -> void:
 
 
 func _auto_play() -> void:
-	_timeouts += 1
 	var best := DuelAI.choose_move(duel, 0)
 	if best.is_empty():
 		return
