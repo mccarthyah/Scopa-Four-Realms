@@ -100,3 +100,15 @@ jobs:
           ! grep -q '^FAIL:' "$RUNNER_TEMP/audit.log"
           grep -q 'AUDIT COMPLETE' "$RUNNER_TEMP/audit.log"
           grep -q 'failures=0' "$RUNNER_TEMP/audit.log"
+          # A floor, not a target: "failures=0" is also what a suite that
+          # silently stopped running would report. If a test is removed on
+          # purpose, lower MIN_CHECKS in the same commit.
+          MIN_CHECKS=150
+          checks=$(sed -n 's/.*AUDIT COMPLETE.* \([0-9][0-9]*\) checks.*/\1/p' \
+                     "$RUNNER_TEMP/audit.log" | tail -1)
+          : "${checks:=0}"
+          if [ "$checks" -lt "$MIN_CHECKS" ]; then
+            echo "::error::audit ran only $checks checks, expected at least $MIN_CHECKS"
+            exit 1
+          fi
+          echo "audit ran $checks checks"
