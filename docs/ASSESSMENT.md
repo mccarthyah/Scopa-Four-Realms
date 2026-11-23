@@ -353,6 +353,11 @@ pattern).
 misses subdirectories), and **does not upload any artifact**. The audit log stays in the step output,
 which is enough to read a failure without keeping a stored copy to expire.
 
+One assertion in it exists because the rest are not enough on their own: it requires **at least 150
+checks**. `failures=0` is equally true of a suite that ran a third of its tests, and a parse error in
+`audit.gd` is the concrete way that happened here. If a test is ever removed deliberately, the floor
+comes down in the same commit.
+
 ### 8. No LICENSE, and no OFL text for the bundled fonts
 
 There is no `LICENSE` file at the repository root, and `fonts/` contains three `.ttf` files with no
