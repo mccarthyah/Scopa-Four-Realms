@@ -760,12 +760,25 @@ func _test_landscape_title() -> void:
 	var title = TitleScreen.new()
 	host.add_child(title)
 	var good := true
-	for dims in [Vector2(1706, 960), Vector2(540, 960), Vector2(720, 1280), Vector2(1280, 960)]:
+	# 720x960 is what an iPad portrait actually measures in canvas units, and it
+	# is 209 px SHORTER than the phone the home screen was tuned for. 720x940 is
+	# the same canvas less the home-indicator safe area. The home screen used to
+	# clip the last line of the record panel off the bottom of both; the scroll
+	# indicator is hidden, so nothing on screen admitted it.
+	for dims in [Vector2(1706, 960), Vector2(540, 960), Vector2(720, 1280), Vector2(1280, 960), Vector2(720, 960), Vector2(720, 940), Vector2(667, 960)]:
 		host.size = dims
 		for i in range(8): await get_tree().process_frame
 		var bounds := host.get_global_rect()
 		for control in [title._mode_list, title.find_child("YourRecord", true, false)]:
 			if not bounds.encloses(control.get_global_rect()):
+				good = false
+		# Nothing may hang past the bottom edge, and no home tile may be
+		# compressed below the size its own contents asked for.
+		var record: Control = title.find_child("YourRecord", true, false)
+		if record == null or record.get_global_rect().end.y > bounds.end.y + 1.0:
+			good = false
+		for row in title._mode_list.get_children():
+			if row.size.y < row.get_combined_minimum_size().y - 0.5:
 				good = false
 		if title._scroll.get_v_scroll_bar().max_value > title._scroll.get_v_scroll_bar().page + 1:
 			good = false

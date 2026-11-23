@@ -214,7 +214,16 @@ func _update_title_layout() -> void:
 			_title_margin.add_theme_constant_override("margin_right", int(maxf(24, global_position.x + size.x - bottom_right.x)))
 			_title_margin.add_theme_constant_override("margin_top", int(maxf(16, top_left.y)))
 			_title_margin.add_theme_constant_override("margin_bottom", int(maxf(16, viewport.y - bottom_right.y)))
-	var record_scale := 1.3 if wide else clampf(size.x / 540.0, 1.0, 1.3)
+	# How much the record text may grow. Width alone is the wrong budget: an iPad
+	# portrait is 720x960 in canvas units, so it scaled the record to 1.3x on a
+	# canvas 209 px SHORTER than the 540x960 phone the layout was tuned for, and
+	# the last line of "YOUR RECORD" was clipped off the bottom of the screen.
+	# Take the smaller of the width and height budgets so the type only grows
+	# when there is room for it in both directions. The 0.85 keeps real headroom:
+	# at full height the column landed within 16 px of the bottom margin, and an
+	# iPad portrait then loses more of it to the home-indicator safe area than
+	# there is left to give.
+	var record_scale := 1.3 if wide else minf(clampf(size.x / 540.0, 1.0, 1.3), clampf(size.y / 960.0 * 0.85, 0.8, 1.3))
 	for label in _title_parts[2].find_children("*", "Label", true, false):
 		if not label.has_meta("home_font_size"):
 			label.set_meta("home_font_size", label.get_theme_font_size("font_size"))
