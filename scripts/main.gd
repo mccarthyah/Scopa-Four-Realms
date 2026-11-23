@@ -29,6 +29,7 @@ func _notification(what: int) -> void:
 	if what == NOTIFICATION_RESIZED and is_node_ready() and current != null \
 			and is_instance_valid(current):
 		_layout_stage(current)
+		_report_ios_duel_layout.call_deferred()
 
 
 func _process(_delta: float) -> void:
@@ -85,11 +86,6 @@ func _ready() -> void:
 const DESIGN_WIDTH := 540.0
 
 
-func _is_wide() -> bool:
-	var v := get_viewport_rect().size
-	return v.x > v.y * 0.72
-
-
 func _swap(screen: Control, fade: bool = true) -> void:
 	if current != null and is_instance_valid(current):
 		current.queue_free()
@@ -107,32 +103,22 @@ func _swap(screen: Control, fade: bool = true) -> void:
 func _layout_stage(screen: Control) -> void:
 	screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var v := get_viewport_rect().size
-	if screen is TitleScreen:
+	if screen is TitleScreen or v.x <= v.y:
 		return
-	if v.x > v.y * 1.12:
-		var w: float = minf(1760.0, v.x)
-		var margin: float = maxf((v.x - w) * 0.5, 0.0)
-		screen.anchor_left = 0.0
-		screen.anchor_right = 0.0
-		screen.offset_left = margin
-		screen.offset_right = margin + w
-	elif _is_wide():
-		# Bounded portrait column - but only when there is spare width to bound.
-		#
-		# _is_wide() is "no longer tall" (v.x > v.y * 0.72), which an iPad in
-		# portrait also satisfies: with canvas_items + expand, an iPad 9.7 or a
-		# 12.9" Pro portrait works out to 720x960, so this branch clamped a 720
-		# wide canvas down to 540 and left a 90px dead strip down each side. The
-		# clamp is for wide desktop windows that would otherwise stretch a phone
-		# column across the screen; a device that is still taller than it is wide
-		# should fill its width, and the screens already reflow themselves when
-		# they are genuinely wide.
-		var w: float = minf(DESIGN_WIDTH, v.x) if v.x > v.y else v.x
-		var margin: float = maxf((v.x - w) * 0.5, 0.0)
-		screen.anchor_left = 0.0
-		screen.anchor_right = 0.0
-		screen.offset_left = margin
-		screen.offset_right = margin + w
+	var width_limit := 1760.0 if v.x > v.y * 1.12 else DESIGN_WIDTH
+	var width := minf(width_limit, v.x)
+	var gutter := (v.x - width) * 0.5
+	screen.offset_left = gutter
+	screen.offset_right = -gutter
+
+
+func _report_ios_duel_layout() -> void:
+	if OS.get_name() != "iOS" or not is_instance_valid(current) or not current is DuelScreen:
+		return
+	var window := get_window()
+	print("[scopa] duel layout: window=", window.size,
+		" viewport=", window.get_visible_rect().size, " stage=", current.get_rect(),
+		" stretch=", window.content_scale_mode, "/", window.content_scale_aspect)
 
 
 ## One line, printed at boot and visible in the log, that says everything needed
@@ -264,3 +250,4 @@ func _start_duel(config: Dictionary) -> void:
 	await get_tree().process_frame
 	if is_instance_valid(s) and current == s:
 		_stage = "duel:ready"
+		_report_ios_duel_layout()
