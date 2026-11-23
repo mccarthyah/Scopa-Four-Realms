@@ -108,8 +108,8 @@ const CARD_H_BIG := 174
 ## Anti-aliasing on a StyleBoxFlat replaces the rectangle with a tessellated
 ## triangle mesh: roughly 57 primitives per draw instead of 2, every frame, for
 ## every panel. On a software rasteriser (any VM without a GPU) that was the
-## single largest cost in the game — ~9,700 primitives per frame. Off, plus the
-## optional freeze() helper so no StyleBox is ever mutated per frame.
+## single largest cost in the game — ~9,700 primitives per frame. Off, and the
+## chrome is pre-rendered nine-slice art instead (see fantasy_style below).
 ## Low-spec mode: set at boot when the machine has no real GPU (see main.gd).
 ## Square corners are 2 triangles; a rounded corner is tessellated into ~50-100,
 ## and on a software rasteriser every one of those triangles costs CPU time.
@@ -131,67 +131,6 @@ static func flat(col: Color, radius: int = 12, border: Color = Color(0, 0, 0, 0)
 	# pay for it; everything squared-off stays on the cheap path.
 	s.anti_aliasing = keep_corners
 	return s
-
-
-## Convert a StyleBox into a cheap textured quad.
-##
-## WARNING: this renders a SubViewport and reads the pixels back, which is a hard
-## CPU/GPU sync costing milliseconds on a software rasteriser. Use it for
-## long-lived, rarely created boxes only — never inside a per-item loop, and never
-## per frame. With anti_aliasing off a plain StyleBox is already 2 triangles.
-##
-## A plain rectangle with square corners is only 2 triangles, but a StyleBox with
-## corner radii is tessellated on every draw. freeze() rasterises the box once
-## into a texture (one quad, alpha preserved) and returns a StyleBoxTexture, so a
-## rounded panel costs 2 primitives per frame instead of ~57. Returns null if the
-## texture cannot be created, so callers can fall back to the StyleBox itself.
-static func freeze(box: StyleBox, w: int, h: int) -> StyleBoxTexture:
-	if box == null or w < 2 or h < 2:
-		return null
-	if DisplayServer.get_name() == "headless":
-		return null
-	if RenderingServer.get_video_adapter_name() == "":
-		return null
-	var vp := SubViewport.new()
-	vp.size = Vector2i(w, h)
-	vp.transparent_bg = true
-	vp.disable_3d = true
-	vp.render_target_update_mode = SubViewport.UPDATE_ONCE
-	vp.gui_disable_input = true
-	var host := Control.new()
-	host.size = Vector2(w, h)
-	host.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var painter := _BoxPainter.new()
-	painter.box = box
-	painter.size = Vector2(w, h)
-	host.add_child(painter)
-	vp.add_child(host)
-	Engine.get_main_loop().root.add_child(vp)
-	# Two processed frames, then read back. Deliberately not awaiting
-	# RenderingServer.frame_post_draw: that signal does not fire on every
-	# renderer and awaiting it would hang the caller forever.
-	var t := 0
-	while t < 2:
-		await Engine.get_main_loop().process_frame
-		t += 1
-	var tex: Texture2D = vp.get_texture()
-	var img: Image = tex.get_image() if tex != null else null
-	vp.get_parent().remove_child(vp)
-	vp.free()
-	if img == null:
-		return null
-	var st := StyleBoxTexture.new()
-	st.texture = ImageTexture.create_from_image(img)
-	return st
-
-
-## Paints a StyleBox into a viewport so freeze() can capture it.
-class _BoxPainter extends Control:
-	var box: StyleBox
-
-	func _draw() -> void:
-		if box != null:
-			draw_style_box(box, Rect2(Vector2.ZERO, size))
 
 
 ## Pre-rendered, nine-slice art keeps rounded fantasy frames on the software

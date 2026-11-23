@@ -270,12 +270,6 @@ func puzzle_done_today() -> bool:
 	return last_puzzle_date == today_key() and last_puzzle_won
 
 
-func mark_puzzle_solved(won: bool) -> void:
-	last_puzzle_date = today_key()
-	last_puzzle_won = won
-	save_profile()
-
-
 ## --- interrupted-duel support (also the basis for async duels) -------------
 func store_duel(state: Dictionary) -> void:
 	saved_duel = state.duplicate(true)
