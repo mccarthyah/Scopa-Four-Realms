@@ -23,7 +23,10 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  GODOT_VERSION: 4.4.1
+  # Must match testflight.yml and the 4.7 in project.godot's config/features:
+  # the audit runs the real engine, so a different version would test a
+  # different engine than the one that ships.
+  GODOT_VERSION: 4.7.2
   # SHA-256 of Godot_v4.4.1-stable_linux.x86_64.zip.
   #
   # Deliberately blank. The iOS workflow pins its download by hash, and this one
