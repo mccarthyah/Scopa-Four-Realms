@@ -32,7 +32,7 @@ desktop, and the fact that none of the excellent verification work runs automati
 | UI / screens | **B−** | Correct and accessible, but still a 2,351-line file, positional lookups, dead hooks |
 | Platform (Android/iOS) | **A−** | Back gesture, pause-safe clock, mute, real Android icons; still no pause-on-background |
 | Release hygiene | **A** | LICENSE, OFL text, icons on all targets, dev files and dead art excluded |
-| Tooling / CI | **A−** | lint + audit on every push, Godot pinned by SHA-256; still needs one real CI run to confirm the job itself |
+| Tooling / CI | **A** | lint + audit on every push, Godot pinned by SHA-256; both jobs now observed green on GitHub (PR #1) |
 | Lint cleanliness | **A** | 0 syntax errors, 0 lint findings |
 
 Grades above reflect the state after the P1 and P2 work below was completed; the
@@ -73,6 +73,25 @@ $ GODOT=/tmp/gbin/godot ./safe-check.sh
 [3/3] Running the self-test   ok — 193 checks passed, 0 failures
 ALL HEADLESS CHECKS PASSED.
 ```
+
+### Confirmed independently in CI
+
+The same suite also passes on GitHub, on the *published* binary rather than the
+hand-built one — which is the check that matters, because that is what the
+workflow will keep running:
+
+```
+CI run 45101839204 (PR #1), commit 26ce17d
+  ✓ GDScript parse + lint   (gdparse + gdlint, all files)
+  ✓ Headless audit          Download and verify Godot · Import assets ·
+                            Run the audit · Upload the audit log
+```
+
+Both steps run under `set -euo pipefail`, so `sha256sum -c` passing means the
+downloaded archive really did match the pinned
+`cadd3204...329e4`, and the `grep -q 'failures=0'` passing means the audit
+reported zero failures. That closes the last unverified claim the first pass of
+this assessment made — that the CI workflow would work if it ever ran.
 
 What this does **and does not** prove. It proves the rules engine, the AI, the
 save/resume round-trip, and that every screen builds and lays out without
