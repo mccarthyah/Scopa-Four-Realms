@@ -29,12 +29,15 @@ env:
   GODOT_VERSION: 4.7.2
   # SHA-256 of Godot_v4.4.1-stable_linux.x86_64.zip.
   #
-  # Deliberately blank. The iOS workflow pins its download by hash, and this one
-  # does the same the moment the real value is recorded - but a hash must never be
-  # guessed. Run the audit once on a machine with network access, copy the digest
-  # from the log line below, and paste it here; the step then verifies the archive
-  # instead of merely reporting its digest.
-  GODOT_SHA256: ""
+  # SHA-256 of Godot_v4.7.2-stable_linux.x86_64.zip, as published by the GitHub
+  # Releases API for godotengine/godot-builds tag 4.7.2-stable (the `digest`
+  # field of that asset, and the size matches the downloadable artifact):
+  #   size  77860424 bytes
+  #   digest sha256:cadd3204e728a35d3f13adb7fd0d7902636b79f6b95c40c265eb73b6c35329e4
+  # The CI step fails the job if this does not match, which is what turns the
+  # download into a pinned download. If GODOT_VERSION ever changes, the digest
+  # must change with it and CI will say so loudly rather than silently.
+  GODOT_SHA256: "cadd3204e728a35d3f13adb7fd0d7902636b79f6b95c40c265eb73b6c35329e4"
 
 jobs:
   lint:
