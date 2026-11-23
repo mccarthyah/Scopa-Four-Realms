@@ -6,7 +6,6 @@ extends Control
 # see docs/ASSESSMENT.md.
 
 
-const LANDSCAPE_LOGO := preload("res://assets/branding/four_realms_logo.png")
 ## The duel table: HUD, opponent, table cards, your hand, Oath controls,
 ## scoring sheet and the campaign puzzle goals.  Portrait-first, one-handed.
 
@@ -141,17 +140,7 @@ func _build_duel() -> void:
 	root.add_theme_constant_override("separation", 6)
 	add_child(root)
 
-	# A compact portrait crest echoes the reference without consuming the
-	# interactive card area on shorter windows.
-	var portrait_logo := TextureRect.new()
-	portrait_logo.name = "PortraitDuelLogo"
-	portrait_logo.texture = LANDSCAPE_LOGO
-	portrait_logo.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	portrait_logo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	portrait_logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	portrait_logo.custom_minimum_size = Vector2(0, 100)
-	portrait_logo.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root.add_child(portrait_logo)
+	root.add_child(_duel_wordmark("PortraitDuelLogo", 36))
 
 	var t := _build_top()
 	t.name = "HUD"
@@ -191,16 +180,7 @@ func _build_duel() -> void:
 	_landscape_side.custom_minimum_size = Vector2(380, 0)
 	_landscape_side.add_theme_constant_override("separation", 8)
 	_landscape_root.add_child(_landscape_side)
-	var side_logo := TextureRect.new()
-	side_logo.name = "LandscapeStatusLogo"
-	side_logo.texture = LANDSCAPE_LOGO
-	side_logo.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	side_logo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	side_logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	side_logo.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	side_logo.size_flags_stretch_ratio = 0.65
-	side_logo.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_landscape_side.add_child(side_logo)
+	_landscape_side.add_child(_duel_wordmark("LandscapeStatusLogo", 46))
 	var side_spacer := Control.new()
 	side_spacer.name = "LandscapeStatusSpacer"
 	side_spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -245,6 +225,15 @@ func _build_duel() -> void:
 		_resumed_boot()
 	else:
 		_boot_sequence()
+
+
+func _duel_wordmark(node_name: String, font_size: int) -> Label:
+	var wordmark := UI.label("FOUR REALMS", font_size, UI.GOLD, true)
+	wordmark.name = node_name
+	wordmark.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	wordmark.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	wordmark.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return wordmark
 
 
 func _resumed_boot() -> void:
@@ -428,6 +417,7 @@ func _apply_orientation_layout() -> void:
 	_layout_mode = mode
 	_landscape = wide
 	if wide:
+		_table_box.custom_minimum_size.y = 200.0
 		for key in ["HUD", "TurnBar", "BotHand", "Quests"]:
 			_layout_parts[key].reparent(_landscape_side, false)
 		_layout_parts.Table.reparent(_landscape_table, false)
@@ -459,7 +449,6 @@ func _apply_orientation_layout() -> void:
 	for counter in [_deck_chip, _goal_chip, _score_chip]:
 		counter.reparent(turn_counters if wide else turn_contents, false)
 	turn_counters.visible = wide
-	_btn_menu.text = "Menu" if wide else "☰"
 	_table_grid.offset_bottom = -70 if wide else -26
 	_table_sub.offset_top = -68 if wide else -24
 	_table_sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART if wide else TextServer.AUTOWRAP_OFF
@@ -509,9 +498,43 @@ func _refresh_after_layout() -> void:
 	var hand_width: float = _hand_box.size.x
 	var hw: float = _hand_card_width(hand_width)
 	_hand_box.custom_minimum_size = Vector2(0, int(hw * 1.404) + (56 if _landscape else 36))
+	if not _landscape and OS.get_name() == "iOS":
+		var safe := DisplayServer.get_display_safe_area()
+		var screen := DisplayServer.screen_get_size()
+		var top := 32.0
+		var bottom := 24.0 if size.x >= 600.0 else 10.0
+		if screen.y > 0 and safe.has_area():
+			var scale_y := get_viewport_rect().size.y / float(screen.y)
+			top = maxf(top, ceilf(safe.position.y * scale_y) + 8.0)
+			bottom = maxf(bottom, ceilf((screen.y - safe.end.y) * scale_y) + 8.0)
+		_fit_portrait_duel(top, bottom)
+		await get_tree().process_frame
+		if not is_inside_tree():
+			return
 	_refresh_table()
 	_refresh_hand()
 	_refresh_bot_hand()
+
+
+func _fit_portrait_duel(top: float, bottom: float) -> void:
+	var logo: Label = _portrait_root.get_node("PortraitDuelLogo")
+	var gap := _portrait_root.get_theme_constant("separation")
+	const TABLE_MIN_HEIGHT := 200.0
+	var budget := size.y - top - bottom
+	for section in _layout_parts.values():
+		var control: Control = section
+		if control.visible:
+			var minimum := TABLE_MIN_HEIGHT if control == _table_box else control.get_combined_minimum_size().y
+			budget -= minimum + gap
+	const COMPACT_TABLE_MIN_HEIGHT := 132.0
+	var logo_height := logo.get_combined_minimum_size().y
+	logo.visible = size.y >= 850.0 and budget + TABLE_MIN_HEIGHT - COMPACT_TABLE_MIN_HEIGHT >= logo_height
+	var logo_space: float = logo_height if logo.visible else -float(gap)
+	_table_box.custom_minimum_size.y = clampf(floorf(TABLE_MIN_HEIGHT + budget - logo_space),
+		COMPACT_TABLE_MIN_HEIGHT, TABLE_MIN_HEIGHT)
+	# Apply the insets after the container updates its minimum height.
+	_portrait_root.set_deferred("offset_top", top)
+	_portrait_root.set_deferred("offset_bottom", -bottom)
 
 
 func _refresh_bot_hand() -> void:
@@ -638,8 +661,8 @@ func _build_actions() -> Control:
 	_btn_pile.pressed.connect(_show_pile)
 	h.add_child(_btn_pile)
 
-	_btn_menu = UI.button("☰", "ghost", 18)
-	_btn_menu.custom_minimum_size = Vector2(52, 52)
+	_btn_menu = UI.button("Menu", "ghost", 18)
+	_btn_menu.custom_minimum_size = Vector2(72, 52)
 	_btn_menu.pressed.connect(_open_menu)
 	h.add_child(_btn_menu)
 	return h
