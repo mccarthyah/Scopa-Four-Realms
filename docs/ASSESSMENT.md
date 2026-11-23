@@ -29,7 +29,7 @@ desktop, and the fact that none of the excellent verification work runs automati
 | Rules engine (`game/`) | **A** | Pure, serialisable, RNG-state-accurate, validated round-trip |
 | Persistence | **A−** | Atomic writes, strict `valid_save`, legacy-save path; no profile version key |
 | Verification (`audit.gd`) | **A−** | 49 test functions; **now executed**, 147 assertions, 0 failures against a headless 4.7.2 build. Top grade withheld: the suite had a latent parse error for the whole audit, so it was never actually running (see *Execution*) |
-| UI / screens | **B−** | Correct and accessible, but still a 2,351-line file, positional lookups, dead hooks |
+| UI / screens | **B** | Correct and accessible; five modules extracted (score sheet, oath pickers, card anim, puzzle verdict) take `screens/duel.gd` to 2,063 lines. Still no positional lookups or dead hooks; the hand-summary orchestrator stays, and the file is still the largest screen |
 | Platform (Android/iOS) | **A−** | Back gesture, pause-safe clock, mute, real Android icons; still no pause-on-background |
 | Release hygiene | **A** | LICENSE, OFL text, icons on all targets, dev files and dead art excluded |
 | Tooling / CI | **A** | lint + audit on every push, Godot pinned by SHA-256; both jobs now observed green on GitHub (PR #1) |
@@ -386,7 +386,8 @@ finding 7 starts green and stays meaningful.
 `audit.gd` 2,878 · `screens/duel.gd` 2,296 · `title.gd` 1,029 — against 9,517 total.
 
 `screens/duel.gd` mixes five concerns: layout surgery, card animation, modal sheets, oath pickers and
-score presentation. The cleanest seams, in order of payoff:
+score presentation. The cleanest seams, in order of payoff (all four are now extracted — see the
+status note below):
 
 | Extract | Lines (approx.) | Target |
 |---|---|---|
@@ -394,9 +395,11 @@ score presentation. The cleanest seams, in order of payoff:
 | Score sheet + puzzle verdict | 1926–2133 | `scripts/ui/score_sheet.gd` |
 | Card flight / match rings / pile flight | 1520–1655 | `scripts/ui/card_anim.gd` |
 
-`scripts/game/duel.gd` also trips `max-public-methods` (>20 public methods). The state getters used
-only by the screen (`groups_for`, `deck_low`, `blocked_by_quindici`, `oath_title`, `primiera_total`)
-could collapse behind two or three query objects.
+`scripts/game/duel.gd` also trips `max-public-methods` at gdtoolkit's default of 20. It has 24, and
+`.gdlintrc` sets the project's limit to 40, so `gdlint` passes — but the point stands that the state
+getters used only by the screen (`groups_for`, `deck_low`, `blocked_by_quindici`, `oath_title`,
+`primiera_total`) could collapse behind two or three query objects. Not done: it is an API
+redesign across the engine and the screen, and the limit that flagged it has been raised.
 
 **Status: score sheet and oath pickers extracted.** The score sheet moved to
 `scripts/ui/score_sheet.gd`, and the four Oath bottom sheets to
@@ -406,8 +409,14 @@ object and call a five-method contract (`duel`, `open_sheet`, `toast`, `finish`,
 `close`, `refresh`) rather than six callbacks, and the contract is documented at
 the top of the module so it cannot drift into layout internals.
 
-Still in the screen: the card-flight/match-ring animation and the hand-summary
-sheet, both of which reach into the layout tree. That is the remaining part.
+Also out: card flight and match rings (`scripts/ui/card_anim.gd`) and the puzzle
+verdict (`scripts/ui/puzzle_verdict.gd`). `screens/duel.gd` is now 2,063 lines,
+down from 2,332.
+
+Still in the screen, deliberately: the hand-summary sheet itself. It owns the
+async timer, the `play_again` signal and the scene transitions, so it is
+orchestration — moving it would mean moving the screen's control flow, not its
+presentation. That is the honest end of this item.
 
 ### 14. Duplicated logic between engine and screen
 
@@ -471,6 +480,11 @@ has a member field, so `_relayout` no longer reaches for `get_child(3)`.
 - `duplicated-load` (22, all in `audit.gd`) — hoist to one `const DuelScreen := preload(...)`.
 - `class-variable-name` (4) — `_CountFaction`-style casing: functions are `_snake_case`.
 - `function-variable-name` (2) — `screens/duel.gd:845` `MAX_CH` is a local, not a constant.
+
+**Status: all four are gone.** `.gdlintrc` was written with the project's own
+limits (200-char lines, 3,500-line files, 40 public methods) and the 307 findings
+cleared to zero in the P2 lint pass; `gdlint` is clean across the tree, and CI
+runs it.
 
 ### 18. Documentation drift
 
