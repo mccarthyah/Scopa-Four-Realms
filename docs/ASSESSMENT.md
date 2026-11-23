@@ -153,6 +153,62 @@ the AI and the layout arithmetic, and it can only cover a display bug once
 somebody has described the symptom well enough to name the device. **A windowed
 run is still the only way to see the game.**
 
+### The same device found a second one: the home screen ran off the bottom
+
+With the canvas finally filling the width, the menu was reported as *too long* —
+and it was. The home column is a `ScrollContainer` whose scroll indicator is
+deliberately hidden, and on a 4:3 iPad the canvas is **720×960 in canvas units:
+209 px shorter** than the 540×960 phone every one of these layouts was tuned
+against. The column needed 946 px and had 928, so the last line of
+"YOUR RECORD" — "0 sweeps · 0 quests completed" — was cut off the bottom of the
+screen, with nothing on screen admitting there was more.
+
+The cause was one line. `record_scale` budgeted the record type against
+**width alone**:
+
+```gdscript
+var record_scale := 1.3 if wide else clampf(size.x / 540.0, 1.0, 1.3)
+```
+
+On a 720-wide canvas that is 1.33, clamped to 1.3 — so the record text was
+**enlarged by 30% on the shortest canvas the game runs on**. Width was never the
+scarce dimension in portrait; height was. It now takes the smaller of a width
+budget and a height budget, with a 0.85 factor on height:
+
+```gdscript
+var record_scale := 1.3 if wide else minf(
+    clampf(size.x / 540.0, 1.0, 1.3),
+    clampf(size.y / 960.0 * 0.85, 0.8, 1.3))
+```
+
+The extra factor is not padding — at 1.0 the column still landed within 16 px of
+the bottom margin, and an iPad portrait gives up more than that to the
+home-indicator safe area.
+
+Measured across seven canvas sizes, before and after:
+
+| canvas | before | after |
+|---|---|---|
+| 540×960 (phone) | fits | fits, tiles 391 → 417 px |
+| 667×960 (iPad 10.9″) | +4 px overflow | fits, no clipped edge |
+| **720×960 (iPad 4:3 portrait)** | **+18 px, record clipped** | **fits, 16 px margin intact** |
+| 720×940 (the same, less safe area) | — | fits |
+| 720×1280 / 1145×960 | fits | fits, unchanged |
+
+The layout does not silently squash to fake this: no home tile is rendered
+shorter than its own combined minimum, which is now asserted rather than
+assumed. That assertion matters because the hidden scrollbar means an overflow
+is invisible to a screenshot — the clipped line looked like a rendering choice
+rather than a missing one. The title test gained 720×960, 720×940 and 667×960
+and now checks the record panel's bottom edge against the host rect as well as
+the scrollbar, and it was verified in both directions: it fails on the old line
+and passes on the new one. (`27357ea`)
+
+What these two iPad bugs have in common is worth stating plainly: both were
+rules keyed on **width** being applied to a device whose constraint is
+**height**, and a headless suite that only ever checked 540×960 and 720×1280
+could not see either. The sizes the game actually runs at are now in the test.
+
 ---
 
 ## Verified facts
