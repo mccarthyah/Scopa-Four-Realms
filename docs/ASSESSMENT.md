@@ -398,12 +398,16 @@ score presentation. The cleanest seams, in order of payoff:
 only by the screen (`groups_for`, `deck_low`, `blocked_by_quindici`, `oath_title`, `primiera_total`)
 could collapse behind two or three query objects.
 
-**Status: partly done.** The score sheet is extracted to `scripts/ui/score_sheet.gd`
-(2,332 → 2,275 lines in the screen). It was the one seam with no coupling to screen
-state — the oath pickers and card-flight code both reach back into `_toast`,
-`_close_overlay`, `_selection`, `_save_state` and the layout tree, so pulling them
-out means changing their interfaces first. That is a real refactor, not a move, and
-it is the remaining part of this item.
+**Status: score sheet and oath pickers extracted.** The score sheet moved to
+`scripts/ui/score_sheet.gd`, and the four Oath bottom sheets to
+`scripts/ui/oath_pickers.gd`; `screens/duel.gd` is 2,332 → 2,135 lines. The oath
+pickers did need the interface work predicted above: they take the screen as one
+object and call a five-method contract (`duel`, `open_sheet`, `toast`, `finish`,
+`close`, `refresh`) rather than six callbacks, and the contract is documented at
+the top of the module so it cannot drift into layout internals.
+
+Still in the screen: the card-flight/match-ring animation and the hand-summary
+sheet, both of which reach into the layout tree. That is the remaining part.
 
 ### 14. Duplicated logic between engine and screen
 
