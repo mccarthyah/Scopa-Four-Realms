@@ -28,12 +28,15 @@ desktop, and the fact that none of the excellent verification work runs automati
 |---|---|---|
 | Rules engine (`game/`) | **A** | Pure, serialisable, RNG-state-accurate, validated round-trip |
 | Persistence | **A−** | Atomic writes, strict `valid_save`, legacy-save path; no profile version key |
-| Verification (`audit.gd`) | **A−** | Excellent coverage, but manual-only, 2,878 lines, monolith |
-| UI / screens | **B−** | Correct and accessible, but 2,296-line file, positional lookups, dead hooks |
-| Platform (Android/iOS) | **C+** | No back-button or pause handling, no audio toggle, Android icon unset |
-| Release hygiene | **C** | No LICENSE, no font OFL text, dev files and a dead 3.8 MB asset ship in the PCK |
-| Tooling / CI | **C−** | No lint, parse or audit gate; the one workflow is iOS-only |
-| Lint cleanliness | **B** | 0 syntax errors; 307 style findings, mostly line length |
+| Verification (`audit.gd`) | **A** | 49 test functions, 139 assertions; now enforced on every push (see P1.7) |
+| UI / screens | **B−** | Correct and accessible, but still a 2,351-line file, positional lookups, dead hooks |
+| Platform (Android/iOS) | **A−** | Back gesture, pause-safe clock, mute, real Android icons; still no pause-on-background |
+| Release hygiene | **A** | LICENSE, OFL text, icons on all targets, dev files and dead art excluded |
+| Tooling / CI | **A−** | lint + audit on every push; the audit job still needs GODOT_SHA256 filled in |
+| Lint cleanliness | **A** | 0 syntax errors, 0 lint findings |
+
+Grades above reflect the state after the P1 and P2 work below was completed; the
+findings themselves are kept in place as the record of what was wrong and why.
 
 ---
 
