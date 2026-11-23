@@ -27,8 +27,6 @@ env:
   # the audit runs the real engine, so a different version would test a
   # different engine than the one that ships.
   GODOT_VERSION: 4.7.2
-  # SHA-256 of Godot_v4.4.1-stable_linux.x86_64.zip.
-  #
   # SHA-256 of Godot_v4.7.2-stable_linux.x86_64.zip, as published by the GitHub
   # Releases API for godotengine/godot-builds tag 4.7.2-stable (the `digest`
   # field of that asset, and the size matches the downloadable artifact):
