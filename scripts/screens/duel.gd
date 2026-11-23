@@ -25,6 +25,7 @@ const T := preload("res://scripts/tables.gd")
 const ScoreSheet := preload("res://scripts/ui/score_sheet.gd")
 const OathPickers := preload("res://scripts/ui/oath_pickers.gd")
 const CardAnim := preload("res://scripts/ui/card_anim.gd")
+const PuzzleVerdict := preload("res://scripts/ui/puzzle_verdict.gd")
 const C := preload("res://scripts/game/cards.gd")
 const Duel := preload("res://scripts/game/duel.gd")
 
@@ -1894,46 +1895,7 @@ func _show_hand_summary() -> void:
 
 
 func _puzzle_verdict(body: VBoxContainer) -> bool:
-	var goal: String = duel.puzzle.get("goal", "scopa")
-	var ok := false
-	var msg := ""
-	match goal:
-		"scopa":
-			ok = duel.scopa_count[0] >= 1
-			msg = "%d sweeps earned. You need at least 1." % duel.scopa_count[0]
-		"runestone":
-			ok = duel.captured[0].has(C.make(7, T.RUNESTONE_SUIT))
-			msg = "Runestone captured." if ok else "The Runestone is outside your captured pile."
-		"primiera":
-			ok = duel.primiera_total(duel.captured[0]) > 40
-			msg = "Banner strength %d. You need more than 40." % duel.primiera_total(duel.captured[0])
-		"captures":
-			ok = duel.captured[0].size() >= 12
-			msg = "%d cards captured. You need at least 12." % duel.captured[0].size()
-	_solved_puzzle(ok, msg, body)
-	return ok
-
-
-func _solved_puzzle(ok: bool, msg: String, body: VBoxContainer) -> void:
-	var p := PanelContainer.new()
-	p.add_theme_stylebox_override("panel", UI.panel(Color("233026") if ok else Color("2f2228"), 14, UI.GOOD if ok else UI.BAD, 2))
-	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 2)
-	p.add_child(v)
-	var t := UI.label("PUZZLE SOLVED" if ok else "PUZZLE FAILED", 36 if _landscape else 28, UI.GOOD if ok else UI.BAD, true)
-	t.add_theme_font_override("font", ThemeDB.fallback_font)
-	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	v.add_child(t)
-	var s := UI.label(msg, 24 if _landscape else 20, UI.TEXT_DIM)
-	s.add_theme_font_override("font", ThemeDB.fallback_font)
-	s.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	s.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	v.add_child(s)
-	body.add_child(p)
-	if ok:
-		Sfx.play("win", -8.0)
-	else:
-		Sfx.play("lose", -10.0)
+	return PuzzleVerdict.build(body, duel, _landscape)
 
 
 func _record_match(puzzle_result: int = -1) -> void:
