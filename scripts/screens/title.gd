@@ -170,7 +170,11 @@ func _open_quit_confirm() -> void:
 	var stay := UI.button("Keep playing", "primary")
 	stay.pressed.connect(_codex_close)
 	body.add_child(stay)
-	if OS.get_name() in ["Android", "iOS", "Windows", "macOS", "Linux"] or OS.has_feature("web"):
+	# "Leave" only makes sense where the process can actually end. On the web,
+	# get_tree().quit() does nothing, so offer Keep playing alone rather than a
+	# button that silently fails. (OS.get_name() returns "Web", so the old
+	# "or OS.has_feature(web)" made this branch unconditional.)
+	if not OS.has_feature("web"):
 		var leave := UI.button("Leave", "secondary")
 		leave.pressed.connect(func():
 			Profile.save_profile()

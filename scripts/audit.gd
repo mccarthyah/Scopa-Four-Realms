@@ -1707,6 +1707,49 @@ func _test_back_gesture() -> void:
 	d.queue_free()
 	await get_tree().process_frame
 
+	# 4. on the title, back must offer to leave without crashing. This path was
+	# never exercised: it leans on _sheet/_para/UI.button, none of which static
+	# parsing validates.
+	var title = TitleScreen.new()
+	main.add_child(title)
+	for i in range(4): await get_tree().process_frame
+	title._open_quit_confirm()
+	await get_tree().process_frame
+	var panel: Control = title._sheet_panel
+	if panel == null:
+		fail("the title's back gesture opened no confirmation sheet")
+	else:
+		var labels: Array = []
+		var has_stay := false
+		var has_leave := false
+		for n in _walk_controls(panel):
+			if n is Label: labels.append(n.text)
+			if n is Button and n.text == "Keep playing": has_stay = true
+			if n is Button and n.text == "Leave":
+				has_leave = true
+		var mentions_save := false
+		for t in labels:
+			if "saved duel" in t: mentions_save = true
+		if has_stay and mentions_save:
+			ok("back on the title offers Keep playing and says saves are kept")
+		else:
+			fail("title quit confirm: stay=%s, save notice=%s" % [str(has_stay), str(mentions_save)])
+		# "Leave" would call get_tree().quit(); only assert its presence off-web.
+		if OS.has_feature("web") == has_leave:
+			fail("title quit confirm: Leave button presence does not match the platform")
+		else:
+			ok("the Leave button appears only where quitting works")
+		# Keeping playing must clear the sheet, not strand a blocker.
+		for n in _walk_controls(panel):
+			if n is Button and n.text == "Keep playing":
+				n.pressed.emit()
+		await get_tree().process_frame
+	if title._sheet_panel == null and title._codex == null:
+		ok("Keep playing closes the quit prompt cleanly")
+	else: fail("title quit confirm left a stranded blocker")
+	title.queue_free()
+	await get_tree().process_frame
+
 
 func _dim_count(n: Node) -> int:
 	var c := 0
