@@ -161,10 +161,13 @@ func _maybe_hide_table() -> void:
 	veiled = table[rng.randi() % table.size()]
 
 
-## A veiled card is invisible to the player: it can be neither seen nor taken
-## until the table thins out and the veil lifts.
-func visible_table(who: int) -> Array:
-	if who == 0 and veiled >= 0:
+## A veiled card is out of play: it can be neither seen nor taken by EITHER side
+## until the table thins out and the veil lifts.  Hiding it from the player alone
+## was a bug: the Warden still saw it, so it could capture the veiled card as part
+## of a group, which left `veiled` pointing at a card that was no longer on the
+## table.  The twist is a veil over the table, not a handicap for one side.
+func visible_table(_who: int) -> Array:
+	if veiled >= 0:
 		var out: Array = []
 		for c in table:
 			if c != veiled:
@@ -630,7 +633,8 @@ func to_dict() -> Dictionary:
 		"turn": turn, "starter": starter, "last_capturer": last_capturer,
 		"hand_no": hand_no, "turn_count": turn_count, "renown": renown,
 		"quest_keys": _quest_keys(), "quest_done": quest_done,
-		"hand_over": hand_over, "match_over": match_over, "veiled": veiled,
+		"hand_over": hand_over, "match_over": match_over,
+		"veiled": veiled, "veil_lifted": veil_lifted,
 		"hands_played": hands_played, "stat": stat,
 		"player_sweeps": player_sweeps, "player_glory": player_glory,
 		"rng_seed": str(rng.seed), "rng_state": str(rng.state),
@@ -660,6 +664,8 @@ static func valid_save(save: Variant) -> bool:
 	for key in ["hand_over", "match_over", "oaths"]:
 		if not (d.get(key) is bool):
 			return false
+	if d.has("veil_lifted") and not (d.get("veil_lifted") is bool):
+		return false
 	if d.match_over and not d.hand_over:
 		return false
 	if d.get("rule", C.RULE_CLASSIC) not in [C.RULE_CLASSIC, C.RULE_QUINDICI]:
@@ -756,6 +762,7 @@ func from_dict(d: Dictionary) -> void:
 	match_over = bool(d.get("match_over", false))
 	rule = String(d.get("rule", C.RULE_CLASSIC))
 	veiled = int(d.get("veiled", -1))
+	veil_lifted = bool(d.get("veil_lifted", false))
 	hands_played = int(d.get("hands_played", 0))
 	stat = d.get("stat", {})
 	for k in stat.keys():
