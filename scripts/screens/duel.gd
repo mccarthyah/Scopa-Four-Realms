@@ -9,6 +9,7 @@ extends Control
 ## The duel table: HUD, opponent, table cards, your hand, Oath controls,
 ## scoring sheet and the campaign puzzle goals.  Portrait-first, one-handed.
 
+const DUEL_WORDMARK := preload("res://assets/branding/four_realms_wordmark.png")
 const UI := preload("res://scripts/ui/ui.gd")
 const SettingsPanel := preload("res://scripts/ui/settings_panel.gd")
 const FX := preload("res://scripts/ui/fx.gd")
@@ -140,7 +141,7 @@ func _build_duel() -> void:
 	root.add_theme_constant_override("separation", 6)
 	add_child(root)
 
-	root.add_child(_duel_wordmark("PortraitDuelLogo", 36))
+	root.add_child(_duel_wordmark("PortraitDuelLogo", 44.0))
 
 	var t := _build_top()
 	t.name = "HUD"
@@ -180,7 +181,7 @@ func _build_duel() -> void:
 	_landscape_side.custom_minimum_size = Vector2(380, 0)
 	_landscape_side.add_theme_constant_override("separation", 8)
 	_landscape_root.add_child(_landscape_side)
-	_landscape_side.add_child(_duel_wordmark("LandscapeStatusLogo", 46))
+	_landscape_side.add_child(_duel_wordmark("LandscapeStatusLogo", 56.0))
 	var side_spacer := Control.new()
 	side_spacer.name = "LandscapeStatusSpacer"
 	side_spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -227,11 +228,13 @@ func _build_duel() -> void:
 		_boot_sequence()
 
 
-func _duel_wordmark(node_name: String, font_size: int) -> Label:
-	var wordmark := UI.label("FOUR REALMS", font_size, UI.GOLD, true)
+func _duel_wordmark(node_name: String, height: float) -> TextureRect:
+	var wordmark := TextureRect.new()
 	wordmark.name = node_name
-	wordmark.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	wordmark.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	wordmark.texture = DUEL_WORDMARK
+	wordmark.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	wordmark.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	wordmark.custom_minimum_size.y = height
 	wordmark.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return wordmark
 
@@ -517,7 +520,7 @@ func _refresh_after_layout() -> void:
 
 
 func _fit_portrait_duel(top: float, bottom: float) -> void:
-	var logo: Label = _portrait_root.get_node("PortraitDuelLogo")
+	var logo: TextureRect = _portrait_root.get_node("PortraitDuelLogo")
 	var gap := _portrait_root.get_theme_constant("separation")
 	const TABLE_MIN_HEIGHT := 200.0
 	var budget := size.y - top - bottom

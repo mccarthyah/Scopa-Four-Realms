@@ -636,8 +636,8 @@ func _test_landscape_reflow() -> void:
 	d._refresh_all()
 	for i in range(6): await get_tree().process_frame
 	var good: bool = d._landscape and d._layout_mode == "full" and d._landscape_root.visible and not d._portrait_root.visible
-	var side_logo: Label = d._landscape_side.get_node_or_null("LandscapeStatusLogo")
-	if side_logo == null or side_logo.text != "FOUR REALMS" or not side_logo.visible or side_logo.size.y <= 0:
+	var side_logo: TextureRect = d._landscape_side.get_node_or_null("LandscapeStatusLogo")
+	if side_logo == null or side_logo.texture == null or not side_logo.visible or side_logo.size.y <= 0:
 		good = false
 	if d._layout_parts.Hand.get_parent() != d._landscape_bottom \
 		or d._layout_parts.Quests.get_parent() != d._landscape_side \
@@ -1065,11 +1065,11 @@ func _test_display_scaling() -> void:
 		for frame in range(4):
 			await get_tree().process_frame
 		var actions: Control = probe.current._layout_parts.Actions
-		var wordmark: Label = probe.current._portrait_root.get_node("PortraitDuelLogo")
+		var wordmark: TextureRect = probe.current._portrait_root.get_node("PortraitDuelLogo")
 		var menu: Button = probe.current._btn_menu
 		if actions.get_global_rect().end.y > vp.y - 40.0 + 1.0:
 			fail("%s: bottom action row extends past the safe area" % label)
-		elif not wordmark.visible or wordmark.text != "FOUR REALMS" or wordmark.global_position.y < 32.0:
+		elif not wordmark.visible or wordmark.texture == null or wordmark.global_position.y < 32.0:
 			fail("%s: the one-line wordmark is outside the safe area" % label)
 		elif menu.text != "Menu":
 			fail("%s: portrait menu button is missing its label" % label)
