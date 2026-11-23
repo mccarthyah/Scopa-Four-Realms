@@ -64,3 +64,38 @@ GODOT="$GODOT" ./safe-check.sh
   about rendering. Visual checks still need a real device; see `CRASH_REPORT.md`.
 - `godot.pck`-dependent features and export templates are not included. This is a
   test instrument, not a replacement for the editor on a workstation.
+
+---
+
+## A built artefact
+
+A headless build made this way is in Google Drive:
+
+```
+godot-4.7.2-linuxbsd-headless-f1bee50a8b01.x86_64.gz   78,108,839 bytes
+https://drive.google.com/file/d/1Th2hbOq7lZuDZKyYYkSKqeGMnOGmKRqF/view
+```
+
+It reports `4.7.2.stable.custom_build`. The `f1bee50a8b01` in the name is the
+first 12 hex of the **uncompressed** binary's SHA-256:
+
+```
+f1bee50a8b010d8631c8ed659791105ecd7135b1a42fc960f8579066fc5d2132
+```
+
+Use it:
+
+```bash
+gunzip godot-4.7.2-linuxbsd-headless-f1bee50a8b01.x86_64.gz
+chmod +x godot-4.7.2-linuxbsd-headless-f1bee50a8b01.x86_64
+sha256sum godot-4.7.2-linuxbsd-headless-f1bee50a8b01.x86_64   # expect the hash above
+GODOT=$PWD/godot-4.7.2-linuxbsd-headless-f1bee50a8b01.x86_64 ./safe-check.sh
+```
+
+Kept out of Git: `tools/godot/bin/` is ignored, and no binary belongs in the
+repository.
+
+With this build, `safe-check.sh` passes all three steps — 51 assets imported,
+the game boots, and 193 audit assertions pass with 0 failures. It was built
+without fontconfig, so it logs `compiled without fontconfig` once per font load;
+that is a capability notice, not a failure, and `safe-check.sh` now ignores it.
