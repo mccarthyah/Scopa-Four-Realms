@@ -89,19 +89,14 @@ jobs:
         # --headless forces the dummy renderer, so this proves the rules, the
         # serialisation and that every screen BUILDS - it proves nothing about
         # rendering, which still needs a real device (see CRASH_REPORT.md).
+        #
+        # The log is teed so the greps below see it, and it stays in the step's
+        # own output. It is deliberately NOT uploaded as an artifact: nothing
+        # here needs to outlive the run, and a retained artifact is another
+        # stored copy to expire and account for.
         run: |
           set -o pipefail
           "$GODOT" --headless --path . -- --audit 2>&1 | tee "$RUNNER_TEMP/audit.log"
           ! grep -q '^FAIL:' "$RUNNER_TEMP/audit.log"
           grep -q 'AUDIT COMPLETE' "$RUNNER_TEMP/audit.log"
           grep -q 'failures=0' "$RUNNER_TEMP/audit.log"
-      - name: Upload the audit log and the game log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: audit-log
-          path: |
-            ${{ runner.temp }}/audit.log
-            ~/.local/share/godot/app_userdata/**/logs/*.log
-          if-no-files-found: warn
-          retention-days: 14

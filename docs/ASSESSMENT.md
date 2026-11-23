@@ -315,6 +315,11 @@ jobs:
 Pin the Godot download by SHA-256 (the iOS workflow already does this properly — reuse that
 pattern).
 
+**What actually landed** (`.github/workflows/verify.yml`) differs from the sketch above: it pins
+4.7.2 with a verified SHA-256 rather than 4.4.1, runs `gdlint` over every script (not a glob that
+misses subdirectories), and **does not upload any artifact**. The audit log stays in the step output,
+which is enough to read a failure without keeping a stored copy to expire.
+
 ### 8. No LICENSE, and no OFL text for the bundled fonts
 
 There is no `LICENSE` file at the repository root, and `fonts/` contains three `.ttf` files with no
