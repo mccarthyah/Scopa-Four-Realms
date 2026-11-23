@@ -61,6 +61,9 @@ var _quest_list: VBoxContainer
 var _banner_meter: Control
 var _toast_box: VBoxContainer
 var _overlay: Control
+## True while the open sheet is one the player must answer (the results screen), so
+## the back gesture cannot discard it.
+var _overlay_blocks_back := false
 var _menu_paused := false
 var _pause_before_menu := false
 var _deck_chip: PanelContainer
@@ -376,11 +379,39 @@ func _bot_card_size() -> Vector2:
 
 
 func _notification(what: int) -> void:
+	# Android's hardware/gesture back. Without this the OS closed the activity
+	# mid-duel with no pause, no confirmation and no hint that Continue exists.
+	# Back closes the top sheet if one is open, otherwise opens the pause menu.
+	if what == NOTIFICATION_WM_GO_BACK_REQUEST:
+		_on_back_pressed()
+		return
 	if what != NOTIFICATION_RESIZED or not is_node_ready() or not _layout_ready:
 		return
 	_apply_orientation_layout()
 	_schedule_layout_refresh()
 	_layout_game_dialogs()
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	# Escape is the desktop equivalent of Android's back gesture.
+	if event.is_action_pressed("ui_cancel"):
+		_on_back_pressed()
+		get_viewport().set_input_as_handled()
+
+
+func _on_back_pressed() -> void:
+	if not is_node_ready() or duel == null:
+		return
+	# A sheet that demands an answer (the results screen) is never dismissed by a
+	# back press, or the player would lose the hand summary with no way back to it.
+	if _overlay != null and is_instance_valid(_overlay):
+		if _overlay_blocks_back:
+			return
+		_close_overlay()
+		return
+	if duel.hand_over:
+		return
+	_open_menu()
 
 
 ## Reparent existing controls rather than rebuilding the duel: a rotation must
@@ -1814,6 +1845,9 @@ func _oath_sheet(title: String, sub: String, dismissible: bool = true) -> PanelC
 				_close_overlay())
 	add_child(dim)
 	_overlay = dim
+	# A sheet that cannot be dismissed by tapping the dimmer (the results screen)
+	# must also refuse the back gesture, or back would throw the hand summary away.
+	_overlay_blocks_back = not dismissible
 
 	var p := PanelContainer.new()
 	p.add_theme_stylebox_override("panel", UI.panel(UI.BG2, 20, UI.GOLD, 2))
@@ -1915,6 +1949,7 @@ func _close_overlay() -> void:
 	if _overlay != null and is_instance_valid(_overlay):
 		_remove_now(_overlay)
 	_overlay = null
+	_overlay_blocks_back = false
 	for c in get_children():
 		if c is PanelContainer and c.z_index == 101:
 			_remove_now(c)

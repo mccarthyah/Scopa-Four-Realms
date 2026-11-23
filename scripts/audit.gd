@@ -93,6 +93,8 @@ func run(m: Control) -> void:
 	_test_deal()
 	_test_overlay_dismiss()
 	await _test_toast_cap_and_turn_clock()
+	await _test_back_gesture()
+	await _test_new_duel_clears_old_save()
 	_test_quindici()
 	_test_animation_settings()
 	_test_hand_dimming()
@@ -1480,6 +1482,76 @@ func _test_toast_cap_and_turn_clock() -> void:
 		fail("an oversized frame delta moved the turn clock by %.2fs" % (10.0 - d._turn_time))
 	else:
 		ok("an oversized frame delta is clamped to one frame of turn clock")
+	d.queue_free()
+	await get_tree().process_frame
+
+
+## Starting a new duel must invalidate the previous save. A duel only writes one when
+## a card is played, so leaving match A for the menu and starting match B without
+## playing used to leave A's snapshot on disk - Continue then resumed the abandoned
+## match.
+func _test_new_duel_clears_old_save() -> void:
+	var keep: Dictionary = Profile.saved_duel
+	var a = DuelScript.new({"mode": T.Mode.QUICK, "seed": 818})
+	Profile.store_duel({"mode": a.mode, "player_faction": a.player_faction, "campaign": {}, "puzzle": {}, "state": a.to_dict()})
+	if not Profile.has_saved_duel():
+		fail("stale-save test could not write a save to clear")
+	else:
+		var title = load("res://scripts/screens/title.gd").new()
+		main.add_child(title)
+		for i in range(20):
+			await get_tree().process_frame
+		title.faction = T.CROWN
+		title._launch(T.Mode.QUICK)
+		await get_tree().process_frame
+		if Profile.has_saved_duel():
+			fail("starting a new duel left the previous match resumable")
+		else:
+			ok("starting a new duel clears the previous save")
+		title.queue_free()
+		await get_tree().process_frame
+	Profile.clear_duel()
+	Profile.saved_duel = keep
+
+
+## The back gesture must never discard a sheet the player has to answer, and must
+## open the pause menu from the table.
+func _test_back_gesture() -> void:
+	var d = load("res://scripts/screens/duel.gd").new()
+	d.config = {"mode": T.Mode.QUICK, "seed": 21}
+	main.add_child(d)
+	for i in range(40):
+		await get_tree().process_frame
+	# 1. from the table, back opens the pause menu
+	d._overlay = null
+	d.duel.hand_over = false
+	d._on_back_pressed()
+	await get_tree().process_frame
+	if d._overlay == null:
+		fail("the back gesture did not open the pause menu from the table")
+	else:
+		ok("the back gesture opens the pause menu from the table")
+		d._close_overlay()
+	# 2. with a normal sheet open, back closes it
+	d._show_rules()
+	await get_tree().process_frame
+	d._on_back_pressed()
+	await get_tree().process_frame
+	if d._overlay != null:
+		fail("the back gesture did not close an open sheet")
+	else:
+		ok("the back gesture closes a dismissible sheet")
+	# 3. the results sheet must survive it
+	d._oath_sheet("RESULTS", "", false)
+	if not d._overlay_blocks_back:
+		fail("the results sheet did not mark itself as unskippable")
+	else:
+		d._on_back_pressed()
+		if d._overlay == null:
+			fail("the back gesture discarded the hand summary")
+		else:
+			ok("the back gesture cannot discard the hand summary")
+	d._close_overlay()
 	d.queue_free()
 	await get_tree().process_frame
 

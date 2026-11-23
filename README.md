@@ -47,9 +47,12 @@ four presets; you supply the export templates and SDK paths in *Project → Expo
 | Choose among several capture sets | choose the complete group in the capture picker |
 | Spend Favor on your Oath | tap the Oath button above your hand |
 | Hint · Pile · Menu | the buttons beside your hand |
+| Back / Escape | closes the open sheet, otherwise opens the pause menu (Android back never drops you out of a duel) |
 
 Turn timer: **26 s**, with a 5-second audible countdown; if it expires the game auto-plays a good move
-for you (it says so, and never shames you).
+for you (it says so, and never shames you). The clock is held while a sheet is open — reading the
+rules, the pile view or an Oath picker never costs you a turn — and it is clamped per frame so an app
+returning from suspension cannot skip a turn.
 
 ---
 
@@ -366,6 +369,9 @@ The audit checks, among other things:
 * the toast queue stays capped instead of growing all match, the turn clock is held while a sheet is
   open (reading the rules can no longer auto-play your turn), and an oversized frame delta is clamped
   so a suspended app cannot skip a turn,
+* the back gesture opens the pause menu from the table, closes a dismissible sheet, and is refused by
+  the hand summary; starting a new duel clears the previous save so *Continue* can never resume an
+  abandoned match,
 * AI move choice stays under 8 ms (it measures ~30 µs).
 
 Latest run: 300 AI games (318 sweeps), layout clean, **failures=0** — including a real save/resume round-trip through the profile files

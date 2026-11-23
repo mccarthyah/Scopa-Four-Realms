@@ -123,10 +123,48 @@ func _build() -> void:
 
 
 func _notification(what: int) -> void:
+	# Android back on the home screen: close whatever sheet is open, otherwise ask
+	# before leaving. Closing the activity straight from the masthead gave no
+	# confirmation and no way to reach Settings or About by accident.
+	if what == NOTIFICATION_WM_GO_BACK_REQUEST:
+		_on_back_pressed()
+		return
 	if what == NOTIFICATION_RESIZED and is_node_ready() and not _title_parts.is_empty():
 		_update_title_layout()
 		_layout_sheet()
 		_place_intro_logo(_intro_progress)
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("ui_cancel"):
+		_on_back_pressed()
+		get_viewport().set_input_as_handled()
+
+
+func _on_back_pressed() -> void:
+	if is_instance_valid(_sheet_panel) or is_instance_valid(_codex):
+		_codex_close()
+		return
+	if is_instance_valid(_intro_layer):
+		return
+	_open_quit_confirm()
+
+
+## The masthead has no Quit entry: on mobile the OS gesture is the only way out, so
+## it gets a confirmation instead of killing the process silently.
+func _open_quit_confirm() -> void:
+	var sheet := _sheet("LEAVE FOUR REALMS?")
+	var body: VBoxContainer = sheet.get_meta("body")
+	body.add_child(_para("Your record and any saved duel are kept. This closes the game."))
+	var stay := UI.button("Keep playing", "primary")
+	stay.pressed.connect(_codex_close)
+	body.add_child(stay)
+	if OS.get_name() in ["Android", "iOS", "Windows", "macOS", "Linux"] or OS.has_feature("web"):
+		var leave := UI.button("Leave", "secondary")
+		leave.pressed.connect(func():
+			Profile.save_profile()
+			get_tree().quit())
+		body.add_child(leave)
 
 
 ## Move the existing controls so rotation keeps the selected faction, scroll
@@ -726,6 +764,12 @@ func _stats_panel() -> Control:
 # LAUNCHERS
 # ---------------------------------------------------------------------------
 func _launch(mode: int, extra: Dictionary = {}) -> void:
+	# Starting a new duel invalidates the previous save. A duel only writes one when
+	# a card is played, so leaving match A for the menu and starting match B without
+	# playing used to leave A's snapshot on disk - Continue then resumed the
+	# abandoned match. Clear it here; the resume path below does not come through
+	# _launch(), so it is unaffected.
+	Profile.clear_duel()
 	var cfg := {
 		"mode": mode,
 		"player_faction": faction,
