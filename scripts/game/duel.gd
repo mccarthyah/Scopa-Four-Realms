@@ -53,6 +53,9 @@ var events: Array = []
 var hand_over := false
 var match_over := false
 var veiled := -1                  # campaign: a table card the player cannot see or take
+## Campaign hidden_table: once the veil lifts it stays lifted for the rest of the
+## hand (one veiled card per hand, never a new one).  Reset in start_hand().
+var veil_lifted := false
 var rng := RandomNumberGenerator.new()
 var hands_played := 0
 var stat := {}
@@ -94,6 +97,7 @@ func start_hand() -> void:
 	turn_count = 0
 	hand_over = false
 	veiled = -1
+	veil_lifted = false
 	stat = {"7s": 0, "horde": 0, "forge": 0, "runestone": false, "scopas": 0, "fools": 0}
 
 	if not puzzle.is_empty():
@@ -138,9 +142,17 @@ func _shuffle(a: Array) -> void:
 		a[j] = tmp
 
 
+## The Warden's twist veils ONE card per hand.  Once that veil has lifted it must
+## not fall again: _reveal_if_thin() runs immediately before this on every play, so
+## without the veil_lifted latch the engine lifted the veil and instantly hid a
+## different card (the player was told "the veil lifts" on the same play that a card
+## vanished).  The README promises the card stays visible "until the table thins".
 func _maybe_hide_table() -> void:
-	if campaign.get("twist_kind", "") == "hidden_table" and veiled < 0 and table.size() > 1:
-		veiled = table[rng.randi() % table.size()]
+	if campaign.get("twist_kind", "") != "hidden_table":
+		return
+	if veiled >= 0 or veil_lifted or table.size() <= 1:
+		return
+	veiled = table[rng.randi() % table.size()]
 
 
 ## A veiled card is invisible to the player: it can be neither seen nor taken
@@ -159,6 +171,7 @@ func _reveal_if_thin() -> void:
 	if veiled >= 0 and table.size() <= 2:
 		_push({"t": "reveal", "card": veiled})
 		veiled = -1
+		veil_lifted = true
 
 
 # ---------------------------------------------------------------------------

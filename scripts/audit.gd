@@ -2328,6 +2328,57 @@ func _test_veiled_capture() -> void:
 		ok("AI-assisted play uses visible cards and leaves no false sweep")
 	else:
 		fail("veiled capture used the wrong group or awarded a false sweep")
+	_test_veil_never_returns()
+
+
+## The Warden veils ONE table card per hand, and it stays visible once the veil
+## lifts.  This plays whole hidden_table deals the way the game does and watches the
+## veil across every move: it must be set at the deal, must hide exactly one card
+## from the player, and must never come back after its reveal event.
+func _test_veil_never_returns() -> void:
+	var hands_checked := 0
+	var veiled_seen := 0
+	var leaks: Array = []
+	for seed_i in range(60):
+		var d = DuelScript.new({
+			"mode": T.Mode.CAMPAIGN, "campaign": T.CAMPAIGNS[0], "seed": seed_i + 900,
+		})
+		var revealed := false
+		var guard := 0
+		var veil_was_set := d.veiled >= 0
+		if veil_was_set:
+			veiled_seen += 1
+		while not d.hand_over and guard < 2000:
+			guard += 1
+			if d.veiled >= 0 and d.table.count(d.veiled) != 1:
+				leaks.append("seed %d: veiled card %d is not on the table once" % [seed_i, d.veiled])
+				break
+			var who: int = d.turn
+			var mv: Dictionary = DuelAI.choose_move(d, who)
+			if mv.is_empty():
+				break
+			# the hidden card must never be a legal target for the player
+			if who == 0 and d.veiled >= 0 and d.visible_table(0).has(d.veiled):
+				leaks.append("seed %d: veiled card appears in the player's visible table" % seed_i)
+				break
+			var before_table: Array = d.table.duplicate()
+			d.play(who, mv.card, mv.group)
+			for ev in d.drain_events():
+				if ev.get("t", "") == "reveal":
+					if revealed:
+						leaks.append("seed %d: the veil lifted twice in one hand" % seed_i)
+					revealed = true
+			if revealed and d.veiled >= 0:
+				# the only legal way for a veil to exist again is a NEW hand
+				leaks.append("seed %d: a new card was veiled after the veil had lifted" % seed_i)
+				break
+		hands_checked += 1
+	if leaks.is_empty() and veiled_seen > 0:
+		ok("the Warden veils one card per deal and never re-veils after the reveal (%d deals)" % hands_checked)
+	else:
+		for leak in leaks.slice(0, 3):
+			print("      ", leak)
+		fail("the Warden's veil returned after lifting, or was never set (%d of %d deals had a veil)" % [veiled_seen, hands_checked])
 
 
 func _test_profile_io() -> void:

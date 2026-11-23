@@ -236,7 +236,7 @@ Lucky Sevens · Empty Halls — two are drawn per duel. Completing one earns the
 
 | Boss | Twist |
 |---|---|
-| **The Veiled Warden** (Grove) | one table card is veiled — you can't see or take it until the table thins |
+| **The Veiled Warden** (Grove) | one table card per hand is veiled — you can't see or take it until the table thins to two cards; once the veil lifts it stays lifted |
 | **Grasha Ironjaw** (Horde) | from the sixth play of a hand, her sweeps score 2 Glory |
 | **Thane Brund** (Forge) | his Forge cards count double toward the Treasury |
 | **Regent Aurelia** (Crown) | she wins the Banner on a Banner tie |
@@ -360,6 +360,9 @@ The audit checks, among other things:
 * every screen builds headless at 720×1280 with no control overflowing its parent or the viewport —
   checked before and during play, and across eight extra deals covering all four factions,
 * all four Oath sheets, the pile view, the pause menu, the score sheet and the Classic toggle,
+* the Veiled Warden's twist: 60 complete hidden-table deals are played move by move, asserting the
+  veil is set at the deal, never hides a card the player can also see, and never returns once it has
+  lifted (one veiled card per hand),
 * AI move choice stays under 8 ms (it measures ~30 µs).
 
 Latest run: 300 AI games (318 sweeps), layout clean, **failures=0** — including a real save/resume round-trip through the profile files
