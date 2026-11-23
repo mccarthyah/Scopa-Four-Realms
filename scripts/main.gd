@@ -1,11 +1,25 @@
 extends Control
+# gdlint: disable=class-definitions-order
+# Declarations here are grouped for readability (constants beside the tables
+# they describe, fields beside the build code that fills them) rather than
+# strictly consts-before-vars. Ordering is a style rule with no runtime effect;
+# see docs/ASSESSMENT.md.
+
 ## App shell / router.  Every screen is a Control built in code; this node owns
 ## the top-level navigation and the shared transition.
 
 const TitleScreen := preload("res://scripts/screens/title.gd")
 const DuelScreen := preload("res://scripts/screens/duel.gd")
+const RealmBackground := preload("res://scripts/ui/background.gd")
+# The audit is dev-only and excluded from exports (export_presets.cfg), so it is
+# loaded on demand rather than preloaded into every build.
+static var AuditScript := load("res://scripts/audit.gd")
 
 var current: Control = null
+var _duel_backdrop: Control
+## Set on the instance that actually owns the audit run, so probe instances of
+## this script built by the audit never start a second, nested suite.
+static var _audit_owner: Control = null
 var _stage := "boot"
 # Cheap wall-clock frame intervals for diagnosing stutter. These include the
 # intentional FPS cap and OS scheduling; they are not GPU timing measurements.
@@ -17,6 +31,7 @@ func _notification(what: int) -> void:
 	if what == NOTIFICATION_RESIZED and is_node_ready() and current != null \
 			and is_instance_valid(current):
 		_layout_stage(current)
+		_report_ios_duel_layout.call_deferred()
 
 
 func _process(_delta: float) -> void:
@@ -49,15 +64,25 @@ func _ready() -> void:
 	# window ColorRect beneath the screen's own opaque background. This avoids
 	# a redundant full-screen pass on software renderers without changing it.
 	RenderingServer.set_default_clear_color(ProjectSettings.get_setting("application/boot_splash/bg_color"))
+	_duel_backdrop = RealmBackground.new()
+	_duel_backdrop.name = "DuelBackdrop"
+	_duel_backdrop.hide()
+	add_child(_duel_backdrop)
 	_detect_low_spec()
 	_report_environment()
 	show_title(true)
-	if OS.get_cmdline_user_args().has("--audit"):
-		var audit = load("res://scripts/audit.gd").new()
+	# Guarded: the audit builds probe instances of this same script to measure
+	# layout, and an unguarded _ready() made each probe re-run the whole suite
+	# from inside the test that spawned it. The suite ran twice, the second run
+	# restarted the counters, and the reported total was really one run's worth.
+	if OS.get_cmdline_user_args().has("--audit") and _audit_owner == null:
+		_audit_owner = self
+		var audit = AuditScript.new()
 		add_child(audit)
 		audit.run(self)
-	elif OS.get_cmdline_user_args().has("--smoke"):
-		var smoke = load("res://scripts/audit.gd").new()
+	elif OS.get_cmdline_user_args().has("--smoke") and _audit_owner == null:
+		_audit_owner = self
+		var smoke = AuditScript.new()
 		add_child(smoke)
 		smoke.smoke_test(self)
 
@@ -67,14 +92,10 @@ func _ready() -> void:
 const DESIGN_WIDTH := 540.0
 
 
-func _is_wide() -> bool:
-	var v := get_viewport_rect().size
-	return v.x > v.y * 0.72
-
-
 func _swap(screen: Control, fade: bool = true) -> void:
 	if current != null and is_instance_valid(current):
 		current.queue_free()
+	_duel_backdrop.visible = screen is DuelScreen
 	current = screen
 	add_child(screen)
 	_layout_stage(screen)
@@ -89,22 +110,23 @@ func _swap(screen: Control, fade: bool = true) -> void:
 func _layout_stage(screen: Control) -> void:
 	screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	var v := get_viewport_rect().size
-	if screen is TitleScreen:
+	if screen is TitleScreen or v.x <= v.y:
 		return
-	if v.x > v.y * 1.12:
-		var w: float = minf(1760.0, v.x)
-		var margin: float = maxf((v.x - w) * 0.5, 0.0)
-		screen.anchor_left = 0.0
-		screen.anchor_right = 0.0
-		screen.offset_left = margin
-		screen.offset_right = margin + w
-	elif _is_wide():
-		var w: float = minf(DESIGN_WIDTH, v.x)
-		var margin: float = maxf((v.x - w) * 0.5, 0.0)
-		screen.anchor_left = 0.0
-		screen.anchor_right = 0.0
-		screen.offset_left = margin
-		screen.offset_right = margin + w
+	var width_limit := 1760.0 if v.x > v.y * 1.12 else DESIGN_WIDTH
+	var width := minf(width_limit, v.x)
+	var gutter := (v.x - width) * 0.5
+	screen.offset_left = gutter
+	screen.offset_right = -gutter
+
+
+func _report_ios_duel_layout() -> void:
+	if OS.get_name() != "iOS" or not is_instance_valid(current) or not current is DuelScreen:
+		return
+	var window := get_window()
+	print("[scopa] duel layout: window=", window.size,
+		" viewport=", window.get_visible_rect().size, " stage=", current.get_rect(),
+		" backdrop=", _duel_backdrop.get_global_rect(),
+		" stretch=", window.content_scale_mode, "/", window.content_scale_aspect)
 
 
 ## One line, printed at boot and visible in the log, that says everything needed
@@ -236,3 +258,4 @@ func _start_duel(config: Dictionary) -> void:
 	await get_tree().process_frame
 	if is_instance_valid(s) and current == s:
 		_stage = "duel:ready"
+		_report_ios_duel_layout()

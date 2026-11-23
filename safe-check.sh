@@ -54,9 +54,13 @@ echo
 
 echo "[1/3] Importing assets (headless — no window, no GPU context)"
 "$GODOT" --headless --path "$PROJECT_DIR" --import >/tmp/scopa_import.log 2>&1
-if grep -qE "ERROR|Parse Error" /tmp/scopa_import.log; then
+# A Godot built without fontconfig logs a capability notice on every font load.
+# It is not an import failure, and treating it as one makes the check impossible
+# to pass with a headless/custom build.
+IMPORT_ERRS=$(grep -E "ERROR|Parse Error" /tmp/scopa_import.log | grep -v "compiled without fontconfig")
+if [ -n "$IMPORT_ERRS" ]; then
   echo "  FAILED — first errors:"
-  grep -E "ERROR|Parse Error" /tmp/scopa_import.log | head -10
+  printf '%s\n' "$IMPORT_ERRS" | head -10
   echo "  (full log: /tmp/scopa_import.log)"
   exit 1
 fi

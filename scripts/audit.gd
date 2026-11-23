@@ -7,12 +7,24 @@ extends Node
 const T := preload("res://scripts/tables.gd")
 const C := preload("res://scripts/game/cards.gd")
 const DuelScript := preload("res://scripts/game/duel.gd")
+const MainScript := preload("res://scripts/main.gd")
 const DuelAI := preload("res://scripts/game/ai.gd")
 const CardArt := preload("res://scripts/ui/card_art.gd")
 const EffectAtlas := preload("res://scripts/ui/effect_atlas.gd")
 const UI := preload("res://scripts/ui/ui.gd")
 
+# Screens and the card widget are loaded lazily rather than preloaded, so a bare
+# checkout - before Godot has built any import or global-class cache - can still
+# start the audit. They were loaded inline at 25 call sites; naming them once means
+# a mistyped path fails in one place instead of part-way through a test run.
+static var DuelScreen := load("res://scripts/screens/duel.gd")
+static var TitleScreen := load("res://scripts/screens/title.gd")
+static var CardViewScript := load("res://scripts/ui/card_view.gd")
+
 var failures := 0
+## Counted so the suite reports its own size; the README used to claim a
+## number that drifted every time a test was added.
+var checks := 0
 var main: Control
 
 
@@ -92,6 +104,9 @@ func run(m: Control) -> void:
 	_test_profile_io()
 	_test_deal()
 	_test_overlay_dismiss()
+	await _test_toast_cap_and_turn_clock()
+	await _test_back_gesture()
+	await _test_new_duel_clears_old_save()
 	_test_quindici()
 	_test_animation_settings()
 	_test_hand_dimming()
@@ -107,6 +122,8 @@ func run(m: Control) -> void:
 	await _test_display_scaling()
 	await _test_logo_layout()
 	await _test_settings_dialog()
+	await _test_mute_preference()
+	await _test_export_hygiene()
 	await _test_orientation_setting()
 	await _test_settings_layout()
 	await _test_landscape_reflow()
@@ -122,7 +139,7 @@ func run(m: Control) -> void:
 	await _test_game_settings()
 	await _audit_screens()
 	await _test_result_labels()
-	print("=== AUDIT COMPLETE · failures=%d ===" % failures)
+	print("=== AUDIT COMPLETE · %d checks · failures=%d ===" % [checks, failures])
 	print("godot ", Engine.get_version_info().string, " · renderer ",
 		ProjectSettings.get_setting("rendering/renderer/rendering_method", "?"), " · adapter ",
 		RenderingServer.get_video_adapter_name())
@@ -146,7 +163,7 @@ func _test_animation_settings() -> void:
 	# same number of moves - i.e. the switches cannot gate gameplay.
 	var saved := [Profile.anim_enabled, Profile.anim_spin, Profile.anim_slow, Profile.anim_match]
 	Profile.anim_enabled = false
-	var off = load("res://scripts/screens/duel.gd").new()
+	var off = DuelScreen.new()
 	off.config = {"mode": 0, "seed": 11}
 	main.add_child(off)
 	for i in range(30):
@@ -162,7 +179,7 @@ func _test_animation_settings() -> void:
 		fail("opponent hand mismatch: %d backs for %d cards" % [backs_off, off.duel.hands[1].size()])
 	var played_off := _tap_first_card(off)
 	Profile.anim_enabled = true
-	var on = load("res://scripts/screens/duel.gd").new()
+	var on = DuelScreen.new()
 	on.config = {"mode": 0, "seed": 11}
 	main.add_child(on)
 	for i in range(30):
@@ -291,11 +308,13 @@ func _test_settings_dialog() -> void:
 			var controls := {}
 			var backs := {}
 			var boards := {}
+			# Earlier tests may have muted; start from a known state.
+			Sfx.set_enabled(true)
 			for n in _walk_controls(panel):
 				if n is Button and n.has_meta("setting_key"): controls[n.get_meta("setting_key")] = n
 				if n is Button and n.has_meta("card_back"): backs[int(n.get_meta("card_back"))] = n
 				if n is Button and n.has_meta("board_theme"): boards[int(n.get_meta("board_theme"))] = n
-			if controls.size() != 6 or backs.size() != 3 or boards.size() != 4:
+			if controls.size() != 7 or backs.size() != 3 or boards.size() != 4:
 				fail("settings: missing controls: toggles=%s backs=%s boards=%s" % [str(controls.keys()), str(backs.keys()), str(boards.keys())])
 			else:
 				var rounded := true
@@ -323,7 +342,14 @@ func _test_settings_dialog() -> void:
 					await get_tree().process_frame
 				var selected_theme: Label = panel.find_child("SelectedTableTheme", true, false)
 				var board_style: StyleBoxTexture = board.get_theme_stylebox("normal") as StyleBoxTexture
-				if selected_theme != null and selected_theme.text == "Plum" and board_style != null and board_style.texture == UI.FRAME_TEXTURES.felt_purple and back.button_pressed and not backs[0].button_pressed and board.button_pressed and not boards[0].button_pressed:
+				if selected_theme != null \
+					and selected_theme.text == "Plum" \
+					and board_style != null \
+					and board_style.texture == UI.FRAME_TEXTURES.felt_purple \
+					and back.button_pressed \
+					and not backs[0].button_pressed \
+					and board.button_pressed \
+					and not boards[0].button_pressed:
 					ok("table choices show the actual felt, update the name and retain a single selection")
 				else:
 					fail("table cosmetic choice, preview or selection indicator did not update")
@@ -335,10 +361,24 @@ func _test_settings_dialog() -> void:
 				var disabled := true
 				for key in ["anim_spin", "anim_slow", "anim_match"]:
 					disabled = disabled and controls[key].disabled
-				if Profile.classic_mode and Profile.confirm_card_play and Profile.card_back == 2 and Profile.board_theme == 3 and not Profile.anim_enabled and not Profile.anim_spin and not Profile.anim_slow and not Profile.anim_match and disabled and back.button_pressed and board.button_pressed:
+				if Profile.classic_mode \
+					and Profile.confirm_card_play \
+					and Profile.card_back == 2 \
+					and Profile.board_theme == 3 \
+					and not Profile.anim_enabled \
+					and not Profile.anim_spin \
+					and not Profile.anim_slow \
+					and not Profile.anim_match \
+					and disabled \
+					and back.button_pressed \
+					and board.button_pressed:
 					ok("settings controls respond to clicks, show cosmetic selections and master disables sub-switches")
 				else:
-					fail("settings: click state classic=%s back=%s board=%s anim=%s,%s,%s,%s disabled=%s selected=%s,%s" % [Profile.classic_mode,Profile.card_back,Profile.board_theme,Profile.anim_enabled,Profile.anim_spin,Profile.anim_slow,Profile.anim_match,disabled,back.button_pressed,board.button_pressed])
+					var state := "classic=%s back=%s board=%s anim=%s,%s,%s,%s disabled=%s selected=%s,%s" \
+						% [Profile.classic_mode, Profile.card_back, Profile.board_theme, \
+							Profile.anim_enabled, Profile.anim_spin, Profile.anim_slow, \
+							Profile.anim_match, disabled, back.button_pressed, board.button_pressed]
+					fail("settings: click state " + state)
 				_send_mouse_click(master.get_global_rect().get_center())
 				await get_tree().process_frame
 				if not controls["anim_spin"].disabled and not controls["anim_slow"].disabled and not controls["anim_match"].disabled:
@@ -354,7 +394,14 @@ func _test_settings_dialog() -> void:
 				Profile.anim_match = true
 				Profile.confirm_card_play = false
 				Profile.load_profile()
-				if Profile.classic_mode and Profile.confirm_card_play and Profile.card_back == 2 and Profile.board_theme == 3 and Profile.anim_enabled and not Profile.anim_spin and not Profile.anim_slow and not Profile.anim_match:
+				if Profile.classic_mode \
+					and Profile.confirm_card_play \
+					and Profile.card_back == 2 \
+					and Profile.board_theme == 3 \
+					and Profile.anim_enabled \
+					and not Profile.anim_spin \
+					and not Profile.anim_slow \
+					and not Profile.anim_match:
 					ok("all settings persist through profile reload")
 				else: fail("settings: profile reload did not restore choices")
 				var done: Button = panel.find_child("SettingsDone", true, false)
@@ -377,7 +424,14 @@ func _test_settings_dialog() -> void:
 						if n is Button and n.text == "✕": close = n
 						if n is Button and n.has_meta("card_back") and n.get_meta("card_back") == 2: reopened["back"] = n.button_pressed
 						if n is Button and n.has_meta("board_theme") and n.get_meta("board_theme") == 3: reopened["board"] = n.button_pressed
-				if reopened.get("classic_mode", false) and reopened.get("confirm_card_play", false) and reopened.get("anim_enabled", false) and not reopened.get("anim_spin", true) and not reopened.get("anim_slow", true) and not reopened.get("anim_match", true) and reopened.get("back", false) and reopened.get("board", false):
+				if reopened.get("classic_mode", false) \
+					and reopened.get("confirm_card_play", false) \
+					and reopened.get("anim_enabled", false) \
+					and not reopened.get("anim_spin", true) \
+					and not reopened.get("anim_slow", true) \
+					and not reopened.get("anim_match", true) \
+					and reopened.get("back", false) \
+					and reopened.get("board", false):
 					ok("reopened settings reflects saved rules, cosmetics and animations")
 				else: fail("settings: reopening does not reflect saved choices")
 				if close != null:
@@ -400,12 +454,109 @@ func _test_settings_dialog() -> void:
 	for i in range(4): await get_tree().process_frame
 
 
+## The persisted sound flag, read back off disk rather than trusting the field.
+func _saved_sound_on() -> Variant:
+	# Profile is the autoload *instance*, so its const is not reachable through it;
+	# mirror profile.gd::SAVE_PATH. Keep the two in step.
+	var path := "user://four_realms_profile.json"
+	if not FileAccess.file_exists(path):
+		return null
+	var f := FileAccess.open(path, FileAccess.READ)
+	if f == null:
+		return null
+	var d = JSON.parse_string(f.get_as_text())
+	f.close()
+	if typeof(d) != TYPE_DICTIONARY or not d.has("sound_on"):
+		return null
+	return bool(d.sound_on)
+
+
+## Mute must be reachable, persisted, and must not drift from what actually plays.
+## Before this existed, Sfx.enabled was declared and read but never assigned, so
+## there was no way for a player to silence the game.
+func _test_mute_preference() -> void:
+	var profile := get_node_or_null("/root/Profile")
+	if profile == null:
+		fail("mute: no Profile autoload to persist the choice")
+		return
+	var before: bool = Profile.sound_on
+	# Off silences and persists.
+	Sfx.set_enabled(false)
+	if Sfx.enabled or Profile.sound_on or _saved_sound_on() != false:
+		fail("mute: turning sound off did not reach Sfx and the save")
+	else: ok("muting silences Sfx and is written to the profile")
+	# On restores, and a silent play() is a no-op rather than an error.
+	Sfx.set_enabled(true)
+	if not Sfx.enabled or not Profile.sound_on or _saved_sound_on() != true:
+		fail("mute: turning sound back on did not reach Sfx and the save")
+	else: ok("unmuting restores Sfx and is written to the profile")
+	# A muted play() must not start a player.
+	Sfx.set_enabled(false)
+	var quiet := true
+	for i in range(6):
+		Sfx.play("tap", -14.0)
+	for child in Sfx.get_children():
+		if child is AudioStreamPlayer and child.playing:
+			quiet = false
+	if quiet: ok("a muted Sfx.play() starts no audio")
+	else: fail("mute: a player kept running while muted")
+	# Restore whatever the player had before this test.
+	Sfx.set_enabled(before)
+
+
+## Every export preset must drop build tooling, docs and the unused scenic art.
+## A preset that ships tools/card_sources/ (8.6 MB of source art) or a 3.8 MB
+## image nothing references is bloat a player pays for on first install.
+func _test_export_hygiene() -> void:
+	var preset := ConfigFile.new()
+	if preset.load("res://export_presets.cfg") != OK:
+		fail("export: export_presets.cfg will not load")
+		return
+	var must_drop := ["tools/*", "screenshots/*", "docs/*", "README.md"]
+	var presets := 0
+	var problems: Array = []
+	for section in preset.get_sections():
+		# get_sections() also returns each "preset.N.options" subsection; only the
+		# bare "preset.N" sections carry the export filter.
+		if not section.begins_with("preset.") or not section.substr(7).is_valid_int():
+			continue
+		presets += 1
+		var filter: String = str(preset.get_value(section, "exclude_filter", ""))
+		var parts := filter.split(",", false)
+		for want in must_drop:
+			if not parts.has(want):
+				problems.append("%s lacks %s" % [section, want])
+	# The icons are the other half of release hygiene: an empty path means the
+	# platform shows Godot's default mark instead of the game's.
+	for key in ["launcher_icons/main_192x192",
+			"launcher_icons/adaptive_foreground_432x432",
+			"launcher_icons/adaptive_background_432x432"]:
+		var v: String = str(preset.get_value("preset.0.options", key, ""))
+		if v.is_empty() or not ResourceLoader.exists(v):
+			problems.append("android icon %s missing" % key)
+	for key in ["progressive_web_app/icon_144x144",
+			"progressive_web_app/icon_180x180",
+			"progressive_web_app/icon_512x512"]:
+		var v: String = str(preset.get_value("preset.1.options", key, ""))
+		if v.is_empty() or not ResourceLoader.exists(v):
+			problems.append("pwa icon %s missing" % key)
+	if problems.is_empty() and presets == 4:
+		ok("all 4 export presets drop build tooling and ship real launcher icons")
+	else:
+		fail("export hygiene: %s" % str(problems))
+
+
 ## The Settings choice persists all values and its callback applies a desktop
 ## window shape (or calls the mobile API where supported).
 func _test_orientation_setting() -> void:
 	var preset := ConfigFile.new()
 	var loaded: Error = preset.load("res://export_presets.cfg")
-	if ProjectSettings.get_setting("display/window/handheld/orientation", -1) == DisplayServer.SCREEN_SENSOR and loaded == OK and preset.get_value("preset.2.options", "orientation/portrait", false) and preset.get_value("preset.2.options", "orientation/landscape_left", false) and preset.get_value("preset.2.options", "orientation/landscape_right", false) and preset.get_value("preset.1.options", "progressive_web_app/orientation", -1) == 0:
+	if ProjectSettings.get_setting("display/window/handheld/orientation", -1) == DisplayServer.SCREEN_SENSOR \
+		and loaded == OK \
+		and preset.get_value("preset.2.options", "orientation/portrait", false) \
+		and preset.get_value("preset.2.options", "orientation/landscape_left", false) \
+		and preset.get_value("preset.2.options", "orientation/landscape_right", false) \
+		and preset.get_value("preset.1.options", "progressive_web_app/orientation", -1) == 0:
 		ok("mobile export permits sensor, portrait and both landscape orientations; web PWA is unlocked")
 	else: fail("orientation: mobile or web export preset forbids an orientation")
 	var win: Window = get_window()
@@ -476,7 +627,7 @@ func _test_landscape_reflow() -> void:
 	var host := Control.new()
 	host.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	main.add_child(host)
-	var d = load("res://scripts/screens/duel.gd").new()
+	var d = DuelScreen.new()
 	d.config = {"mode": 0, "seed": 12, "oaths": true}
 	host.add_child(d)
 	for i in range(25): await get_tree().process_frame
@@ -488,7 +639,11 @@ func _test_landscape_reflow() -> void:
 	var side_logo: TextureRect = d._landscape_side.get_node_or_null("LandscapeStatusLogo")
 	if side_logo == null or side_logo.texture == null or not side_logo.visible or side_logo.size.y <= 0:
 		good = false
-	if d._layout_parts.Hand.get_parent() != d._landscape_bottom or d._layout_parts.Quests.get_parent() != d._landscape_side or d._layout_parts.Actions.get_parent() != d._landscape_player or not d._layout_parts.Actions.vertical or d._layout_parts.BotHand.get_parent() != d._landscape_side:
+	if d._layout_parts.Hand.get_parent() != d._landscape_bottom \
+		or d._layout_parts.Quests.get_parent() != d._landscape_side \
+		or d._layout_parts.Actions.get_parent() != d._landscape_player \
+		or not d._layout_parts.Actions.vertical \
+		or d._layout_parts.BotHand.get_parent() != d._landscape_side:
 		good = false
 	if d._landscape_player.get_parent() != d._landscape_bottom or d._table_box.size.x < d.size.x * 0.65:
 		good = false
@@ -602,15 +757,34 @@ func _test_landscape_title() -> void:
 	var host := Control.new()
 	host.size = Vector2(1706, 960)
 	main.add_child(host)
-	var title = load("res://scripts/screens/title.gd").new()
+	var title = TitleScreen.new()
 	host.add_child(title)
 	var good := true
-	for dims in [Vector2(1706, 960), Vector2(540, 960), Vector2(720, 1280), Vector2(1280, 960)]:
+	# 720x960 is what an iPad portrait actually measures in canvas units, and it
+	# is 209 px SHORTER than the phone the home screen was tuned for. 720x940 is
+	# the same canvas less the home-indicator safe area. The home screen used to
+	# clip the last line of the record panel off the bottom of both; the scroll
+	# indicator is hidden, so nothing on screen admitted it.
+	for dims in [Vector2(1706, 960), Vector2(540, 960), Vector2(720, 1280), Vector2(1280, 960), Vector2(720, 960), Vector2(720, 940), Vector2(667, 960)]:
 		host.size = dims
 		for i in range(8): await get_tree().process_frame
-		var bounds := host.get_global_rect()
+		if dims == Vector2(720, 960):
+			# Simulate top and bottom safe insets within the full portrait canvas.
+			title._title_margin.add_theme_constant_override("margin_top", 32)
+			title._title_margin.add_theme_constant_override("margin_bottom", 40)
+			title._fit_portrait_masthead()
+			for i in range(8): await get_tree().process_frame
+		var bounds: Rect2 = title._scroll.get_global_rect()
 		for control in [title._mode_list, title.find_child("YourRecord", true, false)]:
 			if not bounds.encloses(control.get_global_rect()):
+				good = false
+		# Nothing may hang past the bottom edge, and no home tile may be
+		# compressed below the size its own contents asked for.
+		var record: Control = title.find_child("YourRecord", true, false)
+		if record == null or record.get_global_rect().end.y > bounds.end.y + 1.0:
+			good = false
+		for row in title._mode_list.get_children():
+			if row.size.y < row.get_combined_minimum_size().y - 0.5:
 				good = false
 		if title._scroll.get_v_scroll_bar().max_value > title._scroll.get_v_scroll_bar().page + 1:
 			good = false
@@ -641,7 +815,7 @@ func _test_settings_layout() -> void:
 	Profile.seen_intro = true
 	var host := Control.new()
 	main.add_child(host)
-	var title = load("res://scripts/screens/title.gd").new()
+	var title = TitleScreen.new()
 	host.add_child(title)
 	var all_ok := true
 	for dims in [Vector2(320, 568), Vector2(360, 640), Vector2(540, 600)]:
@@ -681,7 +855,12 @@ func _test_settings_layout() -> void:
 			var row_rect := choice_row.get_global_rect()
 			for choice in choice_row.get_children():
 				var option: Button = choice as Button
-				if option == null or option.size.x < 44.0 or option.size.y < 44.0 or option.get_global_rect().position.x < row_rect.position.x - 1.0 or option.get_global_rect().end.x > row_rect.end.x + 1.0 or option.get_global_rect().end.x > pr.end.x + 1.0:
+				if option == null \
+					or option.size.x < 44.0 \
+					or option.size.y < 44.0 \
+					or option.get_global_rect().position.x < row_rect.position.x - 1.0 \
+					or option.get_global_rect().end.x > row_rect.end.x + 1.0 \
+					or option.get_global_rect().end.x > pr.end.x + 1.0:
 					fail("settings layout: table choice overflows or has a small touch target at %s" % str(dims))
 					all_ok = false
 		var dr := done.get_global_rect()
@@ -840,7 +1019,7 @@ func _test_display_scaling() -> void:
 	win.content_scale_size = Vector2i(540, 960)
 	await get_tree().process_frame
 	await get_tree().process_frame
-	var m = load("res://scripts/main.gd").new()
+	var m = MainScript.new()
 	main.add_child(m)
 	m.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	for i in range(20):
@@ -866,6 +1045,58 @@ func _test_display_scaling() -> void:
 		else:
 			fail("page %.0f px does not match the %.0f px canvas" % [page.size.x, vp.x])
 	m.queue_free()
+	await get_tree().process_frame
+
+	# Exercise the live duel and its felt at iPad portrait sizes.
+	var probe = MainScript.new()
+	main.add_child(probe)
+	await probe._start_duel({"seed": 42})
+	for device in [Vector2i(768, 1024), Vector2i(810, 1080), Vector2i(1024, 1366)]:
+		win.size = device
+		win.content_scale_size = Vector2i(540, 960)
+		for frame in range(4):
+			await get_tree().process_frame
+		var vp: Vector2 = main.get_viewport_rect().size
+		var stage: Rect2 = probe.current.get_global_rect()
+		var table: Control = probe.current._table_box
+		var felt: Rect2 = table.get_global_rect()
+		var label := "iPad %dx%d portrait" % [device.x, device.y]
+		probe.current._fit_portrait_duel(32.0, 40.0)
+		for frame in range(4):
+			await get_tree().process_frame
+		var actions: Control = probe.current._layout_parts.Actions
+		var wordmark: TextureRect = probe.current._portrait_root.get_node("PortraitDuelLogo")
+		var menu: Button = probe.current._btn_menu
+		if actions.get_global_rect().end.y > vp.y - 40.0 + 1.0:
+			fail("%s: bottom action row extends past the safe area" % label)
+		elif not wordmark.visible or wordmark.texture == null or wordmark.global_position.y < 32.0:
+			fail("%s: the one-line wordmark is outside the safe area" % label)
+		elif menu.text != "Menu":
+			fail("%s: portrait menu button is missing its label" % label)
+		else:
+			ok("%s: wordmark and labeled menu fit inside the safe area" % label)
+		if vp.y <= vp.x or vp.x <= 540.0:
+			fail("%s: expected an expanded portrait canvas, got %s" % [label, vp])
+		elif absf(stage.position.x) > 1.0 or absf(stage.size.x - vp.x) > 1.0:
+			fail("%s: duel %s does not fill canvas %s" % [label, stage, vp])
+		elif absf(felt.position.x - 12.0) > 1.0 or absf(felt.end.x - (vp.x - 12.0)) > 1.0:
+			fail("%s: felt %s does not fill canvas %s inside its gutters" % [label, felt, vp])
+		else:
+			ok("%s: duel and felt fill their available widths" % label)
+	# Force a landscape canvas wider than the stage cap and check the artwork
+	# still reaches both window edges.
+	win.size = Vector2i(1600, 800)
+	for frame in range(4):
+		await get_tree().process_frame
+	var viewport: Rect2 = probe.get_viewport_rect()
+	var backdrop: Control = probe.get_node("DuelBackdrop")
+	var duel_width: float = probe.current.get_global_rect().size.x
+	if duel_width >= viewport.size.x or not backdrop.is_visible_in_tree() \
+			or not backdrop.get_global_rect().is_equal_approx(viewport):
+		fail("duel backdrop does not fill the viewport beyond the capped stage")
+	else:
+		ok("duel artwork covers the full viewport beyond the capped stage")
+	probe.queue_free()
 	win.size = saved
 	await get_tree().process_frame
 
@@ -877,7 +1108,7 @@ func _test_logo_layout() -> void:
 	var host := Control.new()
 	host.size = Vector2(540, 960)
 	main.add_child(host)
-	var title = load("res://scripts/screens/title.gd").new()
+	var title = TitleScreen.new()
 	host.add_child(title)
 	Profile.seen_intro = old_seen
 	var passed := true
@@ -907,7 +1138,7 @@ func _test_logo_layout() -> void:
 ## layout used to be a single-row HBoxContainer with a 112 px minimum card width,
 ## so a fifth card simply hung off both sides of the screen.
 func _test_table_fit() -> void:
-	var d = load("res://scripts/screens/duel.gd").new()
+	var d = DuelScreen.new()
 	d.config = {"mode": 0, "seed": 4}
 	main.add_child(d)
 	d.size = Vector2(540, 960)
@@ -920,15 +1151,15 @@ func _test_table_fit() -> void:
 		return
 	var bad := []
 	for n in range(1, 17):
-		var L: Dictionary = d._table_layout(n, avail)
-		var cw: float = L.cw
-		var ch: float = L.ch
-		if cw < 20.0 or L.at.size() != n:
+		var layout: Dictionary = d._table_layout(n, avail)
+		var cw: float = layout.cw
+		var ch: float = layout.ch
+		if cw < 20.0 or layout.at.size() != n:
 			bad.append("%d cards: bad layout" % n)
 			continue
 		if absf(ch / cw - CardView.ASPECT) > 0.01:
 			bad.append("%d cards: aspect %.2f" % [n, ch / cw])
-		for p in L.at:
+		for p in layout.at:
 			var pos: Vector2 = p
 			if pos.x < -1.0 or pos.y < -1.0 or \
 					pos.x + cw > avail.x + 1.0 or pos.y + ch > avail.y + 1.0:
@@ -1080,7 +1311,6 @@ func _test_software_draw_policy() -> void:
 	var previous_low: bool = UI.LOW_SPEC
 	var previous_checked: bool = CardArt._atlas_checked
 	var previous_tex: Texture2D = CardArt.atlas_texture()
-	var CardViewScript = load("res://scripts/ui/card_view.gd")
 	UI.LOW_SPEC = true
 	var no_low_shadow: bool = not CardViewScript._needs_separate_shadow()
 	UI.LOW_SPEC = false
@@ -1186,7 +1416,7 @@ func _test_effect_atlas() -> void:
 ## container actually gives the cards their proper height: an undersized row
 ## silently squashes them out of aspect (91 px cards in a 54 px box).
 func _test_bot_hand_scale() -> void:
-	var d = load("res://scripts/screens/duel.gd").new()
+	var d = DuelScreen.new()
 	d.config = {"mode": 0, "seed": 12}
 	main.add_child(d)
 	d.size = Vector2(540, 960)
@@ -1332,7 +1562,7 @@ func _test_quindici() -> void:
 		fail("quindici: a capture group did not total 15")
 
 	# A whole duel under the ruleset plays through and only ever offers 15s.
-	var d = load("res://scripts/game/duel.gd").new({"mode": T.Mode.QUINDICI, "rule": C.RULE_QUINDICI, "seed": 4242})
+	var d = DuelScript.new({"mode": T.Mode.QUINDICI, "rule": C.RULE_QUINDICI, "seed": 4242})
 	var steps := 0
 	var offered_ok := true
 	while not d.match_over and steps < 600:
@@ -1371,7 +1601,7 @@ func _test_quindici() -> void:
 	for pair in piles:
 		var scored := []
 		for rule in [C.RULE_CLASSIC, C.RULE_QUINDICI]:
-			var sd = load("res://scripts/game/duel.gd").new({"mode": 0, "rule": rule, "seed": 31, "player_faction": 0, "bot_faction": 2})
+			var sd = DuelScript.new({"mode": 0, "rule": rule, "seed": 31, "player_faction": 0, "bot_faction": 2})
 			sd.captured = [(pair[0] as Array).duplicate(), (pair[1] as Array).duplicate()]
 			sd.scopa_count = [2, 1]
 			scored.append(str(sd.score_hand()))
@@ -1383,7 +1613,7 @@ func _test_quindici() -> void:
 		fail("quindici: scoring differs by ruleset")
 
 	# Classic must be untouched by the variant existing.
-	var cd = load("res://scripts/game/duel.gd").new({"mode": T.Mode.QUICK, "seed": 77})
+	var cd = DuelScript.new({"mode": T.Mode.QUICK, "seed": 77})
 	if cd.rule == C.RULE_CLASSIC and C.capture_groups_rule([C.make(4, 0)], C.make(4, 1), C.RULE_CLASSIC).size() == 1:
 		ok("classic capture still matches rank when the variant is not selected")
 	else:
@@ -1401,7 +1631,7 @@ func _sort_key(g: Array) -> String:
 ## of the frame, swallowing the next tap - which is how "I had a 4 and it would not
 ## let me play it" happened.
 func _test_overlay_dismiss() -> void:
-	var d = load("res://scripts/screens/duel.gd").new()
+	var d = DuelScreen.new()
 	d.config = {"mode": 0}
 	main.add_child(d)
 	for i in range(40):
@@ -1431,6 +1661,171 @@ func _test_overlay_dismiss() -> void:
 	await get_tree().process_frame
 
 
+## Two regressions that only show up in a long duel:
+##   1. the toast box trimmed at most one panel per toast and counted children that
+##      were only queued for deletion, so it grew for the whole match;
+##   2. the turn clock kept running behind an open sheet, so reading the rules
+##      auto-played the player's turn.
+func _test_toast_cap_and_turn_clock() -> void:
+	var d = DuelScreen.new()
+	d.config = {"mode": T.Mode.QUICK, "seed": 12}
+	main.add_child(d)
+	for i in range(40):
+		await get_tree().process_frame
+	# 1. toasts: fire many, then let the deferred frees settle
+	for i in range(12):
+		d._toast("Toast %d" % i, "body")
+	for i in range(4):
+		await get_tree().process_frame
+	var toasts: int = d._toast_box.get_child_count()
+	if toasts > d.MAX_TOASTS:
+		fail("toast box kept %d panels (cap is %d)" % [toasts, d.MAX_TOASTS])
+	else:
+		ok("toast box stays capped at %d panels" % d.MAX_TOASTS)
+	# 2. the clock must not move while a sheet is open
+	d.duel.turn = 0
+	d._busy = false
+	d._overlay = null
+	d._show_rules()
+	await get_tree().process_frame
+	if d._overlay == null:
+		fail("rules sheet did not open, so the turn-clock test proved nothing")
+	else:
+		var held: float = d._turn_time
+		for i in range(8):
+			await get_tree().process_frame
+		if not is_equal_approx(d._turn_time, held):
+			fail("the turn clock ran down behind an open sheet (%.2f -> %.2f)" % [held, d._turn_time])
+		else:
+			ok("the turn clock is held while a sheet is open")
+		d._close_overlay()
+	# 3. a suspended app cannot skip a whole turn in one frame
+	d.duel.turn = 0
+	d._busy = false
+	d._overlay = null
+	d._turn_time = 10.0
+	d._process(30.0)
+	if d._turn_time > 9.9 or d._turn_time < 9.5:
+		fail("an oversized frame delta moved the turn clock by %.2fs" % (10.0 - d._turn_time))
+	else:
+		ok("an oversized frame delta is clamped to one frame of turn clock")
+	d.queue_free()
+	await get_tree().process_frame
+
+
+## Starting a new duel must invalidate the previous save. A duel only writes one when
+## a card is played, so leaving match A for the menu and starting match B without
+## playing used to leave A's snapshot on disk - Continue then resumed the abandoned
+## match.
+func _test_new_duel_clears_old_save() -> void:
+	var keep: Dictionary = Profile.saved_duel
+	var a = DuelScript.new({"mode": T.Mode.QUICK, "seed": 818})
+	Profile.store_duel({"mode": a.mode, "player_faction": a.player_faction, "campaign": {}, "puzzle": {}, "state": a.to_dict()})
+	if not Profile.has_saved_duel():
+		fail("stale-save test could not write a save to clear")
+	else:
+		var title = TitleScreen.new()
+		main.add_child(title)
+		for i in range(20):
+			await get_tree().process_frame
+		title.faction = T.CROWN
+		title._launch(T.Mode.QUICK)
+		await get_tree().process_frame
+		if Profile.has_saved_duel():
+			fail("starting a new duel left the previous match resumable")
+		else:
+			ok("starting a new duel clears the previous save")
+		title.queue_free()
+		await get_tree().process_frame
+	Profile.clear_duel()
+	Profile.saved_duel = keep
+
+
+## The back gesture must never discard a sheet the player has to answer, and must
+## open the pause menu from the table.
+func _test_back_gesture() -> void:
+	var d = DuelScreen.new()
+	d.config = {"mode": T.Mode.QUICK, "seed": 21}
+	main.add_child(d)
+	for i in range(40):
+		await get_tree().process_frame
+	# 1. from the table, back opens the pause menu
+	d._overlay = null
+	d.duel.hand_over = false
+	d._on_back_pressed()
+	await get_tree().process_frame
+	if d._overlay == null:
+		fail("the back gesture did not open the pause menu from the table")
+	else:
+		ok("the back gesture opens the pause menu from the table")
+		d._close_overlay()
+	# 2. with a normal sheet open, back closes it
+	d._show_rules()
+	await get_tree().process_frame
+	d._on_back_pressed()
+	await get_tree().process_frame
+	if d._overlay != null:
+		fail("the back gesture did not close an open sheet")
+	else:
+		ok("the back gesture closes a dismissible sheet")
+	# 3. the results sheet must survive it
+	d._oath_sheet("RESULTS", "", false)
+	if not d._overlay_blocks_back:
+		fail("the results sheet did not mark itself as unskippable")
+	else:
+		d._on_back_pressed()
+		if d._overlay == null:
+			fail("the back gesture discarded the hand summary")
+		else:
+			ok("the back gesture cannot discard the hand summary")
+	d._close_overlay()
+	d.queue_free()
+	await get_tree().process_frame
+
+	# 4. on the title, back must offer to leave without crashing. This path was
+	# never exercised: it leans on _sheet/_para/UI.button, none of which static
+	# parsing validates.
+	var title = TitleScreen.new()
+	main.add_child(title)
+	for i in range(4): await get_tree().process_frame
+	title._open_quit_confirm()
+	await get_tree().process_frame
+	var panel: Control = title._sheet_panel
+	if panel == null:
+		fail("the title's back gesture opened no confirmation sheet")
+	else:
+		var labels: Array = []
+		var has_stay := false
+		var has_leave := false
+		for n in _walk_controls(panel):
+			if n is Label: labels.append(n.text)
+			if n is Button and n.text == "Keep playing": has_stay = true
+			if n is Button and n.text == "Leave":
+				has_leave = true
+		var mentions_save := false
+		for t in labels:
+			if "saved duel" in t: mentions_save = true
+		if has_stay and mentions_save:
+			ok("back on the title offers Keep playing and says saves are kept")
+		else:
+			fail("title quit confirm: stay=%s, save notice=%s" % [str(has_stay), str(mentions_save)])
+		# "Leave" would call get_tree().quit(); only assert its presence off-web.
+		if OS.has_feature("web") == has_leave:
+			fail("title quit confirm: Leave button presence does not match the platform")
+		else:
+			ok("the Leave button appears only where quitting works")
+		# Keeping playing must clear the sheet, not strand a blocker.
+		for n in _walk_controls(panel):
+			if n is Button and n.text == "Keep playing":
+				n.pressed.emit()
+		await get_tree().process_frame
+	if title._sheet_panel == null and title._codex == null:
+		ok("Keep playing closes the quit prompt cleanly")
+	else: fail("title quit confirm left a stranded blocker")
+	title.queue_free()
+	await get_tree().process_frame
+
+
 func _dim_count(n: Node) -> int:
 	var c := 0
 	for ch in n.get_children():
@@ -1446,7 +1841,7 @@ func _dim_count(n: Node) -> int:
 ## This is asserted because "the deal looks wrong" has been reported twice; if the
 ## deal is provably correct then the problem is presentation, not the deal.
 func _test_deal() -> void:
-	var d = load("res://scripts/game/duel.gd").new({"mode": 0, "seed": 7})
+	var d = DuelScript.new({"mode": 0, "seed": 7})
 	var need_table: int = d.TABLE_START
 	var need_hand: int = d.HAND_SIZE
 	if d.table.size() != need_table:
@@ -1512,7 +1907,7 @@ func _test_tap_play() -> void:
 	Profile.anim_enabled = false
 	for confirm in [false, true]:
 		Profile.confirm_card_play = confirm
-		var screen = load("res://scripts/screens/duel.gd").new()
+		var screen = DuelScreen.new()
 		screen.config = {"mode": T.Mode.QUICK, "seed": 42}
 		main.add_child(screen)
 		await get_tree().create_timer(0.9).timeout
@@ -1556,7 +1951,7 @@ func _test_raid_picker() -> void:
 	var saved_profile_duel: Dictionary = Profile.saved_duel.duplicate(true)
 	var saved_anim: bool = Profile.anim_enabled
 	Profile.anim_enabled = false
-	var screen = load("res://scripts/screens/duel.gd").new()
+	var screen = DuelScreen.new()
 	screen.config = {"mode": T.Mode.QUICK, "seed": 284, "oaths": true, "player_faction": T.HORDE}
 	main.add_child(screen)
 	for i in range(50):
@@ -1661,7 +2056,7 @@ func _test_raid_picker() -> void:
 ## CardView.pressed has no arguments. Exercise the other two card-based oath
 ## pickers as well; handlers that expect an argument silently fail on a click.
 func _test_other_oath_picker_signals() -> void:
-	var screen = load("res://scripts/screens/duel.gd").new()
+	var screen = DuelScreen.new()
 	screen.config = {"mode": T.Mode.QUICK, "seed": 288, "oaths": true, "player_faction": T.GROVE}
 	main.add_child(screen)
 	for i in range(45):
@@ -1745,6 +2140,7 @@ func fail(msg: String) -> void:
 
 
 func ok(msg: String) -> void:
+	checks += 1
 	print("  ok  ", msg)
 
 
@@ -2120,7 +2516,7 @@ func _test_puzzle_limits_and_legacy_saves() -> void:
 
 
 func _test_capture_choice() -> void:
-	var screen = load("res://scripts/screens/duel.gd").new()
+	var screen = DuelScreen.new()
 	screen.config = {"mode": T.Mode.QUICK}
 	main.add_child(screen)
 	await get_tree().create_timer(0.8).timeout
@@ -2158,7 +2554,7 @@ func _test_capture_choice() -> void:
 
 
 func _test_hand_dimming() -> void:
-	var card = load("res://scripts/ui/card_view.gd").new()
+	var card = CardViewScript.new()
 	card._fig = 1.0
 	card.dim = true
 	var dimmed: bool = is_equal_approx(card.modulate.a, 0.6)
@@ -2180,7 +2576,7 @@ func _test_game_settings() -> void:
 	window.content_scale_size = Vector2i(1706, 960)
 	window.size = Vector2i(1280, 720)
 	for i in range(6): await get_tree().process_frame
-	var screen = load("res://scripts/screens/duel.gd").new()
+	var screen = DuelScreen.new()
 	screen.config = {"mode": T.Mode.QUICK, "seed": 42}
 	main.add_child(screen)
 	await get_tree().create_timer(0.9).timeout
@@ -2263,7 +2659,7 @@ func _test_game_settings() -> void:
 
 func _test_result_labels() -> void:
 	for sample in [[[8, 3], "YOU WIN!"], [[2, 7], "OPPONENT WINS"], [[4, 4], "MATCH DRAW"]]:
-		var screen = load("res://scripts/screens/duel.gd").new()
+		var screen = DuelScreen.new()
 		screen.config = {"mode": T.Mode.QUICK}
 		main.add_child(screen)
 		await get_tree().create_timer(0.8).timeout
@@ -2328,6 +2724,57 @@ func _test_veiled_capture() -> void:
 		ok("AI-assisted play uses visible cards and leaves no false sweep")
 	else:
 		fail("veiled capture used the wrong group or awarded a false sweep")
+	_test_veil_never_returns()
+
+
+## The Warden veils ONE table card per hand, and it stays visible once the veil
+## lifts.  This plays whole hidden_table deals the way the game does and watches the
+## veil across every move: it must be set at the deal, must hide exactly one card
+## from the player, and must never come back after its reveal event.
+func _test_veil_never_returns() -> void:
+	var hands_checked := 0
+	var veiled_seen := 0
+	var leaks: Array = []
+	for seed_i in range(60):
+		var d = DuelScript.new({
+			"mode": T.Mode.CAMPAIGN, "campaign": T.CAMPAIGNS[0], "seed": seed_i + 900,
+		})
+		var revealed := false
+		var guard := 0
+		var veil_was_set: bool = d.veiled >= 0
+		if veil_was_set:
+			veiled_seen += 1
+		while not d.hand_over and guard < 2000:
+			guard += 1
+			if d.veiled >= 0 and d.table.count(d.veiled) != 1:
+				leaks.append("seed %d: veiled card %d is not on the table once" % [seed_i, d.veiled])
+				break
+			var who: int = d.turn
+			var mv: Dictionary = DuelAI.choose_move(d, who)
+			if mv.is_empty():
+				break
+			# the hidden card must never be a legal target for the player
+			if who == 0 and d.veiled >= 0 and d.visible_table(0).has(d.veiled):
+				leaks.append("seed %d: veiled card appears in the player's visible table" % seed_i)
+				break
+			var before_table: Array = d.table.duplicate()
+			d.play(who, mv.card, mv.group)
+			for ev in d.drain_events():
+				if ev.get("t", "") == "reveal":
+					if revealed:
+						leaks.append("seed %d: the veil lifted twice in one hand" % seed_i)
+					revealed = true
+			if revealed and d.veiled >= 0:
+				# the only legal way for a veil to exist again is a NEW hand
+				leaks.append("seed %d: a new card was veiled after the veil had lifted" % seed_i)
+				break
+		hands_checked += 1
+	if leaks.is_empty() and veiled_seen > 0:
+		ok("the Warden veils one card per deal and never re-veils after the reveal (%d deals)" % hands_checked)
+	else:
+		for leak in leaks.slice(0, 3):
+			print("      ", leak)
+		fail("the Warden's veil returned after lifting, or was never set (%d of %d deals had a veil)" % [veiled_seen, hands_checked])
 
 
 func _test_profile_io() -> void:
@@ -2766,7 +3213,7 @@ func _test_title_intro() -> void:
 	var host := Control.new()
 	host.size = Vector2(540, 960)
 	main.add_child(host)
-	var title = load("res://scripts/screens/title.gd").new()
+	var title = TitleScreen.new()
 	host.add_child(title)
 	for i in range(5): await get_tree().process_frame
 	title.play_intro()
@@ -2805,7 +3252,7 @@ func _test_title_intro() -> void:
 	good = good and title._intro_phase == "four_realms"
 	await get_tree().create_timer(0.6).timeout
 	good = good and not is_instance_valid(title._intro_layer)
-	var screen = load("res://scripts/screens/title.gd").new()
+	var screen = TitleScreen.new()
 	main.add_child(screen)
 	main._layout_stage(screen)
 	good = good and screen.get_global_rect().is_equal_approx(main.get_global_rect())
@@ -2831,7 +3278,7 @@ func _test_mobile_home_targets() -> void:
 	Input.emulate_mouse_from_touch = false
 	var saved := {"state": DuelScript.new({"seed": 42}).to_dict()}
 	Profile.store_duel(saved)
-	var title = load("res://scripts/screens/title.gd").new()
+	var title = TitleScreen.new()
 	main.add_child(title)
 	main._layout_stage(title)
 	var launched: Array = []

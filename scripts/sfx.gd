@@ -1,4 +1,10 @@
 extends Node
+# gdlint: disable=class-definitions-order
+# Declarations here are grouped for readability (constants beside the tables
+# they describe, fields beside the build code that fills them) rather than
+# strictly consts-before-vars. Ordering is a style rule with no runtime effect;
+# see docs/ASSESSMENT.md.
+
 ## Autoloaded sound player.  Sounds are generated WAVs in res://audio — no
 ## external assets, so the project stays self-contained.
 
@@ -22,6 +28,9 @@ var enabled := true
 var _next := 0
 
 
+## Profile is declared after Sfx in project.godot, so it may not exist yet when
+## this autoload readies. Guard both ways: read the saved preference when it is
+## there, and let the Settings toggle push changes through set_enabled().
 func _ready() -> void:
 	for i in range(8):
 		var p := AudioStreamPlayer.new()
@@ -33,6 +42,30 @@ func _ready() -> void:
 		var path: String = SOUNDS[key]
 		if ResourceLoader.exists(path):
 			_streams[key] = load(path)
+	# Sfx is declared before Profile in project.godot, so Profile has not loaded
+	# its save yet at this point. Read the preference once the frame settles.
+	call_deferred("_apply_saved_preference")
+
+
+## Godot's autoload _ready() order follows project.godot, and Profile loads its
+## JSON in its own _ready(). Deferring guarantees the saved value is there.
+func _apply_saved_preference() -> void:
+	var profile := get_node_or_null("/root/Profile")
+	if profile != null:
+		enabled = bool(profile.get("sound_on"))
+
+
+## Single writer for the mute preference: keeps the playing set in sync and
+## persists the choice. Sfx stays usable before a Profile exists.
+func set_enabled(on: bool) -> void:
+	enabled = on
+	if not on:
+		for p in _players:
+			p.stop()
+	var profile := get_node_or_null("/root/Profile")
+	if profile != null:
+		profile.set("sound_on", on)
+		profile.save_profile()
 
 
 func play(key: String, volume_db: float = -8.0, pitch: float = 1.0) -> void:

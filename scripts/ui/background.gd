@@ -1,4 +1,10 @@
 extends Control
+# gdlint: disable=class-definitions-order
+# Declarations here are grouped for readability (constants beside the tables
+# they describe, fields beside the build code that fills them) rather than
+# strictly consts-before-vars. Ordering is a style rule with no runtime effect;
+# see docs/ASSESSMENT.md.
+
 ## A single pre-rendered fantasy landscape, shared by menu and duel.
 ## It is drawn as one opaque, aspect-cover quad; no runtime readback, baking,
 ## extra full-screen overlays or animated full-screen effects are required.
@@ -12,15 +18,17 @@ func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 
 
-# Kept as part of the screen interface; this artwork has its own palette.
+## The artwork carries its own palette, so both screens pass colours that are
+## deliberately unused; kept so a caller does not have to special-case us.
+## (set_quiet() used to live here as an empty method. Its only caller measured
+## FPS and then printed "background animations paused" - the one thing this
+## backdrop cannot do, since it has no animations. That call is gone; do not
+## reintroduce a no-op hook just to keep a log line honest.)
 func set_accents(_a: Color, _b: Color) -> void:
-	queue_redraw()
-
-
-func set_quiet() -> void:
 	pass
 
 
+# gdlint: enable=class-definitions-order
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_RESIZED:
 		queue_redraw()

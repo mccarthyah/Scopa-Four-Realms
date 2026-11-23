@@ -12,6 +12,10 @@ build/
 export_credentials.cfg
 export_credentials.cfg.*
 
+# Locally built Godot engines. Useful, but 100+ MB binaries do not belong in git;
+# upload them to shared storage and record the hash in the filename instead.
+/tools/godot/bin/
+
 # ---- DO commit these (do not add them to .gitignore) -------------------
 #   *.import   — per-asset import settings + resource UIDs
 #   *.uid      — script/shader UIDs (Godot 4.4+)

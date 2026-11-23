@@ -1,0 +1,114 @@
+name: verify
+
+# The project ships a headless audit that plays thousands of games and measures
+# the layout, plus a GDScript parser/linter (gdtoolkit). Until this workflow
+# existed, nothing ran either of them: every "audit green" claim in the README was
+# a statement about somebody's laptop, and a regression like the Veiled Warden's
+# veil returning could ship unnoticed.
+#
+# Both jobs are cheap. The audit is the load-bearing one - it fails the build on
+# rules, serialisation, layout or screen-construction regressions.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Must match testflight.yml and the 4.7 in project.godot's config/features:
+  # the audit runs the real engine, so a different version would test a
+  # different engine than the one that ships.
+  GODOT_VERSION: 4.7.2
+  # SHA-256 of Godot_v4.7.2-stable_linux.x86_64.zip, as published by the GitHub
+  # Releases API for godotengine/godot-builds tag 4.7.2-stable (the `digest`
+  # field of that asset, and the size matches the downloadable artifact):
+  #   size  77860424 bytes
+  #   digest sha256:cadd3204e728a35d3f13adb7fd0d7902636b79f6b95c40c265eb73b6c35329e4
+  # The CI step fails the job if this does not match, which is what turns the
+  # download into a pinned download. If GODOT_VERSION ever changes, the digest
+  # must change with it and CI will say so loudly rather than silently.
+  GODOT_SHA256: "cadd3204e728a35d3f13adb7fd0d7902636b79f6b95c40c265eb73b6c35329e4"
+
+jobs:
+  lint:
+    name: GDScript parse + lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install gdtoolkit
+        run: pip install --disable-pip-version-check "gdtoolkit==4.*"
+      - name: Every script must parse
+        run: |
+          set -euo pipefail
+          mapfile -t files < <(find scripts tools -name '*.gd' | sort)
+          printf '%s\n' "${files[@]}"
+          gdparse "${files[@]}"
+      - name: Lint against the project's own limits
+        run: |
+          set -euo pipefail
+          mapfile -t files < <(find scripts tools -name '*.gd' | sort)
+          gdlint "${files[@]}"
+
+  audit:
+    name: Headless audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download and verify Godot
+        run: |
+          set -euo pipefail
+          base="https://github.com/godotengine/godot-builds/releases/download/${GODOT_VERSION}-stable"
+          curl --fail --location --retry 3 \
+            "$base/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip" -o "$RUNNER_TEMP/godot.zip"
+          actual=$(sha256sum "$RUNNER_TEMP/godot.zip" | cut -d' ' -f1)
+          echo "Godot ${GODOT_VERSION} archive sha256: $actual"
+          if [ -n "${GODOT_SHA256}" ]; then
+            echo "${GODOT_SHA256}  $RUNNER_TEMP/godot.zip" | sha256sum -c -
+          else
+            echo "::warning::GODOT_SHA256 is unset; the archive digest was printed but not verified. Record it in .github/workflows/verify.yml."
+          fi
+          unzip -q "$RUNNER_TEMP/godot.zip" -d "$RUNNER_TEMP/godot"
+          chmod +x "$RUNNER_TEMP/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64"
+          echo "GODOT=$RUNNER_TEMP/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64" >> "$GITHUB_ENV"
+      - name: Import assets (builds the .godot cache a bare checkout lacks)
+        run: "$GODOT --headless --path . --import"
+      - name: Run the audit
+        # --headless forces the dummy renderer, so this proves the rules, the
+        # serialisation and that every screen BUILDS - it proves nothing about
+        # rendering, which still needs a real device (see CRASH_REPORT.md).
+        #
+        # The log is teed so the greps below see it, and it stays in the step's
+        # own output. It is deliberately NOT uploaded as an artifact: nothing
+        # here needs to outlive the run, and a retained artifact is another
+        # stored copy to expire and account for.
+        run: |
+          set -o pipefail
+          "$GODOT" --headless --path . -- --audit 2>&1 | tee "$RUNNER_TEMP/audit.log"
+          ! grep -q '^FAIL:' "$RUNNER_TEMP/audit.log"
+          grep -q 'AUDIT COMPLETE' "$RUNNER_TEMP/audit.log"
+          grep -q 'failures=0' "$RUNNER_TEMP/audit.log"
+          # A floor, not a target: "failures=0" is also what a suite that
+          # silently stopped running would report. If a test is removed on
+          # purpose, lower MIN_CHECKS in the same commit.
+          MIN_CHECKS=150
+          checks=$(sed -n 's/.*AUDIT COMPLETE.* \([0-9][0-9]*\) checks.*/\1/p' \
+                     "$RUNNER_TEMP/audit.log" | tail -1)
+          : "${checks:=0}"
+          if [ "$checks" -lt "$MIN_CHECKS" ]; then
+            echo "::error::audit ran only $checks checks, expected at least $MIN_CHECKS"
+            exit 1
+          fi
+          echo "audit ran $checks checks"

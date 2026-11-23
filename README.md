@@ -27,7 +27,7 @@ paths can hard-lock a virtualised or GPU-poor machine instead of failing, and a
 **Safe health check — no window, no GPU context, so it cannot freeze a VM:**
 
 ```bash
-GODOT=/path/to/godot ./safe-check.sh          # import + boot + 57 self-tests
+GODOT=/path/to/godot ./safe-check.sh          # import + boot + the full self-test audit
 GODOT=/path/to/godot ./safe-check.sh log      # the log from a frozen run
 ```
 
@@ -47,9 +47,12 @@ four presets; you supply the export templates and SDK paths in *Project → Expo
 | Choose among several capture sets | choose the complete group in the capture picker |
 | Spend Favor on your Oath | tap the Oath button above your hand |
 | Hint · Pile · Menu | the buttons beside your hand |
+| Back / Escape | closes the open sheet, otherwise opens the pause menu (Android back never drops you out of a duel) |
 
 Turn timer: **26 s**, with a 5-second audible countdown; if it expires the game auto-plays a good move
-for you (it says so, and never shames you).
+for you (it says so, and never shames you). The clock is held while a sheet is open — reading the
+rules, the pile view or an Oath picker never costs you a turn — and it is clamped per frame so an app
+returning from suspension cannot skip a turn.
 
 ---
 
@@ -157,6 +160,14 @@ panel each frame. Special-purpose fallback primitives still use cheap square
 corners in low-spec mode; the card shapes and rings remain independently rounded.
 `python3 tools/build_ui_frames.py` rebuilds the small static frame textures.
 
+### Sound
+
+Title screen → *Settings* → *Audio*. One switch, **Sound**, which is on by default.
+Off silences every effect immediately (players already sounding are stopped) and the
+choice is saved to the profile, so it survives a restart. `Sfx.set_enabled()` is the
+only writer, which keeps the live flag and the saved preference from drifting apart.
+Four Realms ships effects only — there is no music track to mute separately.
+
 ### Animation settings
 
 Title screen → *Settings* → *Animation*. Nothing here changes the rules, and the game is fully
@@ -236,7 +247,7 @@ Lucky Sevens · Empty Halls — two are drawn per duel. Completing one earns the
 
 | Boss | Twist |
 |---|---|
-| **The Veiled Warden** (Grove) | one table card is veiled — you can't see or take it until the table thins |
+| **The Veiled Warden** (Grove) | one table card per hand is veiled — you can't see or take it until the table thins to two cards; once the veil lifts it stays lifted |
 | **Grasha Ironjaw** (Horde) | from the sixth play of a hand, her sweeps score 2 Glory |
 | **Thane Brund** (Forge) | his Forge cards count double toward the Treasury |
 | **Regent Aurelia** (Crown) | she wins the Banner on a Banner tie |
@@ -346,6 +357,10 @@ The project ships with a headless audit that plays the game thousands of times a
 godot --headless --path . -- --audit
 ```
 
+It ends with `=== AUDIT COMPLETE · <checks> checks · failures=<n> ===`, so the
+suite reports its own size rather than leaving a number in this file to drift.
+At the time of writing that is 49 test functions and 147 checks.
+
 The audit checks, among other things:
 
 * card conservation (40 unique cards across deck, table, hands and piles) at deal **and** after 300
@@ -360,6 +375,15 @@ The audit checks, among other things:
 * every screen builds headless at 720×1280 with no control overflowing its parent or the viewport —
   checked before and during play, and across eight extra deals covering all four factions,
 * all four Oath sheets, the pile view, the pause menu, the score sheet and the Classic toggle,
+* the Veiled Warden's twist: 60 complete hidden-table deals are played move by move, asserting the
+  veil is set at the deal, never hides a card the player can also see, and never returns once it has
+  lifted (one veiled card per hand),
+* the toast queue stays capped instead of growing all match, the turn clock is held while a sheet is
+  open (reading the rules can no longer auto-play your turn), and an oversized frame delta is clamped
+  so a suspended app cannot skip a turn,
+* the back gesture opens the pause menu from the table, closes a dismissible sheet, and is refused by
+  the hand summary; starting a new duel clears the previous save so *Continue* can never resume an
+  abandoned match,
 * AI move choice stays under 8 ms (it measures ~30 µs).
 
 Latest run: 300 AI games (318 sweeps), layout clean, **failures=0** — including a real save/resume round-trip through the profile files
@@ -383,8 +407,13 @@ The audit is excluded from exported builds (`exclude_filter` in `export_presets.
 
 ## Credits
 
-Cinzel and Alegreya Sans are licensed under the SIL Open Font License (Google Fonts).
-Scopa is a traditional Italian game; this is an unaffiliated fan reimagining.
+Cinzel and Alegreya Sans are licensed under the SIL Open Font License 1.1; the full
+license text and copyright notices are in [fonts/OFL.txt](fonts/OFL.txt) and travel with
+the font files in every export. Scopa is a traditional Italian game; this is an
+unaffiliated fan reimagining.
+
+The game's own code and art are (c) 2026 Andrew McCarthy, all rights reserved — see
+[LICENSE](LICENSE).
 
 ### TestFlight builds
 

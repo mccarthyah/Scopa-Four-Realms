@@ -1,4 +1,10 @@
 extends Control
+# gdlint: disable=class-definitions-order
+# Declarations here are grouped for readability (constants beside the tables
+# they describe, fields beside the build code that fills them) rather than
+# strictly consts-before-vars. Ordering is a style rule with no runtime effect;
+# see docs/ASSESSMENT.md.
+
 ## Title + mode select.  Also hosts the faction picker and the codex.
 
 const UI := preload("res://scripts/ui/ui.gd")
@@ -8,7 +14,12 @@ const CardArt := preload("res://scripts/ui/card_art.gd")
 const RealmBackground := preload("res://scripts/ui/background.gd")
 const PUBLISHER_LOGO := preload("res://assets/branding/veloce_logo_transparent.png")
 const LOGO_TRANSPARENT := preload("res://assets/branding/four_realms_logo.png")
-const TILE_ART := [preload("res://assets/branding/forge_tile.png"), preload("res://assets/branding/grove_tile.png"), preload("res://assets/branding/horde_tile.png"), preload("res://assets/branding/crown_tile.png")]
+const TILE_ART := [
+	preload("res://assets/branding/forge_tile.png"),
+	preload("res://assets/branding/grove_tile.png"),
+	preload("res://assets/branding/horde_tile.png"),
+	preload("res://assets/branding/crown_tile.png"),
+]
 const MODE_ART := preload("res://assets/branding/panel_landscape.png")
 
 signal start_duel(config: Dictionary)
@@ -119,14 +130,58 @@ func _build() -> void:
 	var stats := _stats_panel()
 	col.add_child(stats)
 	_title_parts = [mast, _mode_list, stats]
+	_mode_list.minimum_size_changed.connect(_fit_portrait_masthead)
+	stats.minimum_size_changed.connect(_fit_portrait_masthead)
 	_update_title_layout()
 
 
 func _notification(what: int) -> void:
+	# Android back on the home screen: close whatever sheet is open, otherwise ask
+	# before leaving. Closing the activity straight from the masthead gave no
+	# confirmation and no way to reach Settings or About by accident.
+	if what == NOTIFICATION_WM_GO_BACK_REQUEST:
+		_on_back_pressed()
+		return
 	if what == NOTIFICATION_RESIZED and is_node_ready() and not _title_parts.is_empty():
 		_update_title_layout()
 		_layout_sheet()
 		_place_intro_logo(_intro_progress)
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("ui_cancel"):
+		_on_back_pressed()
+		get_viewport().set_input_as_handled()
+
+
+func _on_back_pressed() -> void:
+	if is_instance_valid(_sheet_panel) or is_instance_valid(_codex):
+		_codex_close()
+		return
+	if is_instance_valid(_intro_layer):
+		return
+	_open_quit_confirm()
+
+
+## The masthead has no Quit entry: on mobile the OS gesture is the only way out, so
+## it gets a confirmation instead of killing the process silently.
+func _open_quit_confirm() -> void:
+	var sheet := _sheet("LEAVE FOUR REALMS?")
+	var body: VBoxContainer = sheet.get_meta("body")
+	body.add_child(_para("Your record and any saved duel are kept. This closes the game."))
+	var stay := UI.button("Keep playing", "primary")
+	stay.pressed.connect(_codex_close)
+	body.add_child(stay)
+	# "Leave" only makes sense where the process can actually end. On the web,
+	# get_tree().quit() does nothing, so offer Keep playing alone rather than a
+	# button that silently fails. (OS.get_name() returns "Web", so the old
+	# "or OS.has_feature(web)" made this branch unconditional.)
+	if not OS.has_feature("web"):
+		var leave := UI.button("Leave", "secondary")
+		leave.pressed.connect(func():
+			Profile.save_profile()
+			get_tree().quit())
+		body.add_child(leave)
 
 
 ## Move the existing controls so rotation keeps the selected faction, scroll
@@ -161,7 +216,16 @@ func _update_title_layout() -> void:
 			_title_margin.add_theme_constant_override("margin_right", int(maxf(24, global_position.x + size.x - bottom_right.x)))
 			_title_margin.add_theme_constant_override("margin_top", int(maxf(16, top_left.y)))
 			_title_margin.add_theme_constant_override("margin_bottom", int(maxf(16, viewport.y - bottom_right.y)))
-	var record_scale := 1.3 if wide else clampf(size.x / 540.0, 1.0, 1.3)
+	# How much the record text may grow. Width alone is the wrong budget: an iPad
+	# portrait is 720x960 in canvas units, so it scaled the record to 1.3x on a
+	# canvas 209 px SHORTER than the 540x960 phone the layout was tuned for, and
+	# the last line of "YOUR RECORD" was clipped off the bottom of the screen.
+	# Take the smaller of the width and height budgets so the type only grows
+	# when there is room for it in both directions. The 0.85 keeps real headroom:
+	# at full height the column landed within 16 px of the bottom margin, and an
+	# iPad portrait then loses more of it to the home-indicator safe area than
+	# there is left to give.
+	var record_scale := 1.3 if wide else minf(clampf(size.x / 540.0, 1.0, 1.3), clampf(size.y / 960.0 * 0.85, 0.8, 1.3))
 	for label in _title_parts[2].find_children("*", "Label", true, false):
 		if not label.has_meta("home_font_size"):
 			label.set_meta("home_font_size", label.get_theme_font_size("font_size"))
@@ -182,8 +246,22 @@ func _update_title_layout() -> void:
 		_title_left.move_child(_mode_list, _title_left.get_child_count() - 1)
 		_title_left.move_child(_title_parts[2], _title_left.get_child_count() - 1)
 		_title_right.hide()
+	_fit_portrait_masthead.call_deferred()
 	if rotated:
 		_scroll.scroll_vertical = 0
+
+
+func _fit_portrait_masthead() -> void:
+	if _title_landscape or _title_parts.is_empty():
+		return
+	var mast: TextureRect = _title_parts[0]
+	var record: Control = _title_parts[2]
+	var available := size.y - _title_margin.get_theme_constant("margin_top") \
+		- _title_margin.get_theme_constant("margin_bottom")
+	var needed := _mode_list.get_combined_minimum_size().y + record.get_combined_minimum_size().y \
+		+ 2 * _title_left.get_theme_constant("separation")
+	var preferred := clampf(size.y * 0.32, 100.0, 440.0)
+	mast.custom_minimum_size.y = clampf(available - needed, 100.0, preferred)
 
 
 ## The runtime splash follows the actual viewport after Profile applies the
@@ -726,6 +804,12 @@ func _stats_panel() -> Control:
 # LAUNCHERS
 # ---------------------------------------------------------------------------
 func _launch(mode: int, extra: Dictionary = {}) -> void:
+	# Starting a new duel invalidates the previous save. A duel only writes one when
+	# a card is played, so leaving match A for the menu and starting match B without
+	# playing used to leave A's snapshot on disk - Continue then resumed the
+	# abandoned match. Clear it here; the resume path below does not come through
+	# _launch(), so it is unaffected.
+	Profile.clear_duel()
 	var cfg := {
 		"mode": mode,
 		"player_faction": faction,
@@ -769,11 +853,11 @@ func _open_campaign() -> void:
 	var v: VBoxContainer = p.get_meta("body")
 	for i in range(T.CAMPAIGNS.size()):
 		var c: Dictionary = T.CAMPAIGNS[i]
-		var row := _campaign_row(c, i)
+		var row := _campaign_row(c)
 		v.add_child(row)
 
 
-func _campaign_row(c: Dictionary, idx: int) -> Control:
+func _campaign_row(c: Dictionary) -> Control:
 	var info: Dictionary = T.FACTIONS[c.faction]
 	var btn := Button.new()
 	btn.focus_mode = Control.FOCUS_NONE
@@ -949,9 +1033,18 @@ func _open_codex() -> void:
 	var v: VBoxContainer = p.get_meta("body")
 	v.add_child(UI.label("How Four Realms works", 26, UI.PARCHMENT, true))
 	v.add_child(_para("Four Realms is inspired by Scopa, a traditional Italian card game."))
-	v.add_child(_para("A 40-card deck, ranks 1–10 in four factions, replaces the suits: Forge (Coins), Grove (Cups), Horde (Swords) and Crown (Batons). Each player is dealt 3 cards; 4 lie face up on the table."))
-	v.add_child(_para("On your turn play one card. If its rank matches a table card you capture it. If a set of table cards adds up to your rank, you may capture that set instead — one card for a rank, or several whose sum equals it. Rank 10 can only take an exact 10."))
-	v.add_child(_para("Clear every card off the table with a capture to score a sweep. The final capture of a hand does not score a sweep. The last player to capture collects any remaining table cards at the end of the hand."))
+	v.add_child(_para(
+		"A 40-card deck, ranks 1–10 in four factions, replaces the suits: Forge (Coins), "
+		+ "Grove (Cups), Horde (Swords) and Crown (Batons). Each player is dealt 3 cards; "
+		+ "4 lie face up on the table."))
+	v.add_child(_para(
+		"On your turn play one card. If its rank matches a table card you capture it. "
+		+ "If a set of table cards adds up to your rank, you may capture that set instead "
+		+ "— one card for a rank, or several whose sum equals it. Rank 10 can only take an exact 10."))
+	v.add_child(_para(
+		"Clear every card off the table with a capture to score a sweep. The final "
+		+ "capture of a hand does not score a sweep. The last player to capture collects "
+		+ "any remaining table cards at the end of the hand."))
 	v.add_child(UI.label("Scoring, live", 26, UI.PARCHMENT, true))
 	for line in [
 		["Loot", "most captured cards"],
@@ -967,7 +1060,10 @@ func _open_codex() -> void:
 		var info: Dictionary = T.FACTIONS[f]
 		v.add_child(_oath_line(f))
 	v.add_child(UI.label("Quests", 26, UI.PARCHMENT, true))
-	v.add_child(_para("Every duel shows two public quests. Complete a quest to earn its bonus Renown. They exist to teach strong card-play habits: hoard the 7s, deny the Runestone, keep the table clean."))
+	v.add_child(_para(
+		"Every duel shows two public quests. Complete a quest to earn its bonus Renown. "
+		+ "They exist to teach strong card-play habits: hoard the 7s, deny the Runestone, "
+		+ "keep the table clean."))
 	var close := UI.button("Understood", "primary")
 	close.pressed.connect(_codex_close)
 	v.add_child(close)

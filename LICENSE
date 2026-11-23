@@ -1,0 +1,33 @@
+Copyright (c) 2026 Andrew McCarthy. All rights reserved.
+
+Four Realms — including its source code, artwork, audio, card and suit
+illustrations, fonts bundled under licenses noted below, and the names
+"Four Realms" and "Scopa Four Realms" — is the property of the copyright
+holder.
+
+No permission is granted to copy, modify, merge, publish, distribute,
+sublicense, sell, or otherwise use this software or its assets, in whole or
+in part, without prior written permission from the copyright holder.
+
+This repository is made public for viewing and reference only. Viewing the
+source does not grant a license to any part of it.
+
+---------------------------------------------------------------------------
+Third-party components
+
+Bundled fonts are NOT covered by the above. They are third-party works used
+under the SIL Open Font License 1.1, which permits redistribution as part of
+this application:
+
+    Cinzel                  fonts/Cinzel.ttf
+    Alegreya Sans           fonts/AlegreyaSans.ttf
+    Alegreya Sans Bold      fonts/AlegreyaSans-Bold.ttf
+
+See fonts/OFL.txt for the full license text and copyright notices, which must
+travel with the font files.
+
+Four Realms is built with Godot Engine, which is distributed separately under
+the MIT License (https://godotengine.org/license).
+
+---------------------------------------------------------------------------
+For licensing enquiries, contact the copyright holder via the repository.

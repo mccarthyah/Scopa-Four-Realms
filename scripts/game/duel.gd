@@ -1,4 +1,10 @@
 extends RefCounted
+# gdlint: disable=class-definitions-order
+# Declarations here are grouped for readability (constants beside the tables
+# they describe, fields beside the build code that fills them) rather than
+# strictly consts-before-vars. Ordering is a style rule with no runtime effect;
+# see docs/ASSESSMENT.md.
+
 ## The whole rules engine, with no UI at all.
 ##
 ## Standard Scopa:
@@ -53,6 +59,9 @@ var events: Array = []
 var hand_over := false
 var match_over := false
 var veiled := -1                  # campaign: a table card the player cannot see or take
+## Campaign hidden_table: once the veil lifts it stays lifted for the rest of the
+## hand (one veiled card per hand, never a new one).  Reset in start_hand().
+var veil_lifted := false
 var rng := RandomNumberGenerator.new()
 var hands_played := 0
 var stat := {}
@@ -94,6 +103,7 @@ func start_hand() -> void:
 	turn_count = 0
 	hand_over = false
 	veiled = -1
+	veil_lifted = false
 	stat = {"7s": 0, "horde": 0, "forge": 0, "runestone": false, "scopas": 0, "fools": 0}
 
 	if not puzzle.is_empty():
@@ -138,15 +148,26 @@ func _shuffle(a: Array) -> void:
 		a[j] = tmp
 
 
+## The Warden's twist veils ONE card per hand.  Once that veil has lifted it must
+## not fall again: _reveal_if_thin() runs immediately before this on every play, so
+## without the veil_lifted latch the engine lifted the veil and instantly hid a
+## different card (the player was told "the veil lifts" on the same play that a card
+## vanished).  The README promises the card stays visible "until the table thins".
 func _maybe_hide_table() -> void:
-	if campaign.get("twist_kind", "") == "hidden_table" and veiled < 0 and table.size() > 1:
-		veiled = table[rng.randi() % table.size()]
+	if campaign.get("twist_kind", "") != "hidden_table":
+		return
+	if veiled >= 0 or veil_lifted or table.size() <= 1:
+		return
+	veiled = table[rng.randi() % table.size()]
 
 
-## A veiled card is invisible to the player: it can be neither seen nor taken
-## until the table thins out and the veil lifts.
-func visible_table(who: int) -> Array:
-	if who == 0 and veiled >= 0:
+## A veiled card is out of play: it can be neither seen nor taken by EITHER side
+## until the table thins out and the veil lifts.  Hiding it from the player alone
+## was a bug: the Warden still saw it, so it could capture the veiled card as part
+## of a group, which left `veiled` pointing at a card that was no longer on the
+## table.  The twist is a veil over the table, not a handicap for one side.
+func visible_table(_who: int) -> Array:
+	if veiled >= 0:
 		var out: Array = []
 		for c in table:
 			if c != veiled:
@@ -159,6 +180,7 @@ func _reveal_if_thin() -> void:
 	if veiled >= 0 and table.size() <= 2:
 		_push({"t": "reveal", "card": veiled})
 		veiled = -1
+		veil_lifted = true
 
 
 # ---------------------------------------------------------------------------
@@ -513,12 +535,10 @@ func _winner_of(a: int, b: int, tie_owner: int) -> int:
 	return 0 if a > b else 1
 
 
+## Delegates to the shared definition in Tables: the duel screen used to have
+## its own copy of this loop, so the pile view and the score sheet could drift.
 func _count_faction(arr: Array, f: int) -> int:
-	var n := 0
-	for c in arr:
-		if C.faction(c) == f:
-			n += 1
-	return n
+	return T.count_faction(arr, f)
 
 
 func primiera_total(arr: Array) -> int:
@@ -611,7 +631,8 @@ func to_dict() -> Dictionary:
 		"turn": turn, "starter": starter, "last_capturer": last_capturer,
 		"hand_no": hand_no, "turn_count": turn_count, "renown": renown,
 		"quest_keys": _quest_keys(), "quest_done": quest_done,
-		"hand_over": hand_over, "match_over": match_over, "veiled": veiled,
+		"hand_over": hand_over, "match_over": match_over,
+		"veiled": veiled, "veil_lifted": veil_lifted,
 		"hands_played": hands_played, "stat": stat,
 		"player_sweeps": player_sweeps, "player_glory": player_glory,
 		"rng_seed": str(rng.seed), "rng_state": str(rng.state),
@@ -641,6 +662,8 @@ static func valid_save(save: Variant) -> bool:
 	for key in ["hand_over", "match_over", "oaths"]:
 		if not (d.get(key) is bool):
 			return false
+	if d.has("veil_lifted") and not (d.get("veil_lifted") is bool):
+		return false
 	if d.match_over and not d.hand_over:
 		return false
 	if d.get("rule", C.RULE_CLASSIC) not in [C.RULE_CLASSIC, C.RULE_QUINDICI]:
@@ -737,6 +760,7 @@ func from_dict(d: Dictionary) -> void:
 	match_over = bool(d.get("match_over", false))
 	rule = String(d.get("rule", C.RULE_CLASSIC))
 	veiled = int(d.get("veiled", -1))
+	veil_lifted = bool(d.get("veil_lifted", false))
 	hands_played = int(d.get("hands_played", 0))
 	stat = d.get("stat", {})
 	for k in stat.keys():

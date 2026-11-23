@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cuyavsgwhtm0"
-path="res://.godot/imported/four_realms_scenic.png-fc1c1d6806b63b84d6b573e2b54ce908.ctex"
+uid="uid://mldtj5jl8nu"
+path="res://.godot/imported/icon-144.png-633509a2d1c06378fea5e34ac3ebacd6.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/branding/four_realms_scenic.png"
-dest_files=["res://.godot/imported/four_realms_scenic.png-fc1c1d6806b63b84d6b573e2b54ce908.ctex"]
+source_file="res://assets/icon/icon-144.png"
+dest_files=["res://.godot/imported/icon-144.png-633509a2d1c06378fea5e34ac3ebacd6.ctex"]
 
 [params]
 
@@ -23,7 +23,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=true
+mipmaps/generate=false
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""

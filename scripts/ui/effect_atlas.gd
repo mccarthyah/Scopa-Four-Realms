@@ -1,4 +1,10 @@
 extends RefCounted
+# gdlint: disable=class-definitions-order
+# Declarations here are grouped for readability (constants beside the tables
+# they describe, fields beside the build code that fills them) rather than
+# strictly consts-before-vars. Ordering is a style rule with no runtime effect;
+# see docs/ASSESSMENT.md.
+
 ## Offline-generated card decorations and small HUD sprites. No viewport capture
 ## or readback happens at runtime. Missing assets fall back to vector drawing.
 class_name EffectAtlas

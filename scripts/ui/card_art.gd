@@ -1,4 +1,10 @@
 extends RefCounted
+# gdlint: disable=class-definitions-order
+# Declarations here are grouped for readability (constants beside the tables
+# they describe, fields beside the build code that fills them) rather than
+# strictly consts-before-vars. Ordering is a style rule with no runtime effect;
+# see docs/ASSESSMENT.md.
+
 ## User-supplied card faces and existing backs in an offline-generated atlas.
 ## The imported PNG is shared on every renderer: no runtime viewport capture or
 ## GPU readback. The original vectors remain a safe fallback if it is missing.
@@ -100,7 +106,7 @@ static func corner_radius(rect: Rect2) -> int:
 
 
 static func draw_face(target: CanvasItem, rect: Rect2, card_id: int, back_style: int = 0,
-		alpha: float = 1.0, atlas_art: bool = false) -> void:
+		_alpha: float = 1.0, atlas_art: bool = false) -> void:
 	if card_id < 0:
 		_draw_back(target, rect, back_style)
 		return
@@ -274,17 +280,17 @@ static func _draw_grove(target: CanvasItem, c: Vector2, s: float, ink: Color, ac
 
 static func _draw_horde(target: CanvasItem, c: Vector2, s: float, ink: Color, accent: Color) -> void:
 	# crossed axes
-	for sign_ in [-1.0, 1.0]:
-		target.draw_line(c + Vector2(-20 * sign_, 24) * s, c + Vector2(20 * sign_, -20) * s,
+	for side in [-1.0, 1.0]:
+		target.draw_line(c + Vector2(-20 * side, 24) * s, c + Vector2(20 * side, -20) * s,
 			ink, 5.0 * s, true)
 		var blade := PackedVector2Array([
-			c + Vector2(20 * sign_, -20) * s,
-			c + Vector2(30 * sign_, -32) * s,
-			c + Vector2(34 * sign_, -18) * s,
-			c + Vector2(22 * sign_, -10) * s,
+			c + Vector2(20 * side, -20) * s,
+			c + Vector2(30 * side, -32) * s,
+			c + Vector2(34 * side, -18) * s,
+			c + Vector2(22 * side, -10) * s,
 		])
 		target.draw_colored_polygon(blade, ink)
-		target.draw_circle(c + Vector2(14 * sign_, -12) * s, 3.0 * s, accent)
+		target.draw_circle(c + Vector2(14 * side, -12) * s, 3.0 * s, accent)
 	target.draw_circle(c, 6.0 * s, accent)
 
 

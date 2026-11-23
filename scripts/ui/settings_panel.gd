@@ -32,6 +32,10 @@ static func populate(sheet: PanelContainer, close: Callable, reflow: Callable, i
 		section.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
 		gameplay_rows.add_child(section)
 	left.add_child(_cosmetics_panel())
+	var sound := _sound_panel()
+	sound.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sound.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	grid.add_child(sound)
 	var animation := _animation_panel()
 	animation.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	animation.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
@@ -194,6 +198,35 @@ static func _classic_panel(in_game: bool) -> Control:
 		Sfx.play("select", -14.0))
 	confirmation_row.add_child(confirmation)
 	return panel
+
+
+## Audio. One control: sound either plays or it does not. Sfx.set_enabled() is
+## the single writer, so the autoload bit and the saved preference cannot drift.
+static func _sound_panel() -> Control:
+	var p := PanelContainer.new()
+	p.name = "SoundSettings"
+	p.add_theme_stylebox_override("panel", UI.fantasy_style("panel", 10, 8))
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 4)
+	p.add_child(v)
+	v.add_child(UI.label("AUDIO", 18, UI.GOLD))
+	var r := HBoxContainer.new()
+	r.add_theme_constant_override("separation", 12)
+	v.add_child(r)
+	var tv := VBoxContainer.new()
+	tv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	tv.add_theme_constant_override("separation", 0)
+	r.add_child(tv)
+	tv.add_child(UI.label("Sound", 19, UI.TEXT, true))
+	r.tooltip_text = "Off silences every effect. The game carries no music."
+	var t := _toggle(Sfx.enabled)
+	t.set_meta("setting_key", "sound_on")
+	t.pressed.connect(func():
+		Sfx.set_enabled(not Sfx.enabled)
+		# Confirm an unmute audibly; a mute cannot demonstrate itself.
+		Sfx.play("select", -14.0))
+	r.add_child(t)
+	return p
 
 
 ## Presentation settings. Every animation can be turned off and the game stays

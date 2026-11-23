@@ -1,4 +1,10 @@
 extends RefCounted
+# gdlint: disable=class-definitions-order
+# Declarations here are grouped for readability (constants beside the tables
+# they describe, fields beside the build code that fills them) rather than
+# strictly consts-before-vars. Ordering is a style rule with no runtime effect;
+# see docs/ASSESSMENT.md.
+
 ## Static game tables: factions, ranks, Oaths, quests, campaigns and puzzles.
 ## Everything theme-facing lives here so the rules engine stays pure.
 
@@ -223,3 +229,29 @@ const PUZZLES := [
 		"hint": "Banner totals your best card in each faction — a 7 is worth 21.",
 	},
 ]
+
+
+# ---------------------------------------------------------------------------
+# SHARED LOOKUPS
+# One definition each, used by both the engine and the duel screen. These used
+# to exist twice: game/duel.gd counted a faction one way and screens/duel.gd
+# counted it again in its own copy, so a rules change could make the pile view
+# disagree with the score sheet about the same pile.
+# ---------------------------------------------------------------------------
+## How many cards of faction `f` are in `arr`.
+static func count_faction(arr: Array, f: int) -> int:
+	var n := 0
+	for c in arr:
+		if Cards.faction(c) == f:
+			n += 1
+	return n
+
+
+## The quest table entry for `key`, or {} if it drifted. Returning {} rather
+## than a fabricated {"name": key, "reward": 1} matters: the old fallback
+## invented a quest with a made-up reward, so a bad key silently scored points.
+static func quest_by_key(key: String) -> Dictionary:
+	for q in QUESTS:
+		if q.key == key:
+			return q
+	return {}
