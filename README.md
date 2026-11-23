@@ -160,6 +160,14 @@ panel each frame. Special-purpose fallback primitives still use cheap square
 corners in low-spec mode; the card shapes and rings remain independently rounded.
 `python3 tools/build_ui_frames.py` rebuilds the small static frame textures.
 
+### Sound
+
+Title screen → *Settings* → *Audio*. One switch, **Sound**, which is on by default.
+Off silences every effect immediately (players already sounding are stopped) and the
+choice is saved to the profile, so it survives a restart. `Sfx.set_enabled()` is the
+only writer, which keeps the live flag and the saved preference from drifting apart.
+Four Realms ships effects only — there is no music track to mute separately.
+
 ### Animation settings
 
 Title screen → *Settings* → *Animation*. Nothing here changes the rules, and the game is fully

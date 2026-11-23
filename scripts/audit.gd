@@ -118,6 +118,7 @@ func run(m: Control) -> void:
 	await _test_display_scaling()
 	await _test_logo_layout()
 	await _test_settings_dialog()
+	await _test_mute_preference()
 	await _test_export_hygiene()
 	await _test_orientation_setting()
 	await _test_settings_layout()
@@ -303,11 +304,13 @@ func _test_settings_dialog() -> void:
 			var controls := {}
 			var backs := {}
 			var boards := {}
+			# Earlier tests may have muted; start from a known state.
+			Sfx.set_enabled(true)
 			for n in _walk_controls(panel):
 				if n is Button and n.has_meta("setting_key"): controls[n.get_meta("setting_key")] = n
 				if n is Button and n.has_meta("card_back"): backs[int(n.get_meta("card_back"))] = n
 				if n is Button and n.has_meta("board_theme"): boards[int(n.get_meta("board_theme"))] = n
-			if controls.size() != 6 or backs.size() != 3 or boards.size() != 4:
+			if controls.size() != 7 or backs.size() != 3 or boards.size() != 4:
 				fail("settings: missing controls: toggles=%s backs=%s boards=%s" % [str(controls.keys()), str(backs.keys()), str(boards.keys())])
 			else:
 				var rounded := true
@@ -445,6 +448,56 @@ func _test_settings_dialog() -> void:
 	Profile.save_profile()
 	main.show_title()
 	for i in range(4): await get_tree().process_frame
+
+
+## The persisted sound flag, read back off disk rather than trusting the field.
+func _saved_sound_on() -> Variant:
+	# Profile is the autoload *instance*, so its const is not reachable through it;
+	# mirror profile.gd::SAVE_PATH. Keep the two in step.
+	var path := "user://four_realms_profile.json"
+	if not FileAccess.file_exists(path):
+		return null
+	var f := FileAccess.open(path, FileAccess.READ)
+	if f == null:
+		return null
+	var d = JSON.parse_string(f.get_as_text())
+	f.close()
+	if typeof(d) != TYPE_DICTIONARY or not d.has("sound_on"):
+		return null
+	return bool(d.sound_on)
+
+
+## Mute must be reachable, persisted, and must not drift from what actually plays.
+## Before this existed, Sfx.enabled was declared and read but never assigned, so
+## there was no way for a player to silence the game.
+func _test_mute_preference() -> void:
+	var profile := get_node_or_null("/root/Profile")
+	if profile == null:
+		fail("mute: no Profile autoload to persist the choice")
+		return
+	var before: bool = Profile.sound_on
+	# Off silences and persists.
+	Sfx.set_enabled(false)
+	if Sfx.enabled or Profile.sound_on or _saved_sound_on() != false:
+		fail("mute: turning sound off did not reach Sfx and the save")
+	else: ok("muting silences Sfx and is written to the profile")
+	# On restores, and a silent play() is a no-op rather than an error.
+	Sfx.set_enabled(true)
+	if not Sfx.enabled or not Profile.sound_on or _saved_sound_on() != true:
+		fail("mute: turning sound back on did not reach Sfx and the save")
+	else: ok("unmuting restores Sfx and is written to the profile")
+	# A muted play() must not start a player.
+	Sfx.set_enabled(false)
+	var quiet := true
+	for i in range(6):
+		Sfx.play("tap", -14.0)
+	for child in Sfx.get_children():
+		if child is AudioStreamPlayer and child.playing:
+			quiet = false
+	if quiet: ok("a muted Sfx.play() starts no audio")
+	else: fail("mute: a player kept running while muted")
+	# Restore whatever the player had before this test.
+	Sfx.set_enabled(before)
 
 
 ## Every export preset must drop build tooling, docs and the unused scenic art.

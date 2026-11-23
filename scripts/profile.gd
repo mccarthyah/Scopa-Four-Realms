@@ -33,6 +33,8 @@ var _orientation_correction_queued := false
 ## Presentation settings.  Animations are purely cosmetic: the game is fully
 ## playable with every one of them off.
 var anim_enabled := true
+## Sound is on by default; the mute switch in Settings is the only writer.
+var sound_on := true
 var anim_spin := true
 var anim_slow := true
 var anim_match := true
@@ -83,6 +85,7 @@ func load_profile() -> void:
 	card_back = d.get("card_back", 0)
 	board_theme = d.get("board_theme", 0)
 	anim_enabled = bool(d.get("anim_enabled", true))
+	sound_on = bool(d.get("sound_on", true))
 	anim_spin = bool(d.get("anim_spin", true))
 	anim_slow = bool(d.get("anim_slow", true))
 	anim_match = bool(d.get("anim_match", true))
@@ -105,7 +108,8 @@ func save_profile() -> bool:
 		"confirm_card_play": confirm_card_play,
 		"orientation": orientation,
 		"seen_intro": seen_intro, "card_back": card_back, "board_theme": board_theme,
-		"anim_enabled": anim_enabled, "anim_spin": anim_spin,
+		"anim_enabled": anim_enabled, "sound_on": sound_on,
+		"anim_spin": anim_spin,
 		"anim_slow": anim_slow, "anim_match": anim_match,
 		"last_puzzle_date": last_puzzle_date, "last_puzzle_won": last_puzzle_won,
 		"faction_wins": faction_wins, "faction_plays": faction_plays,
