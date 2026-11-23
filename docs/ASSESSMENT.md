@@ -407,6 +407,11 @@ could collapse behind two or three query objects.
 
 Move both into `Cards`/`Tables` as statics and call them from both sides.
 
+**Status: fixed.** Both now live in `scripts/tables.gd` (`count_faction`,
+`quest_by_key`); the engine's `_count_faction` is a one-line delegation and the
+screen's copy is deleted. `quest_by_key` returns `{}` rather than inventing a
+quest, so a drifted key shows up as a missing name instead of a free point.
+
 ### 15. Positional child access will break silently
 
 `screens/duel.gd:424`:
@@ -419,6 +424,8 @@ The menu button is the fourth child built in `_build_actions()` (`:584-610`). In
 — a very plausible future change — and this line relabels the wrong control with no error. The other
 three action buttons already have member fields; give this one the same treatment (`_btn_menu`,
 `:606`).
+
+**Status: fixed.** `_btn_menu` exists and `_relayout` uses it.
 
 ### 16. Dead code and no-op hooks
 
@@ -439,6 +446,13 @@ three action buttons already have member fields; give this one the same treatmen
 The `set_quiet()` case is the interesting one: `_process` (`screens/duel.gd:2265-2270`) measures FPS
 and reports "background animations paused", but the background has no animations and the method is
 empty — the log line asserts something that did not happen.
+
+**Status: all of the above is fixed.** The dead fields, `_timeouts`, `_favor_label`,
+`freeze()`, its `_BoxPainter`, `set_quiet()` and `mark_puzzle_solved()` are gone;
+`set_accents()` keeps its signature because two screens call it, but no longer
+pretends to redraw; the FPS log now reports the frame rate without claiming work
+it did not do; the quests title is built inside its branch; and the menu button
+has a member field, so `_relayout` no longer reaches for `get_child(3)`.
 
 ### 17. Style findings worth fixing cheaply
 
