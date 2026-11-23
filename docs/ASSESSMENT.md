@@ -28,8 +28,8 @@ desktop, and the fact that none of the excellent verification work runs automati
 |---|---|---|
 | Rules engine (`game/`) | **A** | Pure, serialisable, RNG-state-accurate, validated round-trip |
 | Persistence | **A−** | Atomic writes, strict `valid_save`, legacy-save path; no profile version key |
-| Verification (`audit.gd`) | **A−** | 49 test functions; **now executed**, 147 assertions, 0 failures against a headless 4.7.2 build. Top grade withheld: the suite had a latent parse error for the whole audit, so it was never actually running (see *Execution*) |
-| UI / screens | **B** | Correct and accessible; five modules extracted (score sheet, oath pickers, card anim, puzzle verdict) take `screens/duel.gd` to 2,063 lines. Still no positional lookups or dead hooks; the hand-summary orchestrator stays, and the file is still the largest screen |
+| Verification (`audit.gd`) | **A−** | 49 test functions; **now executed**, 150 assertions, 0 failures against a headless 4.7.2 build. Top grade withheld: the suite had a latent parse error for the whole audit, so it was never actually running (see *Execution*) |
+| UI / screens | **B** | Correct and accessible; four modules extracted (score sheet, oath pickers, card anim, puzzle verdict) take `screens/duel.gd` to 2,063 lines. Still no positional lookups or dead hooks; the hand-summary orchestrator stays, and the file is still the largest screen. A real-device iPad portrait bug was found after this pass — see *Execution* |
 | Platform (Android/iOS) | **A−** | Back gesture, pause-safe clock, mute, real Android icons; still no pause-on-background |
 | Release hygiene | **A** | LICENSE, OFL text, icons on all targets, dev files and dead art excluded |
 | Tooling / CI | **A** | lint + audit on every push, Godot pinned by SHA-256; both jobs now observed green on GitHub (PR #1) |
@@ -70,7 +70,7 @@ Result after the fixes:
 $ GODOT=/tmp/gbin/godot ./safe-check.sh
 [1/3] Importing assets        ok — 51 assets, no errors
 [2/3] Booting the game        ok — main loop running, stage -> title
-[3/3] Running the self-test   ok — 147 checks passed, 0 failures
+[3/3] Running the self-test   ok — 150 checks passed, 0 failures
 ALL HEADLESS CHECKS PASSED.
 ```
 
@@ -101,7 +101,7 @@ workflow will keep running:
 CI run 45101839204 (PR #1), commit 26ce17d
   ✓ GDScript parse + lint   (gdparse + gdlint, all files)
   ✓ Headless audit          Download and verify Godot · Import assets ·
-                            Run the audit · Upload the audit log
+                            Run the audit
 ```
 
 Both steps run under `set -euo pipefail`, so `sha256sum -c` passing means the
@@ -114,8 +114,44 @@ What this does **and does not** prove. It proves the rules engine, the AI, the
 save/resume round-trip, and that every screen builds and lays out without
 overflow at 720×1280 — all without a GPU. It says nothing about rendering: no
 window, no shader compilation, no draw call was exercised, and the run reports
-`adapter: (none — headless/dummy)`. A windowed run on a real device is still the
-only way to see the game.
+`adapter: (none — headless/dummy)`.
+
+### And one thing running it *could not* find: the iPad portrait bars
+
+Reported from a real iPad, which is exactly the class of bug a headless suite is
+blind to: landscape looked right, portrait left a dead strip down each side of
+the table.
+
+`scripts/main.gd:_layout_stage()` has three cases — tall, wide, and a bounded
+column in between. The middle case was keyed on `_is_wide()`, defined as
+`v.x > v.y * 0.72`, and clamped the stage to `min(DESIGN_WIDTH, v.x)` = 540. With
+`canvas_items` + `expand`, an iPad portrait does not stay at its device
+resolution: it scales by `min(dw/540, dh/960)`, and on a 4:3 iPad that is
+exactly **720×960**. A ratio of 0.750 clears the 0.72 threshold, so those
+devices fell into the desktop rule and got a 540 px column — **90 px unused on
+each side**. iPads of other aspect ratios (10.9" at 667×960, Pro 11 at
+671×960) sat below 0.72 and filled correctly, which is why it read as one
+model doing something strange rather than one rule doing it to all of them.
+
+The rule now clamps only when the window is genuinely wider than it is tall:
+
+```gdscript
+var w: float = minf(DESIGN_WIDTH, v.x) if v.x > v.y else v.x
+```
+
+Landscape is unchanged (still capped at 1760 for desktop widths); every portrait
+iPad now fills its canvas. Three assertions cover the reported devices
+(768×1024, 810×1080, 1024×1366), and they were checked in both directions: they
+fail with the old line, naming the 90 px strip, and pass with the new one. A
+first attempt at that test mounted a probe `Main` and read its current screen —
+it passed against the bug, because `_layout_stage()` early-returns for the title
+screen, so the clamp was never reached. The test now calls `_layout_stage()`
+directly on a bare `Control` and reads the offsets it sets.
+
+The lesson is worth keeping in the document: the headless suite proves the rules,
+the AI and the layout arithmetic, and it can only cover a display bug once
+somebody has described the symptom well enough to name the device. **A windowed
+run is still the only way to see the game.**
 
 ---
 
@@ -129,7 +165,7 @@ Lint     0 findings (was 307 before the P2 lint pass)
 Assets   card atlas 1664×1752 ✔ matches 8×208 × 6×292
          effect atlas 1040×388 ✔ matches EffectAtlas.WIDTH/HEIGHT
          all 12 UI nine-slice frames 96×96 (switches 144×76) ✔
-Runtime  Godot 4.7.2 headless — import 51 assets, boot clean, 147 assertions, 0 failures
+Runtime  Godot 4.7.2 headless — import 51 assets, boot clean, 150 assertions, 0 failures
 ```
 
 Reproduce:
@@ -307,9 +343,6 @@ jobs:
           unzip -q g.zip && chmod +x Godot_v4.4.1-stable_linux.x86_64
       - run: ./Godot_v4.4.1-stable_linux.x86_64 --headless --path . --import
       - run: ./Godot_v4.4.1-stable_linux.x86_64 --headless --path . -- --audit
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with: { name: godot-log, path: ~/.local/share/godot/app_userdata/**/logs/*.log }
 ```
 
 Pin the Godot download by SHA-256 (the iOS workflow already does this properly — reuse that

@@ -7,6 +7,7 @@ extends Node
 const T := preload("res://scripts/tables.gd")
 const C := preload("res://scripts/game/cards.gd")
 const DuelScript := preload("res://scripts/game/duel.gd")
+const MainScript := preload("res://scripts/main.gd")
 const DuelAI := preload("res://scripts/game/ai.gd")
 const CardArt := preload("res://scripts/ui/card_art.gd")
 const EffectAtlas := preload("res://scripts/ui/effect_atlas.gd")
@@ -999,7 +1000,7 @@ func _test_display_scaling() -> void:
 	win.content_scale_size = Vector2i(540, 960)
 	await get_tree().process_frame
 	await get_tree().process_frame
-	var m = load("res://scripts/main.gd").new()
+	var m = MainScript.new()
 	main.add_child(m)
 	m.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	for i in range(20):
@@ -1025,6 +1026,40 @@ func _test_display_scaling() -> void:
 		else:
 			fail("page %.0f px does not match the %.0f px canvas" % [page.size.x, vp.x])
 	m.queue_free()
+	await get_tree().process_frame
+
+	# iPad portrait must fill the canvas. With canvas_items + expand an iPad 9.7
+	# or a 12.9" Pro in portrait lands on exactly 720x960, which is "not tall
+	# enough" by the desktop rule (>= 0.72) and used to be clamped to a 540 wide
+	# column, leaving a dead strip down each side. Reported on device.
+	#
+	# This measures the stage rule directly rather than through a mounted screen:
+	# _layout_stage() early-returns for the title, so a probe Main never exercised
+	# the clamp at all, and an earlier version of this check passed against the
+	# bug as a result.
+	for device in [Vector2i(768, 1024), Vector2i(810, 1080), Vector2i(1024, 1366)]:
+		win.size = device
+		win.content_scale_size = Vector2i(540, 960)
+		await get_tree().process_frame
+		await get_tree().process_frame
+		var vp: Vector2 = main.get_viewport_rect().size
+		var probe = MainScript.new()
+		main.add_child(probe)
+		var ipad_page: Control = Control.new()
+		probe.add_child(ipad_page)
+		probe._layout_stage(ipad_page)
+		# A Control sized by anchors from within _layout_stage reports after a
+		# frame; read the offsets it set instead, which is what actually lands.
+		var wanted: float = ipad_page.offset_right - ipad_page.offset_left
+		if vp.y < vp.x:
+			fail("iPad %dx%d was not portrait after scaling (%.0fx%.0f)" % [device.x, device.y, vp.x, vp.y])
+		elif absf(wanted - vp.x) > 2.0:
+			fail("iPad %dx%d portrait: stage is %.0f px in a %.0f px canvas (%d px unused each side)"
+				% [device.x, device.y, wanted, vp.x, int((vp.x - wanted) * 0.5)])
+		else:
+			ok("iPad %dx%d portrait fills its %.0f px canvas" % [device.x, device.y, vp.x])
+		probe.queue_free()
+		await get_tree().process_frame
 	win.size = saved
 	await get_tree().process_frame
 

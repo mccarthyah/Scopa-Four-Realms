@@ -117,7 +117,17 @@ func _layout_stage(screen: Control) -> void:
 		screen.offset_left = margin
 		screen.offset_right = margin + w
 	elif _is_wide():
-		var w: float = minf(DESIGN_WIDTH, v.x)
+		# Bounded portrait column - but only when there is spare width to bound.
+		#
+		# _is_wide() is "no longer tall" (v.x > v.y * 0.72), which an iPad in
+		# portrait also satisfies: with canvas_items + expand, an iPad 9.7 or a
+		# 12.9" Pro portrait works out to 720x960, so this branch clamped a 720
+		# wide canvas down to 540 and left a 90px dead strip down each side. The
+		# clamp is for wide desktop windows that would otherwise stretch a phone
+		# column across the screen; a device that is still taller than it is wide
+		# should fill its width, and the screens already reflow themselves when
+		# they are genuinely wide.
+		var w: float = minf(DESIGN_WIDTH, v.x) if v.x > v.y else v.x
 		var margin: float = maxf((v.x - w) * 0.5, 0.0)
 		screen.anchor_left = 0.0
 		screen.anchor_right = 0.0
