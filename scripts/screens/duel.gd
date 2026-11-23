@@ -22,6 +22,7 @@ signal exit_to_menu
 signal play_again(config)
 
 const T := preload("res://scripts/tables.gd")
+const ScoreSheet := preload("res://scripts/ui/score_sheet.gd")
 const C := preload("res://scripts/game/cards.gd")
 const Duel := preload("res://scripts/game/duel.gd")
 
@@ -2011,55 +2012,7 @@ func _show_hand_summary() -> void:
 		meaning.add_theme_font_override("font", ThemeDB.fallback_font)
 		body.add_child(meaning)
 
-	var scoring_title := UI.label("HOW THIS HAND SCORED", 24 if _landscape else 20, UI.GOLD)
-	scoring_title.add_theme_font_override("font", ThemeDB.fallback_font)
-	body.add_child(scoring_title)
-	var grid := GridContainer.new()
-	grid.columns = 3
-	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	grid.add_theme_constant_override("h_separation", 12)
-	grid.add_theme_constant_override("v_separation", 12)
-	body.add_child(grid)
-	_hcell(grid, "Award", "", UI.TEXT_DIM, true)
-	_hcell(grid, "", "You", UI.GOLD, true)
-	_hcell(grid, "", "Opponent", UI.TEXT, true)
-	var tie_notes := PackedStringArray()
-	for category in [
-		["Most cards", "cards", "loot", "cards"],
-		["Most Forge cards", "forge", "treasury", "Forge"],
-		["Best Banner", "primiera", "banner", "strength"],
-	]:
-		_hcell(grid, category[0], "", UI.TEXT, false)
-		var owner: int = score[category[2]]
-		if score[category[1]][0] == score[category[1]][1] and owner >= 0:
-			tie_notes.append("%s tied. %s wins this award through a faction or boss tie rule." % [category[0], "You" if owner == 0 else "Opponent"])
-		for who in range(2):
-			var points := 1 if int(score[category[2]]) == who else 0
-			_hcell(grid, "", "%d %s\n+%d %s" % [score[category[1]][who], category[3], points, "point" if points == 1 else "points"], UI.GOOD if points else UI.TEXT_DIM, false)
-	_hcell(grid, "Runestone\n7 of Forge", "", UI.TEXT, false)
-	for who in range(2):
-		var points := 1 if int(score.runestone) == who else 0
-		_hcell(grid, "", ("Captured\n+1 point" if points else "+0 points"), UI.GOOD if points else UI.TEXT_DIM, false)
-	_hcell(grid, "Sweeps", "", UI.TEXT, false)
-	for who in range(2):
-		_hcell(grid, "", "+%d points" % score.scopa[who], UI.GOOD if score.scopa[who] else UI.TEXT_DIM, false)
-	_hcell(grid, "Hand points", "", UI.GOLD, true)
-	_hcell(grid, "", "+%d" % score.points[0], UI.GOLD, true)
-	_hcell(grid, "", "+%d" % score.points[1], UI.TEXT, true)
-	if not tie_notes.is_empty():
-		var tie_explanation := UI.label(" ".join(tie_notes), 24 if _landscape else 19, UI.TEXT_DIM, false, true)
-		tie_explanation.add_theme_font_override("font", ThemeDB.fallback_font)
-		body.add_child(tie_explanation)
-	if not duel.quests.is_empty():
-		var quests_title := UI.label("QUEST BONUSES · THIS MATCH", 24 if _landscape else 20, UI.GOLD)
-		quests_title.add_theme_font_override("font", ThemeDB.fallback_font)
-		body.add_child(quests_title)
-	for i in range(duel.quests.size()):
-		var quest: Dictionary = duel.quests[i]
-		var bonus := "%s · You earned +%d points" % [quest.name, quest.reward] if duel.quest_done[i] else "%s · Not completed (+0)" % quest.name
-		var quest_line := UI.label(bonus, 24 if _landscape else 20, UI.GOOD if duel.quest_done[i] else UI.TEXT_DIM, false, true)
-		quest_line.add_theme_font_override("font", ThemeDB.fallback_font)
-		body.add_child(quest_line)
+	ScoreSheet.build(body, score, duel, _landscape)
 
 	if final:
 		_record_match(puzzle_result)
@@ -2112,16 +2065,6 @@ func _show_hand_summary() -> void:
 			var note := UI.label("Best of three · first to %d Renown wins the match" % T.MODE_INFO[T.Mode.RANKED].target, 14, UI.TEXT_DIM)
 			note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			body.add_child(note)
-
-
-func _hcell(grid: GridContainer, txt: String, val: String, col: Color, header: bool) -> void:
-	var use := val if txt == "" else txt
-	var l := UI.label(use, 24 if _landscape else 19, col, false, true)
-	l.add_theme_font_override("font", ThemeDB.fallback_font)
-	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	if header:
-		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	grid.add_child(l)
 
 
 func _puzzle_verdict(body: VBoxContainer) -> bool:
