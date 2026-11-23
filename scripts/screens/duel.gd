@@ -23,6 +23,7 @@ signal play_again(config)
 
 const T := preload("res://scripts/tables.gd")
 const ScoreSheet := preload("res://scripts/ui/score_sheet.gd")
+const OathPickers := preload("res://scripts/ui/oath_pickers.gd")
 const C := preload("res://scripts/game/cards.gd")
 const Duel := preload("res://scripts/game/duel.gd")
 
@@ -1294,191 +1295,50 @@ func _on_oath_pressed() -> void:
 			_oath_diplomacy()
 
 
+# --- the contract scripts/ui/oath_pickers.gd calls back on -------------------
+## The pickers are static and take this screen as one object rather than six
+## callbacks; these wrappers keep that surface honest and greppable.
+func open_sheet(title: String, sub: String) -> PanelContainer:
+	return _oath_sheet(title, sub)
+
+
+func toast(title: String, sub: String) -> void:
+	_toast(title, sub)
+
+
+## Commit an Oath: close the sheet, then run the normal post-play path.
+func finish() -> void:
+	_finish_player_oath()
+
+
+func close() -> void:
+	_close_overlay()
+
+
+func refresh() -> void:
+	_refresh_all()
+
+
+## The four Oaths live in scripts/ui/oath_pickers.gd. These keep their names
+## because the screen's own button handler and the audit both call them, and a
+## one-line delegation reads better than six call sites learning a new path.
 func _oath_deep_delve() -> void:
-	if duel.deck.is_empty():
-		_toast("Deck is empty", "There is nothing left to draw.")
-		return
-	var drawn: int = duel.deck[duel.deck.size() - 1]
-	var panel := _oath_sheet("DEEP DELVE", "You drew %s. Now tap one card in your hand to bury it on the bottom of the deck." % C.label(drawn))
-	var body: VBoxContainer = panel.get_meta("body")
-	var row := HBoxContainer.new()
-	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 8)
-	body.add_child(row)
-	# a revealed preview of the drawn card + the hand to choose from
-	var preview := CardView.new()
-	preview.setup(drawn, true, 84, 118)
-	row.add_child(preview)
-	for c in duel.hands[0].duplicate():
-		var b := Button.new()
-		b.focus_mode = Control.FOCUS_NONE
-		b.custom_minimum_size = Vector2(64, 90)
-		b.add_theme_stylebox_override("normal", UI.flat(UI.PANEL_HI, 10, T.FACTIONS[duel.player_faction].color, 1))
-		b.add_theme_stylebox_override("hover", UI.flat(UI.PANEL_HI, 10, UI.GOLD, 2))
-		b.add_theme_stylebox_override("pressed", UI.flat(UI.GOLD, 10))
-		b.add_theme_stylebox_override("focus", UI.flat(Color(0, 0, 0, 0), 10))
-		var v := VBoxContainer.new()
-		v.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		v.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		v.alignment = BoxContainer.ALIGNMENT_CENTER
-		b.add_child(v)
-		var num := UI.label(str(C.rank(c)), 26, UI.PARCHMENT, true)
-		num.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		num.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		v.add_child(num)
-		var fn := UI.label(T.FACTIONS[C.faction(c)].name, 12, T.FACTIONS[C.faction(c)].pale)
-		fn.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		fn.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		v.add_child(fn)
-		b.pressed.connect(func():
-			if not duel.use_deep_delve(0, c):
-				return
-			_finish_player_oath()
-			_toast("Deep Delve", "Drew %s, buried %s." % [C.label(drawn), C.label(c)]))
-		row.add_child(b)
+	OathPickers.deep_delve(self)
 
 
 func _oath_foresight() -> void:
-	var top: Array = duel.peek_top(3)
-	if top.is_empty():
-		return
-	var order: Array = top.duplicate()
-	var panel := _oath_sheet("FORESIGHT", "These are the next cards to be drawn, left to right. Tap two to swap them, then confirm.")
-	var body: VBoxContainer = panel.get_meta("body")
-	var row := HBoxContainer.new()
-	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 10)
-	body.add_child(row)
-	var sel := [-1]
-	var views: Array = []
-	var labels := ["next", "2nd", "3rd"]
-	for i in range(order.size()):
-		var col := VBoxContainer.new()
-		col.add_theme_constant_override("separation", 4)
-		row.add_child(col)
-		var cv := CardView.new()
-		cv.setup(order[i], true, 84, 118)
-		col.add_child(cv)
-		views.append(cv)
-		var lb := UI.label(labels[i], 12, UI.TEXT_DIM)
-		lb.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		col.add_child(lb)
-		var btn_holder := Control.new()
-		btn_holder.custom_minimum_size = Vector2(0, 0)
-		var cb := func(idx: int):
-			if sel[0] == -1:
-				sel[0] = idx
-				cv.set_selected(true)
-				Sfx.play("select", -14.0)
-			elif sel[0] == idx:
-				sel[0] = -1
-				cv.set_selected(false)
-			else:
-				var tmp = order[idx]
-				order[idx] = order[sel[0]]
-				order[sel[0]] = tmp
-				var a: CardView = views[sel[0]]
-				var b: CardView = views[idx]
-				a.setup(order[sel[0]], true, 84, 118)
-				b.setup(order[idx], true, 84, 118)
-				a.set_selected(false)
-				sel[0] = -1
-				Sfx.play("tap")
-		cv.pressed.connect(func(): cb.call(i))
-
-	var go := UI.button("Set the order", "primary")
-	go.pressed.connect(func():
-		if not duel.use_foresight(0, order):
-			return
-		_finish_player_oath()
-		_toast("Foresight", "The deck is stacked: next draw is %s." % C.label(order[0])))
-	body.add_child(go)
+	OathPickers.foresight(self)
 
 
 func _oath_raid() -> void:
-	if not duel.can_use_raid(0):
-		_toast("Raid unavailable", "You need a card in the deck and a visible table card.")
-		return
-	var panel := _oath_sheet("RAID", "Choose a table card to put on the deck bottom. The top card replaces it. No capture or sweep.")
-	var body: VBoxContainer = panel.get_meta("body")
-	# Tables can have more cards than fit across a window. Wrap the choices and
-	# let the sheet scroll vertically instead of hiding cards off the right edge.
-	var row := HFlowContainer.new()
-	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.alignment = FlowContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("h_separation", 8)
-	row.add_theme_constant_override("v_separation", 8)
-	body.add_child(row)
-	for c in duel.visible_table(0).duplicate():
-		var cv := CardView.new()
-		cv.setup(c, true, 84, 118)
-		cv.set_playable(true)
-		cv.pressed.connect(_use_raid_card.bind(c))
-		row.add_child(cv)
-
-
-func _use_raid_card(card: int) -> void:
-	var drawn: int = duel.deck.back() if not duel.deck.is_empty() else -1
-	if not duel.use_raid(0, card):
-		_close_overlay()
-		_refresh_all()
-		_toast("Raid unavailable", "The table or deck changed; no Favor was spent.")
-		return
-	_finish_player_oath()
-	_toast("Raid", "%s went to the deck bottom; %s replaced it." % [C.label(card), C.label(drawn)])
+	OathPickers.raid_picker(self)
 
 
 func _oath_diplomacy() -> void:
-	var panel := _oath_sheet("DIPLOMACY", "First tap a card in your hand, then a table card. They swap, and nothing is captured.")
-	var body: VBoxContainer = panel.get_meta("body")
-	var state := {"hand": -1}
-	body.add_child(UI.label("YOUR HAND", 13, UI.TEXT_DIM))
-	var hr := HBoxContainer.new()
-	hr.alignment = BoxContainer.ALIGNMENT_CENTER
-	hr.add_theme_constant_override("separation", 8)
-	body.add_child(hr)
-	var table_row := GridContainer.new()
-	table_row.columns = 4
-	table_row.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	table_row.add_theme_constant_override("h_separation", 8)
-	table_row.add_theme_constant_override("v_separation", 8)
-	var tl := UI.label("TABLE", 13, UI.TEXT_DIM)
-	body.add_child(tl)
-	body.add_child(table_row)
-	var confirm := UI.button("Swap", "primary")
-	confirm.disabled = true
-	var chosen_table := [-1]
-
-	for c in duel.hands[0].duplicate():
-		var cv := CardView.new()
-		cv.setup(c, true, 84, 118)
-		cv.pressed.connect(func():
-			state["hand"] = c
-			for ch in hr.get_children():
-				ch.set_selected(ch.card_id == c)
-			confirm.disabled = chosen_table[0] == -1
-			Sfx.play("select", -14.0))
-		hr.add_child(cv)
-	for c in duel.visible_table(0).duplicate():
-		var cv2 := CardView.new()
-		cv2.setup(c, true, 84, 118)
-		cv2.set_playable(true)
-		cv2.pressed.connect(func():
-			chosen_table[0] = c
-			for ch in table_row.get_children():
-				ch.set_selected(ch.card_id == c)
-			confirm.disabled = state["hand"] == -1
-			Sfx.play("select", -14.0))
-		table_row.add_child(cv2)
-	confirm.pressed.connect(func():
-		if not duel.use_diplomacy(0, state["hand"], chosen_table[0]):
-			return
-		_finish_player_oath()
-		_toast("Diplomacy", "Swapped %s for %s." % [C.label(state["hand"]), C.label(chosen_table[0])]))
-	body.add_child(confirm)
+	OathPickers.diplomacy(self)
 
 
-# ---------------------------------------------------------------------------
+
 # EVENTS → JUICE
 # ---------------------------------------------------------------------------
 func _finish_player_oath() -> void:
