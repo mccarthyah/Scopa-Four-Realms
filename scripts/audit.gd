@@ -21,6 +21,9 @@ static var TitleScreen := load("res://scripts/screens/title.gd")
 static var CardViewScript := load("res://scripts/ui/card_view.gd")
 
 var failures := 0
+## Counted so the suite reports its own size; the README used to claim a
+## number that drifted every time a test was added.
+var checks := 0
 var main: Control
 
 
@@ -135,7 +138,7 @@ func run(m: Control) -> void:
 	await _test_game_settings()
 	await _audit_screens()
 	await _test_result_labels()
-	print("=== AUDIT COMPLETE · failures=%d ===" % failures)
+	print("=== AUDIT COMPLETE · %d checks · failures=%d ===" % [checks, failures])
 	print("godot ", Engine.get_version_info().string, " · renderer ",
 		ProjectSettings.get_setting("rendering/renderer/rendering_method", "?"), " · adapter ",
 		RenderingServer.get_video_adapter_name())
@@ -2065,6 +2068,7 @@ func fail(msg: String) -> void:
 
 
 func ok(msg: String) -> void:
+	checks += 1
 	print("  ok  ", msg)
 
 
