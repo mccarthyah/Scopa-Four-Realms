@@ -395,8 +395,13 @@ The audit is excluded from exported builds (`exclude_filter` in `export_presets.
 
 ## Credits
 
-Cinzel and Alegreya Sans are licensed under the SIL Open Font License (Google Fonts).
-Scopa is a traditional Italian game; this is an unaffiliated fan reimagining.
+Cinzel and Alegreya Sans are licensed under the SIL Open Font License 1.1; the full
+license text and copyright notices are in [fonts/OFL.txt](fonts/OFL.txt) and travel with
+the font files in every export. Scopa is a traditional Italian game; this is an
+unaffiliated fan reimagining.
+
+The game's own code and art are (c) 2026 Andrew McCarthy, all rights reserved — see
+[LICENSE](LICENSE).
 
 ### TestFlight builds
 
