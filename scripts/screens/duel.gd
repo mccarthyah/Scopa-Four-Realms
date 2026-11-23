@@ -24,6 +24,7 @@ signal play_again(config)
 const T := preload("res://scripts/tables.gd")
 const ScoreSheet := preload("res://scripts/ui/score_sheet.gd")
 const OathPickers := preload("res://scripts/ui/oath_pickers.gd")
+const CardAnim := preload("res://scripts/ui/card_anim.gd")
 const C := preload("res://scripts/game/cards.gd")
 const Duel := preload("res://scripts/game/duel.gd")
 
@@ -1479,54 +1480,19 @@ func _fly_card_in(c: int, from: Vector2, to: Vector2, w: int, h: int, delay: flo
 func _mark_match(cards: Array) -> void:
 	if not anim_on("match"):
 		return
-	for c in cards:
-		var node := _table_card_node(c)
-		if node == null:
-			continue
-		var ring := Panel.new()
-		ring.add_theme_stylebox_override("panel", UI.panel(Color(0, 0, 0, 0), 8, UI.GOLD, 3))
-		ring.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		ring.z_index = 60
-		ring.size = node.size + Vector2(12, 12)
-		ring.position = node.global_position - Vector2(6, 6) - global_position
-		ring.modulate.a = 0.0
-		add_child(ring)
-		var t := create_tween()
-		t.tween_property(ring, "modulate:a", 1.0, 0.12)
-		t.chain().tween_property(ring, "modulate:a", 0.0, 0.34).set_delay(0.16)
-		t.chain().tween_callback(ring.queue_free)
+	CardAnim.mark_match(self, _table_grid, cards, global_position)
 
 
 func _table_card_node(id: int) -> Control:
-	for cv in _table_grid.get_children():
-		if cv is CardView and cv.card_id == id:
-			return cv
-	return null
+	return CardAnim.table_card_node(_table_grid, id)
 
 
 func _hand_card_node(id: int) -> Control:
-	for cv in _hand_row.get_children():
-		if cv is CardView and cv.card_id == id:
-			return cv
-	return null
+	return CardAnim.hand_card_node(_hand_row, id)
 
 
 func _fly_to_pile(cards: Array, from: Vector2) -> void:
-	var pile_pos := _pile_chip_center()
-	for i in range(cards.size()):
-		var cv := CardView.new()
-		cv.setup(cards[i], true, 64, 90)
-		cv.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		cv.z_index = 70
-		add_child(cv)
-		cv.position = from - Vector2(32, 45)
-		var t := create_tween()
-		t.set_parallel(true)
-		var delay := 0.045 * i
-		t.tween_property(cv, "position", pile_pos - Vector2(32, 45), 0.34).set_delay(delay).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_CUBIC)
-		t.tween_property(cv, "scale", Vector2(0.55, 0.55), 0.34).set_delay(delay)
-		t.tween_property(cv, "modulate:a", 0.0, 0.16).set_delay(delay + 0.22)
-		t.chain().tween_callback(cv.queue_free)
+	CardAnim.fly_to_pile(self, cards, from, _pile_chip_center())
 
 
 func _haptic(ms: int) -> void:
