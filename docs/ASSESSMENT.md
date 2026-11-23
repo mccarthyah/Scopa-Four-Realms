@@ -28,11 +28,11 @@ desktop, and the fact that none of the excellent verification work runs automati
 |---|---|---|
 | Rules engine (`game/`) | **A** | Pure, serialisable, RNG-state-accurate, validated round-trip |
 | Persistence | **A−** | Atomic writes, strict `valid_save`, legacy-save path; no profile version key |
-| Verification (`audit.gd`) | **A** | 49 test functions, 139 assertions; now enforced on every push (see P1.7) |
+| Verification (`audit.gd`) | **A−** | 49 test functions; **now executed**, 193 assertions, 0 failures against a headless 4.7.2 build. Top grade withheld: the suite had a latent parse error for the whole audit, so it was never actually running (see *Execution*) |
 | UI / screens | **B−** | Correct and accessible, but still a 2,351-line file, positional lookups, dead hooks |
 | Platform (Android/iOS) | **A−** | Back gesture, pause-safe clock, mute, real Android icons; still no pause-on-background |
 | Release hygiene | **A** | LICENSE, OFL text, icons on all targets, dev files and dead art excluded |
-| Tooling / CI | **A−** | lint + audit on every push; the audit job still needs GODOT_SHA256 filled in |
+| Tooling / CI | **A−** | lint + audit on every push, Godot pinned by SHA-256; still needs one real CI run to confirm the job itself |
 | Lint cleanliness | **A** | 0 syntax errors, 0 lint findings |
 
 Grades above reflect the state after the P1 and P2 work below was completed; the
@@ -40,18 +40,60 @@ findings themselves are kept in place as the record of what was wrong and why.
 
 ---
 
+## Execution — what changed when the audit actually ran
+
+The first pass of this assessment graded the test suite on reading it. It has since
+been run for real, against a headless Godot 4.7.2 built from the `4.7.2-stable`
+source (`4.7.2.stable.custom_build`, built with `x11=no vulkan=no opengl3=no`; see
+`tools/godot/BUILD.md`). Reading the suite hid three things:
+
+1. **`scripts/audit.gd` did not parse.** `var veil_was_set := d.veiled >= 0` cannot
+   infer a type, because `d` is untyped and the comparison yields a `Variant`. The
+   entire self-test therefore failed to load, and `safe-check.sh` step 3 could
+   never have passed. `gdparse` did not catch it: type inference is not a
+   parse-time check. Fixed (`6000d3b`).
+2. **The Veiled Warden's veil was capturable by the Warden.** `visible_table(who)`
+   hid the veiled card only from player 0, so the bot still saw it and could take
+   it inside a capture group; `veiled` was then left pointing at a card no longer
+   on the table. Reproduced on 3 of 60 seeded deals. Fixed (`b58fb2c`), and
+   `veil_lifted` is now serialised so a resumed duel cannot re-veil.
+3. **`safe-check.sh` could not pass with a non-fontconfig build.** It treated every
+   `ERROR` line as an import failure, including Godot's "compiled without
+   fontconfig" capability notice. Fixed (`9d98f0a`).
+
+It was also committed without the executable bit, despite documenting
+`./safe-check.sh` as its own entry point (`52ce991`).
+
+Result after the fixes:
+
+```
+$ GODOT=/tmp/gbin/godot ./safe-check.sh
+[1/3] Importing assets        ok — 51 assets, no errors
+[2/3] Booting the game        ok — main loop running, stage -> title
+[3/3] Running the self-test   ok — 193 checks passed, 0 failures
+ALL HEADLESS CHECKS PASSED.
+```
+
+What this does **and does not** prove. It proves the rules engine, the AI, the
+save/resume round-trip, and that every screen builds and lays out without
+overflow at 720×1280 — all without a GPU. It says nothing about rendering: no
+window, no shader compilation, no draw call was exercised, and the run reports
+`adapter: (none — headless/dummy)`. A windowed run on a real device is still the
+only way to see the game.
+
+---
+
 ## Verified facts
 
 ```
 Parser   gdtoolkit 4.5.0 (GDScript 4 grammar)
-Parse    19/19 files OK — no syntax errors in scripts/ or tools/
-Lint     307 findings: 224 max-line-length · 45 class-definitions-order
-                       22 duplicated-load · 6 unused-argument · 4 class-variable-name
-                       3 max-file-lines · 2 function-variable-name · 1 each of
-                       max-public-methods, function-name, loop-variable-name
+Parse    19/19 files OK — but see *Execution*: one type-inference error only
+         surfaced at load time, where gdparse does not look
+Lint     0 findings (was 307 before the P2 lint pass)
 Assets   card atlas 1664×1752 ✔ matches 8×208 × 6×292
          effect atlas 1040×388 ✔ matches EffectAtlas.WIDTH/HEIGHT
          all 12 UI nine-slice frames 96×96 (switches 144×76) ✔
+Runtime  Godot 4.7.2 headless — import 51 assets, boot clean, 193 assertions, 0 failures
 ```
 
 Reproduce:
