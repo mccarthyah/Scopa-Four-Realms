@@ -2665,7 +2665,7 @@ func _test_veil_never_returns() -> void:
 		})
 		var revealed := false
 		var guard := 0
-		var veil_was_set := d.veiled >= 0
+		var veil_was_set: bool = d.veiled >= 0
 		if veil_was_set:
 			veiled_seen += 1
 		while not d.hand_over and guard < 2000:
