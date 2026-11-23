@@ -398,6 +398,13 @@ score presentation. The cleanest seams, in order of payoff:
 only by the screen (`groups_for`, `deck_low`, `blocked_by_quindici`, `oath_title`, `primiera_total`)
 could collapse behind two or three query objects.
 
+**Status: partly done.** The score sheet is extracted to `scripts/ui/score_sheet.gd`
+(2,332 → 2,275 lines in the screen). It was the one seam with no coupling to screen
+state — the oath pickers and card-flight code both reach back into `_toast`,
+`_close_overlay`, `_selection`, `_save_state` and the layout tree, so pulling them
+out means changing their interfaces first. That is a real refactor, not a move, and
+it is the remaining part of this item.
+
 ### 14. Duplicated logic between engine and screen
 
 - `screens/duel.gd:1782 _CountFaction()` reimplements `game/duel.gd:516 _count_faction()`.
